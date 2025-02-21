@@ -1,38 +1,36 @@
 {
-  "title": "Recep Şen - Software Engineer",
-  "description": "Persönliche Portfolio-Website von Recep Şen, einem auf Backend-Entwicklung spezialisierten Software Engineer",
+  "title": "Yusuf Topkaya - Softwareentwickler",
+  "description": "Persönliche Portfolio-Website von Yusuf Topkaya, einem auf Backend-Entwicklung spezialisierten Softwareentwickler",
   "keywords": [
-    "software engineer",
-    "backend entwicklung",
+    "softwareentwickler",
+    "backend-entwicklung",
     "full stack",
     "entwickler",
-    "easyapp",
-    "taptoweb",
+    "veripark",
     "dotnet",
     "microservices",
-    "no code platform entwickler",
     "portfolio"
   ],
   "openGraph": {
-    "title": "Recep Şen - Software Engineer",
-    "description": "Persönliche Portfolio-Website von Recep Şen, einem auf Backend-Entwicklung spezialisierten Software Engineer",
-    "siteName": "Recep Şen Portfolio",
+    "title": "Yusuf Topkaya - Softwareentwickler",
+    "description": "Persönliche Portfolio-Website von Yusuf Topkaya, einem auf Backend-Entwicklung spezialisierten Softwareentwickler",
+    "siteName": "Yusuf Topkaya Portfolio",
     "images": [
       {
         "url": "/images/og-banner.png",
-        "width": 1200,
-        "height": 384,
-        "alt": "Recep Şen - Software Engineer"
+        "width": 2509,
+        "height": 608,
+        "alt": "Yusuf Topkaya - Softwareentwickler"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "site": "@senrecep0",
-    "creator": "@senrecep0",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
     "images": {
       "url": "/images/og-banner.png",
-      "alt": "Recep Şen - Software Engineer"
+      "alt": "Yusuf Topkaya - Softwareentwickler"
     }
   }
 }

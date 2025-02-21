@@ -1,38 +1,36 @@
 {
-  "title": "Recep Şen - Yazılım Mühendisi",
-  "description": "Backend geliştirme konusunda uzmanlaşmış Yazılım Mühendisi Recep Şen'in kişisel portfolyo web sitesi",
+  "title": "Yusuf Topkaya - Yazılım Mühendisi",
+  "description": "Backend geliştirme konusunda uzmanlaşmış Yazılım Mühendisi Yusuf Topkaya'nın kişisel portfolyo web sitesi",
   "keywords": [
     "yazılım mühendisi",
     "backend geliştirme",
     "full stack",
     "geliştirici",
-    "easyapp",
-    "taptoweb",
+    "veripark",
     "dotnet",
-    "mikroservisler",
-    "no code platform geliştirici",
+    "microservices",
     "portfolyo"
   ],
   "openGraph": {
-    "title": "Recep Şen - Yazılım Mühendisi",
-    "description": "Backend geliştirme konusunda uzmanlaşmış Yazılım Mühendisi Recep Şen'in kişisel portfolyo web sitesi",
-    "siteName": "Recep Şen Portfolio",
+    "title": "Yusuf Topkaya - Yazılım Mühendisi",
+    "description": "Backend geliştirme konusunda uzmanlaşmış Yazılım Mühendisi Yusuf Topkaya'nın kişisel portfolyo web sitesi",
+    "siteName": "Yusuf Topkaya Portfolyo",
     "images": [
       {
         "url": "/images/og-banner.png",
-        "width": 1200,
-        "height": 384,
-        "alt": "Recep Şen - Yazılım Mühendisi"
+        "width": 2509,
+        "height": 608,
+        "alt": "Yusuf Topkaya - Yazılım Mühendisi"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "site": "@senrecep0",
-    "creator": "@senrecep0",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
     "images": {
       "url": "/images/og-banner.png",
-      "alt": "Recep Şen - Yazılım Mühendisi"
+      "alt": "Yusuf Topkaya - Yazılım Mühendisi"
     }
   }
 }

@@ -52,7 +52,7 @@ Enhancement suggestions are tracked as GitHub issues. When you are creating an e
 
 ```bash
 # Clone your fork
-git clone https://github.com/senrecep/portfolio.git
+git clone https://github.com/YusufTopkaya/portfolio.git
 
 # Navigate to the project directory
 cd portfolio

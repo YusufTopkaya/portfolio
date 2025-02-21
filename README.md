@@ -61,7 +61,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 ## 📝 Project Structure
 
 ```
-senrecep/
+portfolio/
 ├── app/                   # Next.js app directory
 ├── components/           # React components
 ├── content/             # Multilingual content

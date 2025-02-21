@@ -1,136 +1,75 @@
 {
   "personalInfo": {
-    "name": "Recep Şen",
-    "position": "Technical Lead",
-    "company": "Taptoweb",
-    "about": "Software Engineer mit Expertise in .NET, Cloud-Technologien und Microservices-Architektur. Leidenschaftlich daran interessiert, Wissen durch technisches Schreiben zu teilen und innovative Lösungen zu entwickeln.",
+    "name": "Yusuf Topkaya",
+    "position": "Softwareentwickler",
+    "company": "Veripark",
+    "about": "Als Softwareentwickler bei VeriPark verfüge ich über fundierte Kenntnisse in der Informatik und eine Leidenschaft für die Entwicklung innovativer Softwarelösungen.",
     "imageUrl": "/images/profile.jpg",
     "cv": {
       "url": "/files/cv.pdf",
-      "fileName": "Recep Şen - CV.pdf"
+      "fileName": "Yusuf Topkaya - Lebenslauf.pdf"
     }
   },
   "skills": [
     "Microservices",
-    "Google Cloud",
     "AI",
-    "No-Code",
     "PostgreSQL",
     "MongoDB",
     "Redis",
     "RabbitMQ",
     "Elasticsearch",
     "Docker",
-    "Kubernetes",
     ".NET",
     "C#",
     "TypeScript",
     "Next.js",
-    "Nuxt.js",
-    "Node.js",
-    "Nest.js",
-    "GO"
-  ],
-  "projects": [
-    {
-      "title": "Easyapp",
-      "description": "Entwickeln Sie Ihre App einfach auf Ihrem mobilen Gerät mit No-Code und KI-gestützten Lösungen.",
-      "projectUrl": "https://easyapp.ai",
-      "tags": ["KI", "Mobile", "No-Code"],
-      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/a2/c3/c4/a2c3c4dc-9089-8d16-0579-06850a46c631/AppIconProduction-0-0-1x_U007emarketing-0-6-0-85-220.png/230x0w.webp"
-    },
-    {
-      "title": "Aspire Microservice Starter Template",
-      "description": "Eine Vorlage für die Erstellung eines Microservice mit dem Aspire Framework.",
-      "projectUrl": "https://github.com/senrecep/Aspire",
-      "tags": [".NET", "Aspire", "Microservices"],
-      "imageUrl": "https://raw.githubusercontent.com/senrecep/Aspire/refs/heads/main/icon.png"
-    },
-    {
-      "title": "CSharpEssentials",
-      "description": "Vereinfacht die C#-Entwicklung durch grundlegende Bausteine, einschließlich eines Frameworks zur Implementierung gängiger Entwurfsmuster wie Result Pattern, Any Pattern und Maybe Pattern.",
-      "projectUrl": "https://github.com/senrecep/CSharpEssentials",
-      "tags": ["C#", ".NET", "Design Patterns", "Funktionale Programmierung"],
-      "imageUrl": "https://raw.githubusercontent.com/senrecep/CSharpEssentials/refs/heads/main/icon.png"
-    }
-  ],
-  "blogPosts": [
-    {
-      "title": "Performanzanalyse von Parameterübergabemethoden in C#",
-      "description": "Tiefgehende Analyse der C#-Parameterübergabe: Vergleich von Struct, Class, Record & Ref-Typen mit Benchmarks. Lernen Sie Best Practices für die Optimierung.",
-      "blogUrl": "https://senrecep.medium.com/performance-analysis-of-parameter-passing-methods-in-c-ceeffcefd624",
-      "date": "02/20/2025",
-      "imageUrl": "https://miro.medium.com/v2/resize:fit:720/format:webp/1*TaEfLjbYsF33FDctLLbI6g.png"
-    },
-    {
-      "title": "Der moderne Weg zum Verwalten von C# Geschäftsregeln: Rule Engine Pattern",
-      "description": "Ein modernes C#-Pattern für die Verwaltung von Geschäftsregeln, das zentrale Kontrolle, hohe Testbarkeit und optimale Leistung durch das Result Pattern bietet",
-      "blogUrl": "https://medium.com/@senrecep/the-modern-way-to-manage-c-business-rules-rule-engine-pattern-14bb1c72d700",
-      "date": "02/04/2025",
-      "imageUrl": "https://miro.medium.com/v2/resize:fit:720/format:webp/1*uhmymuqnTUrR1QkfGAL8-g.png"
-    },
-    {
-      "title": "Google Cloud Secret Manager Integration für Ihre .NET Anwendungen",
-      "description": "Eine .NET-Bibliothek für die Google Cloud Secret Manager-Integration mit Funktionen wie Präfix-Filterung, regionsspezifischer Konfiguration und JSON/Raw-Secret-Unterstützung",
-      "blogUrl": "https://senrecep.medium.com/google-cloud-secret-manager-integration-for-your-net-applications-84f2576f6027",
-      "date": "01/30/2025",
-      "imageUrl": "https://miro.medium.com/v2/resize:fit:720/format:webp/1*oI7K_leu1aMPgbgSsicn1Q.png"
-    },
-    {
-      "title": "Blockchain-basiertes E-Voting-System",
-      "description": "Diese Forschung schlägt die Entwicklung eines sicheren und schnellen Online-Wahlsystems unter Verwendung der Blockchain-Technologie vor. Dieses System bietet nicht nur eine geringe Verarbeitungsverzögerung und ein hohes Sicherheitsniveau, sondern vereinfacht auch die Überprüfung der Datenintegrität über mehrere Wahllokale hinweg.",
-      "blogUrl": "https://www.researchgate.net/publication/365993522_4_International_New_York_Academic_Research_Congress_Full-Text_Book",
-      "date": "23.01.2022",
-      "imageUrl": "/images/blockchain-research.png"
-    }
-  ],
-  "socialLinks": [
-    {
-      "name": "LinkedIn",
-      "url": "https://www.linkedin.com/in/senrecep/"
-    },
-    {
-      "name": "GitHub",
-      "url": "https://github.com/senrecep"
-    },
-    {
-      "name": "Medium",
-      "url": "https://medium.com/@senrecep"
-    },
-    {
-      "name": "X",
-      "url": "https://x.com/senrecep0"
-    }
+    "Angular",
+    "Node.js"
   ],
   "certificates": [
     {
-      "title": "Dive Into Refactoring",
-      "issuer": "Refactoring.Guru",
-      "issueDate": "Dec 2024",
-      "credentialId": "#000053812",
-      "credentialUrl": "https://drive.google.com/file/d/1nkuUA7nszo4cnkOL3ZbMU5x7Bxlyjl8F/view?usp=sharing"
-    },
-    {
-      "title": "Pragmatic Clean Architecture",
-      "issuer": "Milan Jovanovic Tech",
-      "issueDate": "Dec 2024",
-      "credentialId": "cert_y7sc2384",
-      "credentialUrl": "https://drive.google.com/file/d/1ywBRKVFl-GlfeduOWuIe7M36ikBB0Qp2/view?usp=sharing"
-    },
-    {
-      "title": "Golang 101",
-      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
-      "issueDate": "Sep 2023"
-    },
-    {
-      "title": "Centralized log management with Graylog",
+      "title": "Docker",
       "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
       "issueDate": "Feb 2023"
     },
     {
-      "title": "CCNA-1",
+      "title": "Geographische Informationssysteme",
       "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
       "issueDate": "Jan 2020"
+    }
+  ],
+  "projects": [
+    {
+      "title": "Türk Eximbank Internet Banking",
+      "description": "Türk Eximbank Internet Banking ist eine Webanwendung, die es Firmenkunden ermöglicht, ihre Konten und Transaktionen online zu verwalten.",
+      "projectUrl": "https://esube.eximbank.gov.tr/",
+      "tags": ["Banking", "Finanzen"],
+      "imageUrl": "https://www.kap.org.tr/SirketLogo/1DE05DAA8430073AE0530A4A622A2EBD"
+    },
+    {
+      "title": "Akbank AG Internet Banking",
+      "description": "Entwicklung einer umfassenden Internet-Banking-Lösung für die Akbank AG Deutschland, die es Firmen- und Privatkunden ermöglicht, ihre Bankgeschäfte sicher zu verwalten. Die Plattform bietet Funktionen wie Kontoverwaltung, Überweisungen und digitale Bankdienstleistungen mit einer benutzerfreundlichen Oberfläche.",
+      "projectUrl": "https://myonline.akbank.de/",
+      "tags": ["Banking", "Finanzen", ".NET"],
+      "imageUrl": "https://play-lh.googleusercontent.com/I0UWKPLG7AeNHSvpV4KUNNgFlfqdD6ZypA36D6GVX30QnMjA-jMnefqh-ij8eQlOePU"
+    },
+    {
+      "title": "Garanti BBVA Romania Onboarding",
+      "description": "Entwicklung einer umfassenden Onboarding-Lösung für Garanti BBVA Rumänien, die es Firmenkunden ermöglicht, ihre Bankgeschäfte sicher zu verwalten.",
+      "projectUrl": "https://www.garantibbva.ro",
+      "tags": ["Banking", "Finanzen", ".NET"],
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/7b/66/9b/7b669bc1-d399-2bcd-ca43-e54be6e9c836/AppIcon-0-1x_U007emarketing-0-7-0-0-85-220-0.png/460x0w.webp"
+    }
+  ],
+  "blogPosts": [],
+  "socialLinks": [
+    {
+      "name": "LinkedIn",
+      "url": "https://www.linkedin.com/in/yusuftopkaya"
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/YusufTopkaya"
     }
   ]
 }
