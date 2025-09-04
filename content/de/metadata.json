@@ -1,6 +1,7 @@
 {
   "title": "Yusuf Topkaya - Softwareentwickler",
   "description": "Persönliche Portfolio-Website von Yusuf Topkaya, einem auf Backend-Entwicklung spezialisierten Softwareentwickler",
+  "callsign": "TA1YTK",
   "keywords": [
     "softwareentwickler",
     "backend-entwicklung",
@@ -22,8 +23,8 @@
     "images": [
       {
         "url": "/images/og-banner.en.png",
-        "width": 1233,
-        "height": 358,
+        "width": 1235,
+        "height": 359,
         "alt": "Yusuf Topkaya - Softwareentwickler"
       }
     ]
