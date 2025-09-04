@@ -10,6 +10,13 @@ const config = {
     "./src/**/*.{ts,tsx}",
   ],
   prefix: "",
+  // Optimize for smaller CSS bundle
+  safelist: [
+    // Only include essential dynamic classes
+    "animate-spin",
+    "animate-pulse",
+    "animate-bounce",
+  ],
   theme: {
     container: {
       center: true,
@@ -79,4 +86,3 @@ const config = {
 } satisfies Config;
 
 export default config;
-

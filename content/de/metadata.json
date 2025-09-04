@@ -9,7 +9,11 @@
     "veripark",
     "dotnet",
     "microservices",
-    "portfolio"
+    "no code platform entwickler",
+    "portfolio",
+    "TA1YTK",
+    "amateur radio",
+    "ham radio"
   ],
   "openGraph": {
     "title": "Yusuf Topkaya - Softwareentwickler",
@@ -17,9 +21,9 @@
     "siteName": "Yusuf Topkaya Portfolio",
     "images": [
       {
-        "url": "/images/og-banner.png",
-        "width": 2509,
-        "height": 608,
+        "url": "/images/og-banner.de.png",
+        "width": 1200,
+        "height": 364,
         "alt": "Yusuf Topkaya - Softwareentwickler"
       }
     ]
@@ -29,9 +33,8 @@
     "site": "@yusuftopkaja",
     "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.png",
+      "url": "/images/og-banner.de.png",
       "alt": "Yusuf Topkaya - Softwareentwickler"
     }
   }
 }
-

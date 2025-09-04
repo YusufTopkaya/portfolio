@@ -1,6 +1,7 @@
 {
   "title": "Yusuf Topkaya - Yazılım Mühendisi",
   "description": "Backend geliştirme konusunda uzmanlaşmış Yazılım Mühendisi Yusuf Topkaya'nın kişisel portfolyo web sitesi",
+  "callsign": "TA1YTK",
   "keywords": [
     "yazılım mühendisi",
     "backend geliştirme",
@@ -8,7 +9,11 @@
     "geliştirici",
     "veripark",
     "dotnet",
-    "microservices",
+    "portfolyo",
+    "TA1YTK",
+    "amatör radyo",
+    "mikroservisler",
+    "no code platform geliştirici",
     "portfolyo"
   ],
   "openGraph": {
@@ -17,9 +22,9 @@
     "siteName": "Yusuf Topkaya Portfolyo",
     "images": [
       {
-        "url": "/images/og-banner.png",
-        "width": 2509,
-        "height": 608,
+        "url": "/images/og-banner.tr.png",
+        "width": 1200,
+        "height": 364,
         "alt": "Yusuf Topkaya - Yazılım Mühendisi"
       }
     ]
@@ -29,9 +34,8 @@
     "site": "@yusuftopkaja",
     "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.png",
+      "url": "/images/og-banner.tr.png",
       "alt": "Yusuf Topkaya - Yazılım Mühendisi"
     }
   }
 }
-

@@ -1,6 +1,7 @@
 {
   "title": "Yusuf Topkaya - Software Engineer",
   "description": "Personal portfolio website of Yusuf Topkaya, a Software Engineer specialized in backend development",
+  "callsign": "TA1YTK",
   "keywords": [
     "software engineer",
     "backend development",
@@ -9,6 +10,10 @@
     "veripark",
     "dotnet",
     "microservices",
+    "TA1YTK",
+    "amateur radio",
+    "ham radio"
+    "no code platform developer",
     "portfolio"
   ],
   "openGraph": {
@@ -17,9 +22,9 @@
     "siteName": "Yusuf Topkaya Portfolio",
     "images": [
       {
-        "url": "/images/og-banner.png",
-        "width": 2509,
-        "height": 608,
+        "url": "/images/og-banner.en.png",
+        "width": 1200,
+        "height": 364,
         "alt": "Yusuf Topkaya - Software Engineer"
       }
     ]
@@ -29,9 +34,8 @@
     "site": "@yusuftopkaja",
     "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.png",
+      "url": "/images/og-banner.en.png",
       "alt": "Yusuf Topkaya - Software Engineer"
     }
   }
 }
-

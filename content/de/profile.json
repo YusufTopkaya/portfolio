@@ -5,26 +5,169 @@
     "company": "Veripark",
     "about": "Als Softwareentwickler bei VeriPark verfüge ich über fundierte Kenntnisse in der Informatik und eine Leidenschaft für die Entwicklung innovativer Softwarelösungen.",
     "imageUrl": "/images/profile.jpg",
+    "callsign": "TB1REC",
     "cv": {
       "url": "/files/cv.pdf",
       "fileName": "Yusuf Topkaya - Lebenslauf.pdf"
     }
   },
   "skills": [
-    "Microservices",
-    "AI",
-    "PostgreSQL",
-    "MongoDB",
-    "Redis",
-    "RabbitMQ",
-    "Elasticsearch",
-    "Docker",
-    ".NET",
-    "C#",
-    "TypeScript",
-    "Next.js",
-    "Angular",
-    "Node.js"
+    {
+      "name": "KI, Agenten & Automatisierung",
+      "icon": "brain",
+      "items": [
+        {
+          "name": "Agentische KI-Frameworks (z.B. AutoGen)",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "bot"
+        },
+        {
+          "name": "LLM-Integration & Fine-Tuning",
+          "level": "Experte",
+          "levelType": "expert",
+          "icon": "sparkles"
+        },
+        {
+          "name": "Vektor-DBs & Semantische Caching-Systeme",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "search"
+        },
+        {
+          "name": "KI-Workflows & Automatisierung",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "workflow"
+        },
+        {
+          "name": "Automatisierte Kostenoptimierungsstrategien",
+          "level": "Experte",
+          "levelType": "expert",
+          "icon": "trending-down"
+        }
+      ]
+    },
+    {
+      "name": "Kernarchitektur & Backend",
+      "icon": "code",
+      "items": [
+        {
+          "name": ".NET & C#",
+          "level": "Experte",
+          "levelType": "expert",
+          "icon": "code-2"
+        },
+        {
+          "name": "Microservices & Domain-Driven Design (DDD)",
+          "level": "Experte",
+          "levelType": "expert",
+          "icon": "blocks"
+        },
+        {
+          "name": "Node.js & Nest.js",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "server"
+        },
+        {
+          "name": "Go (Golang)",
+          "level": "Vertraut",
+          "levelType": "familiar",
+          "icon": "code-2"
+        }
+      ]
+    },
+    {
+      "name": "Daten & Messaging",
+      "icon": "database",
+      "items": [
+        {
+          "name": "PostgreSQL",
+          "level": "Experte",
+          "levelType": "expert",
+          "icon": "database"
+        },
+        {
+          "name": "Redis",
+          "level": "Experte",
+          "levelType": "expert",
+          "icon": "zap"
+        },
+        {
+          "name": "RabbitMQ",
+          "level": "Experte",
+          "levelType": "expert",
+          "icon": "message-square"
+        },
+        {
+          "name": "MongoDB",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "leaf"
+        },
+        {
+          "name": "Elasticsearch",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "search"
+        }
+      ]
+    },
+    {
+      "name": "Cloud Native & DevOps",
+      "icon": "cloud",
+      "items": [
+        {
+          "name": "Google Cloud Platform (GCP)",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "cloud"
+        },
+        {
+          "name": "Docker & Containerisierung",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "container"
+        },
+        {
+          "name": "CI/CD-Pipeline-Architektur",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "git-branch"
+        },
+        {
+          "name": "Kubernetes (K8s)",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "ship"
+        }
+      ]
+    },
+    {
+      "name": "Frontend & API-Layer",
+      "icon": "monitor",
+      "items": [
+        {
+          "name": "TypeScript",
+          "level": "Experte",
+          "levelType": "expert",
+          "icon": "code"
+        },
+        {
+          "name": "Next.js",
+          "level": "Kompetent",
+          "levelType": "proficient",
+          "icon": "triangle"
+        },
+        {
+          "name": "API-Design",
+          "level": "Experte",
+          "levelType": "expert",
+          "icon": "share-2"
+        }
+      ]
+    }
   ],
   "certificates": [
     {
@@ -73,4 +216,3 @@
     }
   ]
 }
-

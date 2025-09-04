@@ -1,3 +1,5 @@
+"use client";
+
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -8,8 +10,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { NoSSR } from "./NoSSR";
 
-export function ThemeToggle() {
+function ThemeToggleContent() {
   const { setTheme } = useTheme();
 
   return (
@@ -36,3 +39,17 @@ export function ThemeToggle() {
   );
 }
 
+export function ThemeToggle() {
+  return (
+    <NoSSR
+      fallback={
+        <Button variant="ghost" size="icon">
+          <Sun className="h-[1.2rem] w-[1.2rem]" />
+          <span className="sr-only">Toggle theme</span>
+        </Button>
+      }
+    >
+      <ThemeToggleContent />
+    </NoSSR>
+  );
+}

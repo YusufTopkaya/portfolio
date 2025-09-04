@@ -32,10 +32,10 @@ export function Blog({ profile, translations: t }: BlogProps) {
       <div
         className={`mx-auto grid justify-center gap-4 ${
           profile.blogPosts.length === 1
-            ? "md:max-w-[24rem]"
+            ? "max-w-[24rem] grid-cols-1"
             : profile.blogPosts.length === 2
-            ? "sm:grid-cols-2 md:max-w-[48rem]"
-            : "sm:grid-cols-2 md:max-w-[64rem] md:grid-cols-3"
+            ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
+            : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
         }`}
       >
         {profile.blogPosts.map((post, index) => (
@@ -52,4 +52,3 @@ export function Blog({ profile, translations: t }: BlogProps) {
     </section>
   );
 }
-

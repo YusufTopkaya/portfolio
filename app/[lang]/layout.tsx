@@ -1,4 +1,4 @@
-import { getSEOMetadata } from "@/lib/i18n/content-loader";
+import { getSEOMetadata } from "@/lib/i18n/server-content-loader";
 import { getLanguageByCode, defaultLanguage } from "@/lib/i18n/config";
 import type { Metadata } from "next";
 
@@ -36,4 +36,3 @@ export default async function Layout({ children, params }: LayoutProps) {
   await params; // Ensure params is resolved
   return <>{children}</>;
 }
-

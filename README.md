@@ -10,8 +10,11 @@ This is a modern, internationalized personal portfolio website built with Next.j
 - ⚡ Built with Next.js 15 and React 19
 - 🎯 SEO optimized
 - 💅 Styled with TailwindCSS and shadcn/ui
-- 🚀 Optimized performance
+- 🚀 Optimized performance with gzip compression
 - 📊 Google Analytics 4 integration
+- 🗜️ Automatic asset compression and caching
+- ⚡ Static asset optimization
+- 🔧 Bundle analysis support
 
 ## 🚀 Getting Started
 
@@ -24,12 +27,14 @@ This is a modern, internationalized personal portfolio website built with Next.j
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/yourusername/portfolio.git
 cd portfolio
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 # or
@@ -39,15 +44,18 @@ pnpm install
 ```
 
 3. Create your environment variables:
+
 ```bash
 cp .env.example .env.local
 ```
 
 4. Configure your environment variables in `.env.local`:
+
    - Get your Google Analytics Measurement ID from your GA4 property settings
    - Replace the placeholder in `NEXT_PUBLIC_GA_MEASUREMENT_ID` with your actual GA4 Measurement ID
 
 5. Start the development server:
+
 ```bash
 npm run dev
 # or
@@ -82,6 +90,7 @@ portfolio/
 3. Create a new stream or select an existing one
 4. Copy your Measurement ID (starts with "G-")
 5. Add your Measurement ID to `.env.local`:
+
 ```bash
 NEXT_PUBLIC_GA_MEASUREMENT_ID="G-XXXXXXXXXX"
 ```
@@ -116,6 +125,7 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 You can also deploy to other platforms that support Node.js:
 
 1. Build your application:
+
 ```bash
 npm run build
 # or
@@ -125,6 +135,7 @@ pnpm build
 ```
 
 2. Start the production server:
+
 ```bash
 npm run start
 # or
@@ -132,6 +143,45 @@ yarn start
 # or
 pnpm start
 ```
+
+## ⚡ Performance Optimizations
+
+This portfolio website includes several performance optimizations:
+
+### Compression & Caching
+
+- **Gzip Compression**: Enabled by default in Next.js for all responses
+- **Static Asset Caching**: Long-term caching for static assets (CSS, JS, images)
+- **Browser Caching**: Optimized cache headers for different content types
+- **Image Optimization**: Automatic image compression and WebP conversion
+
+### Bundle Analysis
+
+To analyze your bundle size:
+
+```bash
+npm run analyze
+# or
+yarn analyze
+# or
+pnpm analyze
+```
+
+### Additional Optimizations
+
+- **Turbopack**: Fast bundler for development (enabled with `--turbopack`)
+- **Static Generation**: Pages are statically generated at build time
+- **Code Splitting**: Automatic code splitting for better loading performance
+- **Font Optimization**: Optimized Google Fonts loading with Geist
+- **Tree Shaking**: Unused code elimination
+
+### Performance Headers
+
+The application sets several performance-related headers:
+
+- `Vary: Accept-Encoding` for compression negotiation
+- `Cache-Control` headers for optimal caching
+- Security headers for enhanced protection
 
 ## 🤝 Contributing
 

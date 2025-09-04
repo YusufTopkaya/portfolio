@@ -20,7 +20,7 @@ export function BlogPostCard({ post, index, translations }: BlogPostCardProps) {
   const shouldShowImage = post.imageUrl && !imageError;
 
   return (
-    <Card className="overflow-hidden flex flex-col hover:shadow-lg transition-shadow">
+    <Card className="overflow-hidden flex flex-col hover:shadow-lg transition-shadow w-full">
       {shouldShowImage && (
         <div className="relative w-full aspect-[16/9]">
           <Image
@@ -65,4 +65,3 @@ export function BlogPostCard({ post, index, translations }: BlogPostCardProps) {
     </Card>
   );
 }
-

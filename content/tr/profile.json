@@ -5,26 +5,169 @@
     "company": "Veripark",
     "about": "VeriPark'ta Yazılım Mühendisi olarak, güçlü bir bilgisayar bilimleri altyapısına ve yenilikçi yazılım çözümleri geliştirme tutkusuna sahibim.",
     "imageUrl": "/images/profile.jpg",
+    "callsign": "TB1REC",
     "cv": {
       "url": "/files/cv.pdf",
       "fileName": "Yusuf Topkaya - CV.pdf"
     }
   },
   "skills": [
-    "Mikroservisler",
-    "AI",
-    "PostgreSQL",
-    "MongoDB",
-    "Redis",
-    "RabbitMQ",
-    "Elasticsearch",
-    "Docker",
-    ".NET",
-    "C#",
-    "TypeScript",
-    "Next.js",
-    "Angular",
-    "Node.js"
+    {
+      "name": "AI, Ajanlar ve Otomasyon",
+      "icon": "brain",
+      "items": [
+        {
+          "name": "Ajanlı AI Çerçeveleri (örn. AutoGen)",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "bot"
+        },
+        {
+          "name": "LLM Entegrasyonu ve İnce Ayar",
+          "level": "Uzman",
+          "levelType": "expert",
+          "icon": "sparkles"
+        },
+        {
+          "name": "Vektör Veritabanları ve Semantik Önbellekleme Sistemleri",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "search"
+        },
+        {
+          "name": "AI İş Akışları ve Otomasyon",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "workflow"
+        },
+        {
+          "name": "Otomatik Maliyet Optimizasyon Stratejileri",
+          "level": "Uzman",
+          "levelType": "expert",
+          "icon": "trending-down"
+        }
+      ]
+    },
+    {
+      "name": "Temel Mimari ve Backend",
+      "icon": "code",
+      "items": [
+        {
+          "name": ".NET ve C#",
+          "level": "Uzman",
+          "levelType": "expert",
+          "icon": "code-2"
+        },
+        {
+          "name": "Mikroservisler ve Domain-Driven Design (DDD)",
+          "level": "Uzman",
+          "levelType": "expert",
+          "icon": "blocks"
+        },
+        {
+          "name": "Node.js ve Nest.js",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "server"
+        },
+        {
+          "name": "Go (Golang)",
+          "level": "Aşina",
+          "levelType": "familiar",
+          "icon": "code-2"
+        }
+      ]
+    },
+    {
+      "name": "Veri ve Mesajlaşma",
+      "icon": "database",
+      "items": [
+        {
+          "name": "PostgreSQL",
+          "level": "Uzman",
+          "levelType": "expert",
+          "icon": "database"
+        },
+        {
+          "name": "Redis",
+          "level": "Uzman",
+          "levelType": "expert",
+          "icon": "zap"
+        },
+        {
+          "name": "RabbitMQ",
+          "level": "Uzman",
+          "levelType": "expert",
+          "icon": "message-square"
+        },
+        {
+          "name": "MongoDB",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "leaf"
+        },
+        {
+          "name": "Elasticsearch",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "search"
+        }
+      ]
+    },
+    {
+      "name": "Cloud Native ve DevOps",
+      "icon": "cloud",
+      "items": [
+        {
+          "name": "Google Cloud Platform (GCP)",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "cloud"
+        },
+        {
+          "name": "Docker ve Konteynerizasyon",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "container"
+        },
+        {
+          "name": "CI/CD Pipeline Mimarisi",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "git-branch"
+        },
+        {
+          "name": "Kubernetes (K8s)",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "ship"
+        }
+      ]
+    },
+    {
+      "name": "Frontend ve API Katmanı",
+      "icon": "monitor",
+      "items": [
+        {
+          "name": "TypeScript",
+          "level": "Uzman",
+          "levelType": "expert",
+          "icon": "code"
+        },
+        {
+          "name": "Next.js",
+          "level": "Yetkin",
+          "levelType": "proficient",
+          "icon": "triangle"
+        },
+        {
+          "name": "API Tasarımı",
+          "level": "Uzman",
+          "levelType": "expert",
+          "icon": "share-2"
+        }
+      ]
+    }
   ],
   "certificates": [
     {
@@ -73,4 +216,3 @@
     }
   ]
 }
-

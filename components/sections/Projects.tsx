@@ -26,7 +26,7 @@ export function Projects({ projects, translations }: ProjectsProps) {
         </h2>
       </div>
 
-      <div className="mx-auto grid justify-center gap-4 sm:grid-cols-2 md:max-w-[64rem] md:grid-cols-3">
+      <div className="mx-auto grid justify-center gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]">
         {projects.map((project, index) => (
           <ProjectCard
             key={index}
@@ -41,4 +41,3 @@ export function Projects({ projects, translations }: ProjectsProps) {
     </section>
   );
 }
-

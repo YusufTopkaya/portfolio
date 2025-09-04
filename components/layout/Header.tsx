@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { FileDown } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
+import { RadioIcon } from "@/components/shared/RadioIcon";
 
 interface CVDownloadButtonProps {
   url: string;
@@ -63,7 +64,7 @@ interface HeaderProps {
 }
 
 export function Header({ profile: profileData, translations }: HeaderProps) {
-  const { name, position, about, company, cv, imageUrl } =
+  const { name, position, about, company, cv, imageUrl, callsign } =
     profileData.personalInfo;
 
   return (
@@ -76,6 +77,12 @@ export function Header({ profile: profileData, translations }: HeaderProps) {
         <div className="grid md:grid-cols-2 gap-8 items-center">
           <div className="space-y-4">
             <h1 className="text-4xl md:text-6xl font-bold">{name}</h1>
+            {callsign && (
+              <div className="flex items-center gap-2 text-lg md:text-xl text-slate-400 dark:text-slate-400 font-mono">
+                <RadioIcon color="currentColor" size={24} />
+                {callsign}
+              </div>
+            )}
             <h2 className="text-2xl md:text-3xl font-semibold">
               {position}
               {company && company.trim() !== "" && (
@@ -112,4 +119,3 @@ export function Header({ profile: profileData, translations }: HeaderProps) {
     </header>
   );
 }
-

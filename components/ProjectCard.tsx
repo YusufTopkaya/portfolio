@@ -20,7 +20,7 @@ export function ProjectCard({ project, translations }: ProjectCardProps) {
   const shouldShowImage = project.imageUrl && !imageError;
 
   return (
-    <Card className="overflow-hidden flex flex-col hover:shadow-lg transition-shadow">
+    <Card className="overflow-hidden flex flex-col hover:shadow-lg transition-shadow w-full">
       <CardContent className="p-6 flex flex-col flex-1">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-3">
@@ -68,4 +68,3 @@ export function ProjectCard({ project, translations }: ProjectCardProps) {
     </Card>
   );
 }
-

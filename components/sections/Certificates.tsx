@@ -35,11 +35,11 @@ export function Certificates({
         </h2>
       </div>
 
-      <div className="mx-auto grid justify-center gap-4 sm:grid-cols-2 md:max-w-[64rem] md:grid-cols-3">
+      <div className="mx-auto grid justify-center gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]">
         {certificates.map((cert) => (
           <Card
             key={`${cert.title}-${cert.issuer}`}
-            className="flex flex-col hover:shadow-lg transition-shadow"
+            className="flex flex-col hover:shadow-lg transition-shadow w-full"
           >
             <CardContent className="p-6 flex flex-col flex-1">
               <div className="flex-1">
@@ -76,4 +76,3 @@ export function Certificates({
     </section>
   );
 }
-

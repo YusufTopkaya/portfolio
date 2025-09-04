@@ -1,5 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
+
+  // 🚀 GZIP COMPRESSION - Force enable
+  compress: true,
+
+  // 🎯 Production optimizations
+  compiler: {
+    // Remove console.log statements in production for smaller bundles
+    removeConsole: process.env.NODE_ENV === "production",
+  },
+
+  // 🖼️ Image optimizations for better compression
   images: {
     remotePatterns: [
       {
@@ -8,14 +20,16 @@ const nextConfig = {
       },
     ],
   },
+
+  // Only set Vary header to hint compression support
   async headers() {
     return [
       {
-        source: "/:path*",
+        source: "/(.*)",
         headers: [
           {
-            key: "Cache-Control",
-            value: "public, max-age=3600, must-revalidate",
+            key: "Vary",
+            value: "Accept-Encoding",
           },
         ],
       },
@@ -24,4 +38,3 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
-

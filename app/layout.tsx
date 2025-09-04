@@ -1,20 +1,25 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import GoogleAnalytics from "@/components/shared/GoogleAnalytics";
-import { Analytics } from "@vercel/analytics/react";
-import { ThemeProvider } from "next-themes";
-import { getSEOMetadata } from "@/lib/i18n/content-loader";
+import { ClientProviders } from "@/components/shared/ClientProviders";
+import { getSEOMetadata } from "@/lib/i18n/server-content-loader";
 import { defaultLanguage } from "@/lib/i18n/config";
-
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  // Optimize font loading for better performance
+  display: "swap",
+  preload: true,
+  fallback: ["system-ui", "arial", "sans-serif"],
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  // Optimize font loading for better performance
+  display: "swap",
+  preload: true,
+  fallback: ["ui-monospace", "monospace"],
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -52,24 +57,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
+        <ClientProviders gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}>
           {children}
-        </ThemeProvider>
-
-        <Analytics />
-
-        {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
-          <GoogleAnalytics
-            GA_MEASUREMENT_ID={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}
-          />
-        )}
+        </ClientProviders>
       </body>
     </html>
   );
 }
-

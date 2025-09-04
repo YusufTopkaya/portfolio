@@ -1,5 +1,3 @@
-import fs from "fs/promises";
-import path from "path";
 import { translations, Translations } from "./translations";
 
 export interface Project {
@@ -30,6 +28,25 @@ export interface Certificate {
   credentialUrl?: string;
 }
 
+export enum SkillLevel {
+  EXPERT = "expert",
+  PROFICIENT = "proficient",
+  FAMILIAR = "familiar",
+}
+
+export interface SkillItem {
+  name: string;
+  level: string;
+  levelType: SkillLevel;
+  icon?: string;
+}
+
+export interface SkillCategory {
+  name: string;
+  icon?: string;
+  items: SkillItem[];
+}
+
 export interface Profile {
   personalInfo: {
     name: string;
@@ -37,12 +54,13 @@ export interface Profile {
     company: string;
     about: string;
     imageUrl: string;
+    callsign?: string;
     cv?: {
       url: string;
       fileName: string;
     };
   };
-  skills?: string[];
+  skills?: string[] | SkillCategory[];
   certificates?: Certificate[];
   projects?: Project[];
   blogPosts?: BlogPost[];
@@ -79,18 +97,6 @@ export interface SEOMetadata {
   };
 }
 
-export async function getProfile(locale: string): Promise<Profile> {
-  const filePath = path.join(process.cwd(), "content", locale, "profile.json");
-  const fileContent = await fs.readFile(filePath, "utf8");
-  return JSON.parse(fileContent);
-}
-
-export async function getSEOMetadata(locale: string): Promise<SEOMetadata> {
-  const filePath = path.join(process.cwd(), "content", locale, "metadata.json");
-  const fileContent = await fs.readFile(filePath, "utf8");
-  return JSON.parse(fileContent);
-}
-
 export function getTranslation(
   key: string,
   locale: keyof Translations
@@ -108,4 +114,3 @@ export function getTranslation(
 
   return typeof translation === "string" ? translation : key;
 }
-
