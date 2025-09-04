@@ -29,12 +29,6 @@
           "icon": "sparkles"
         },
         {
-          "name": "Vektör Veritabanları ve Semantik Önbellekleme Sistemleri",
-          "level": "Yetkin",
-          "levelType": "proficient",
-          "icon": "search"
-        },
-        {
           "name": "AI İş Akışları ve Otomasyon",
           "level": "Yetkin",
           "levelType": "proficient",
@@ -65,16 +59,10 @@
           "icon": "blocks"
         },
         {
-          "name": "Node.js ve Nest.js",
+          "name": "Node.js",
           "level": "Yetkin",
           "levelType": "proficient",
           "icon": "server"
-        },
-        {
-          "name": "Go (Golang)",
-          "level": "Aşina",
-          "levelType": "familiar",
-          "icon": "code-2"
         }
       ]
     },
@@ -83,15 +71,9 @@
       "icon": "database",
       "items": [
         {
-          "name": "PostgreSQL",
-          "level": "Uzman",
-          "levelType": "expert",
-          "icon": "database"
-        },
-        {
           "name": "Redis",
-          "level": "Uzman",
-          "levelType": "expert",
+          "level": "Yetkin",
+          "levelType": "proficient",
           "icon": "zap"
         },
         {
@@ -105,12 +87,6 @@
           "level": "Yetkin",
           "levelType": "proficient",
           "icon": "leaf"
-        },
-        {
-          "name": "Elasticsearch",
-          "level": "Yetkin",
-          "levelType": "proficient",
-          "icon": "search"
         }
       ]
     },
@@ -119,28 +95,16 @@
       "icon": "cloud",
       "items": [
         {
-          "name": "Google Cloud Platform (GCP)",
-          "level": "Yetkin",
-          "levelType": "proficient",
-          "icon": "cloud"
-        },
-        {
           "name": "Docker ve Konteynerizasyon",
           "level": "Yetkin",
           "levelType": "proficient",
           "icon": "container"
         },
         {
-          "name": "CI/CD Pipeline Mimarisi",
+          "name": "Azure DevOps",
           "level": "Yetkin",
           "levelType": "proficient",
-          "icon": "git-branch"
-        },
-        {
-          "name": "Kubernetes (K8s)",
-          "level": "Yetkin",
-          "levelType": "proficient",
-          "icon": "ship"
+          "icon": "container"
         }
       ]
     },
@@ -155,15 +119,15 @@
           "icon": "code"
         },
         {
-          "name": "Next.js",
+          "name": "Angular",
           "level": "Yetkin",
           "levelType": "proficient",
           "icon": "triangle"
         },
         {
           "name": "API Tasarımı",
-          "level": "Uzman",
-          "levelType": "expert",
+          "level": "Yetkin",
+          "levelType": "proficient",
           "icon": "share-2"
         }
       ]

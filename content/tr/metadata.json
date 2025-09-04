@@ -22,7 +22,7 @@
     "siteName": "Yusuf Topkaya Portfolyo",
     "images": [
       {
-        "url": "/images/og-banner.tr.png",
+        "url": "/images/og-banner.en.png",
         "width": 1200,
         "height": 364,
         "alt": "Yusuf Topkaya - Yazılım Mühendisi"
@@ -34,7 +34,7 @@
     "site": "@yusuftopkaja",
     "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.tr.png",
+      "url": "/images/og-banner.en.png",
       "alt": "Yusuf Topkaya - Yazılım Mühendisi"
     }
   }

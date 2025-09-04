@@ -29,12 +29,6 @@
           "icon": "sparkles"
         },
         {
-          "name": "Vektor-DBs & Semantische Caching-Systeme",
-          "level": "Kompetent",
-          "levelType": "proficient",
-          "icon": "search"
-        },
-        {
           "name": "KI-Workflows & Automatisierung",
           "level": "Kompetent",
           "levelType": "proficient",
@@ -65,16 +59,10 @@
           "icon": "blocks"
         },
         {
-          "name": "Node.js & Nest.js",
+          "name": "Node.js",
           "level": "Kompetent",
           "levelType": "proficient",
           "icon": "server"
-        },
-        {
-          "name": "Go (Golang)",
-          "level": "Vertraut",
-          "levelType": "familiar",
-          "icon": "code-2"
         }
       ]
     },
@@ -83,15 +71,9 @@
       "icon": "database",
       "items": [
         {
-          "name": "PostgreSQL",
-          "level": "Experte",
-          "levelType": "expert",
-          "icon": "database"
-        },
-        {
           "name": "Redis",
-          "level": "Experte",
-          "levelType": "expert",
+          "level": "Kompetent",
+          "levelType": "proficient",
           "icon": "zap"
         },
         {
@@ -105,12 +87,6 @@
           "level": "Kompetent",
           "levelType": "proficient",
           "icon": "leaf"
-        },
-        {
-          "name": "Elasticsearch",
-          "level": "Kompetent",
-          "levelType": "proficient",
-          "icon": "search"
         }
       ]
     },
@@ -119,28 +95,16 @@
       "icon": "cloud",
       "items": [
         {
-          "name": "Google Cloud Platform (GCP)",
-          "level": "Kompetent",
-          "levelType": "proficient",
-          "icon": "cloud"
-        },
-        {
           "name": "Docker & Containerisierung",
           "level": "Kompetent",
           "levelType": "proficient",
           "icon": "container"
         },
         {
-          "name": "CI/CD-Pipeline-Architektur",
+          "name": "Azure DevOps",
           "level": "Kompetent",
           "levelType": "proficient",
-          "icon": "git-branch"
-        },
-        {
-          "name": "Kubernetes (K8s)",
-          "level": "Kompetent",
-          "levelType": "proficient",
-          "icon": "ship"
+          "icon": "container"
         }
       ]
     },
@@ -155,15 +119,15 @@
           "icon": "code"
         },
         {
-          "name": "Next.js",
+          "name": "Angular",
           "level": "Kompetent",
           "levelType": "proficient",
           "icon": "triangle"
         },
         {
           "name": "API-Design",
-          "level": "Experte",
-          "levelType": "expert",
+          "level": "Kompetent",
+          "levelType": "proficient",
           "icon": "share-2"
         }
       ]

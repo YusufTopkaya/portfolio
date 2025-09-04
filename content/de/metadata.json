@@ -21,9 +21,9 @@
     "siteName": "Yusuf Topkaya Portfolio",
     "images": [
       {
-        "url": "/images/og-banner.de.png",
-        "width": 1200,
-        "height": 364,
+        "url": "/images/og-banner.en.png",
+        "width": 1233,
+        "height": 358,
         "alt": "Yusuf Topkaya - Softwareentwickler"
       }
     ]
@@ -33,7 +33,7 @@
     "site": "@yusuftopkaja",
     "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.de.png",
+      "url": "/images/og-banner.en.png",
       "alt": "Yusuf Topkaya - Softwareentwickler"
     }
   }
