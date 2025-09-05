@@ -24,8 +24,8 @@
         },
         {
           "name": "LLM Entegrasyonu ve İnce Ayar",
-          "level": "Uzman",
-          "levelType": "expert",
+          "level": "Yetkin",
+          "levelType": "proficient",
           "icon": "sparkles"
         },
         {
@@ -36,8 +36,8 @@
         },
         {
           "name": "Otomatik Maliyet Optimizasyon Stratejileri",
-          "level": "Uzman",
-          "levelType": "expert",
+          "level": "Yetkin",
+          "levelType": "proficient",
           "icon": "trending-down"
         }
       ]
@@ -78,8 +78,8 @@
         },
         {
           "name": "RabbitMQ",
-          "level": "Uzman",
-          "levelType": "expert",
+          "level": "Yetkin",
+          "levelType": "proficient",
           "icon": "message-square"
         },
         {
@@ -161,8 +161,8 @@
       "imageUrl": "https://play-lh.googleusercontent.com/I0UWKPLG7AeNHSvpV4KUNNgFlfqdD6ZypA36D6GVX30QnMjA-jMnefqh-ij8eQlOePU"
     },
     {
-      "title": "Garanti BBVA Romanya Müşteri Edinimi",
-      "description": "Garanti BBVA Romanya için, kurumsal müşterilerin bankacılık işlemlerini güvenli bir şekilde yönetmelerini sağlayan kapsamlı bir müşteri edinim çözümü geliştirildi.",
+      "title": "Garanti BBVA Romanya İnternet Bankacılığı",
+      "description": "Garanti BBVA Romanya'nın internet bankacılığı sisteminin çeşitli modüllerini geliştirdim, kurumsal müşterilerin hesaplarını, işlemlerini ve bankacılık faaliyetlerini modern bir web platformu üzerinden güvenli bir şekilde yönetmelerini sağladım.",
       "projectUrl": "https://www.garantibbva.ro",
       "tags": ["Bankacılık", "Finans", ".NET"],
       "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/7b/66/9b/7b669bc1-d399-2bcd-ca43-e54be6e9c836/AppIcon-0-1x_U007emarketing-0-7-0-0-85-220-0.png/460x0w.webp"

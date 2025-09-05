@@ -24,8 +24,8 @@
         },
         {
           "name": "LLM Integration & Fine-Tuning",
-          "level": "Expert",
-          "levelType": "expert",
+          "level": "Proficient",
+          "levelType": "proficient",
           "icon": "sparkles"
         },
         {
@@ -36,8 +36,8 @@
         },
         {
           "name": "Automated Cost-Optimization Strategies",
-          "level": "Expert",
-          "levelType": "expert",
+          "level": "Proficient",
+          "levelType": "proficient",
           "icon": "trending-down"
         }
       ]
@@ -78,8 +78,8 @@
         },
         {
           "name": "RabbitMQ",
-          "level": "Expert",
-          "levelType": "expert",
+          "level": "Proficient",
+          "levelType": "proficient",
           "icon": "message-square"
         },
         {
@@ -161,8 +161,8 @@
       "imageUrl": "https://play-lh.googleusercontent.com/I0UWKPLG7AeNHSvpV4KUNNgFlfqdD6ZypA36D6GVX30QnMjA-jMnefqh-ij8eQlOePU"
     },
     {
-      "title": "Garanti BBVA Romania Onboarding",
-      "description": "Developed a comprehensive onboarding solution for Garanti BBVA Romania, enabling corporate customers to securely manage their banking operations.",
+      "title": "Garanti BBVA Romania Internet Banking",
+      "description": "Developed several modules for Garanti BBVA Romania's internet banking system, enabling corporate customers to securely manage their accounts, transactions, and banking operations through a modern web platform.",
       "projectUrl": "https://www.garantibbva.ro",
       "tags": ["Banking", "Financial", ".NET"],
       "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/7b/66/9b/7b669bc1-d399-2bcd-ca43-e54be6e9c836/AppIcon-0-1x_U007emarketing-0-7-0-0-85-220-0.png/460x0w.webp"
