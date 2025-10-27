@@ -51,7 +51,7 @@ export default function KeySequenceListener() {
       bufferRef.current += key;
       scheduleClear();
 
-      if (!target.startsWith(bufferRef.current)) {
+      if (target && !target.startsWith(bufferRef.current)) {
         // mismatch: maybe this key starts the sequence
         bufferRef.current = key === target[0] ? key : "";
         scheduleClear();
