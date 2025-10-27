@@ -12,7 +12,7 @@ export default function KeySequenceListener() {
   const router = useRouter();
   const bufferRef = useRef<string>("");
   const timeoutRef = useRef<number | null>(null);
-  const target = "yusuf";
+  const target = process.env.NEXT_PUBLIC_KEY_SEQUENCE;
   const maxPauseMs = 1000; // allow up to 1s pause between keys
 
   useEffect(() => {
