@@ -39,6 +39,7 @@ export function OptimizedImage({
 }: OptimizedImageProps) {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const isSvg = src.endsWith('.svg') || src.includes('.svg?') || src.includes('data:image/svg+xml');
 
   const handleLoad = () => {
     setImageLoading(false);
@@ -80,6 +81,7 @@ export function OptimizedImage({
         quality={quality}
         onLoad={handleLoad}
         onError={handleError}
+        unoptimized={isSvg}
       />
     </>
   );
