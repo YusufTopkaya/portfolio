@@ -14,6 +14,8 @@ const nextConfig = {
     removeConsole: process.env.NODE_ENV === "production",
   },
 
+  serverExternalPackages: ['pino', 'pino-pretty'],
+
   // 🖼️ Image optimizations for better compression
   images: {
     remotePatterns: [
