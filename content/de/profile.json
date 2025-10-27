@@ -30,12 +30,12 @@
         },
         {
           "name": "KI-Workflows & Automatisierung",
-          "level": "Kompetent",
-          "levelType": "proficient",
+          "level": "Experte",
+          "levelType": "expert",
           "icon": "workflow"
         },
         {
-          "name": "Automatisierte Kostenoptimierungsstrategien",
+          "name": "Automatische Kostenoptimierung",
           "level": "Kompetent",
           "levelType": "proficient",
           "icon": "trending-down"

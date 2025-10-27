@@ -78,7 +78,7 @@ export interface SEOMetadata {
     title: string;
     description: string;
     siteName: string;
-    url: string;
+    url?: string;
     images: Array<{
       url: string;
       width: number;

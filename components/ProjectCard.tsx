@@ -2,9 +2,10 @@
 
 import { type Project } from "@/lib/i18n/content-loader";
 import { Card, CardContent } from "@/components/ui/card";
-import Image from "next/image";
-import { useState } from "react";
 import { ExternalLink } from "lucide-react";
+import { trackExternalLink } from "@/lib/analytics";
+import { OptimizedImage } from "@/components/shared/OptimizedImage";
+import { useState } from "react";
 
 interface ProjectCardProps {
   project: Project;
@@ -26,12 +27,14 @@ export function ProjectCard({ project, translations }: ProjectCardProps) {
           <div className="flex items-center gap-3 mb-3">
             {shouldShowImage && (
               <div className="relative w-6 h-6 flex-shrink-0">
-                <Image
+                <OptimizedImage
                   src={project.imageUrl!}
                   alt={project.title}
                   fill
-                  className="object-contain"
-                  onError={() => setImageError(true)}
+                  sizes="24px"
+                  objectFit="contain"
+                  showLoadingSpinner={false}
+                  onErrorCallback={() => setImageError(true)}
                 />
               </div>
             )}
@@ -58,6 +61,7 @@ export function ProjectCard({ project, translations }: ProjectCardProps) {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center text-sm font-medium text-primary hover:text-primary/90 transition-colors"
+              onClick={() => trackExternalLink(project.projectUrl!, `Project: ${project.title}`)}
             >
               {translations.viewProject}
               <ExternalLink className="h-4 w-4 ml-2" />

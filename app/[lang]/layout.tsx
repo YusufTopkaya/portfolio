@@ -1,6 +1,7 @@
 import { getSEOMetadata } from "@/lib/i18n/server-content-loader";
 import { getLanguageByCode, defaultLanguage } from "@/lib/i18n/config";
 import type { Metadata } from "next";
+import { buildMetadataWithAbsoluteUrls } from "@/lib/i18n/metadata-utils";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -19,17 +20,23 @@ export async function generateMetadata({
   const language = getLanguageByCode(lang);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-  return {
-    ...metadata,
-    metadataBase: new URL(siteUrl),
-    openGraph: {
-      ...metadata.openGraph,
-      ...defaultMetadata.openGraph,
-      url: `${siteUrl}/${lang}`,
-      locale: language?.locale,
-    },
-    twitter: defaultMetadata.twitter,
-  };
+  const result = buildMetadataWithAbsoluteUrls(metadata, siteUrl, {
+    url: `${siteUrl}/${lang}`,
+    locale: language?.locale,
+  });
+
+  if (lang !== defaultLanguage) {
+    result.openGraph = {
+      ...result.openGraph,
+      images: result.openGraph?.images || defaultMetadata.openGraph?.images,
+    };
+    result.twitter = {
+      ...result.twitter,
+      images: result.twitter?.images || defaultMetadata.twitter?.images,
+    };
+  }
+
+  return result;
 }
 
 export default async function Layout({ children, params }: LayoutProps) {

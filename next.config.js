@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
 
+  // Output standalone build for Docker deployment
+  output: 'standalone',
+
   // 🚀 GZIP COMPRESSION - Force enable
   compress: true,
 

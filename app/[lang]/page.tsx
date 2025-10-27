@@ -8,6 +8,7 @@ import { Skills } from "@/components/sections/Skills";
 import { Certificates } from "@/components/sections/Certificates";
 import { Metadata } from "next";
 import { languageCodes } from "@/lib/i18n/config";
+import { buildMetadataWithAbsoluteUrls } from "@/lib/i18n/metadata-utils";
 
 interface PageProps {
   params: Promise<{
@@ -31,15 +32,10 @@ export async function generateMetadata({
   const metadata = await getSEOMetadata(lang);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-  return {
-    ...metadata,
-    metadataBase: new URL(siteUrl),
-    openGraph: {
-      ...metadata.openGraph,
-      url: `${siteUrl}/${lang}`,
-      locale: lang,
-    },
-  };
+  return buildMetadataWithAbsoluteUrls(metadata, siteUrl, {
+    url: `${siteUrl}/${lang}`,
+    locale: lang,
+  });
 }
 
 export default async function Home({ params }: PageProps) {
@@ -63,6 +59,7 @@ export default async function Home({ params }: PageProps) {
         translations={{
           downloadCV: t.actions.downloadCV,
         }}
+        language={lang}
       />
       <main className="container mx-auto px-4 py-8">
         {hasBlogPosts && (

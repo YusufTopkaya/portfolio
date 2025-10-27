@@ -1,22 +1,25 @@
 "use client";
 
 import { Profile } from "@/lib/i18n/content-loader";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { FileDown } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { RadioIcon } from "@/components/shared/RadioIcon";
+import { trackCVDownload } from "@/lib/analytics";
+import { OptimizedImage } from "@/components/shared/OptimizedImage";
 
 interface CVDownloadButtonProps {
   url: string;
   fileName: string;
   label: string;
+  language?: string;
 }
 
-// Separate client component for download functionality
-function CVDownloadButton({ url, fileName, label }: CVDownloadButtonProps) {
+function CVDownloadButton({ url, fileName, label, language }: CVDownloadButtonProps) {
   const handleDownload = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    trackCVDownload(language);
+
     if (url.startsWith("http")) {
       e.preventDefault();
       try {
@@ -61,9 +64,10 @@ interface HeaderProps {
   translations: {
     downloadCV: string;
   };
+  language?: string;
 }
 
-export function Header({ profile: profileData, translations }: HeaderProps) {
+export function Header({ profile: profileData, translations, language }: HeaderProps) {
   const { name, position, about, company, cv, imageUrl, callsign } =
     profileData.personalInfo;
 
@@ -100,17 +104,20 @@ export function Header({ profile: profileData, translations }: HeaderProps) {
                 url={cv.url}
                 fileName={cv.fileName}
                 label={translations.downloadCV}
+                language={language}
               />
             )}
           </div>
           <div className="flex justify-center">
             <div className="relative w-[300px] h-[300px] rounded-full overflow-hidden border-4 border-slate-700/50 dark:border-border shadow-xl">
-              <Image
+              <OptimizedImage
                 src={imageUrl}
                 alt={name}
                 fill
-                className="object-cover hover:scale-105 transition-transform duration-300"
+                sizes="300px"
+                className="hover:scale-105 transition-transform duration-300"
                 priority
+                objectFit="cover"
               />
             </div>
           </div>

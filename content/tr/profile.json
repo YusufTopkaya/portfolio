@@ -30,12 +30,14 @@
         },
         {
           "name": "AI İş Akışları ve Otomasyon",
-          "level": "Yetkin",
-          "levelType": "proficient",
+          "level": "Uzman",
+          "levelType": "expert",
           "icon": "workflow"
         },
         {
           "name": "Otomatik Maliyet Optimizasyon Stratejileri",
+          "level": "Yetkin",
+          "levelType": "proficient",
           "level": "Yetkin",
           "levelType": "proficient",
           "icon": "trending-down"

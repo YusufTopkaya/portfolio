@@ -12,7 +12,8 @@ This is a modern, internationalized personal portfolio website built with Next.j
 - 💅 Styled with TailwindCSS and shadcn/ui
 - 🚀 Optimized performance with gzip compression
 - 📊 Google Analytics 4 integration
-- 🗜️ Automatic asset compression and caching
+- � Microsoft Clarity user behavior analytics
+- �🗜️ Automatic asset compression and caching
 - ⚡ Static asset optimization
 - 🔧 Bundle analysis support
 
@@ -23,6 +24,7 @@ This is a modern, internationalized personal portfolio website built with Next.j
 - Node.js 18.x or later
 - npm or yarn or pnpm
 - Google Analytics 4 account (for analytics)
+- Microsoft Clarity account (for user behavior analytics)
 
 ### Installation
 
@@ -52,7 +54,13 @@ cp .env.example .env.local
 4. Configure your environment variables in `.env.local`:
 
    - Get your Google Analytics Measurement ID from your GA4 property settings
-   - Replace the placeholder in `NEXT_PUBLIC_GA_MEASUREMENT_ID` with your actual GA4 Measurement ID
+   - Get your Microsoft Clarity Project ID from your Clarity account
+   - Replace the placeholders with your actual IDs:
+
+```bash
+NEXT_PUBLIC_GA_MEASUREMENT_ID="G-XXXXXXXXXX"
+NEXT_PUBLIC_CLARITY_PROJECT_ID="XXXXXXXXXX"
+```
 
 5. Start the development server:
 
@@ -94,6 +102,23 @@ portfolio/
 ```bash
 NEXT_PUBLIC_GA_MEASUREMENT_ID="G-XXXXXXXXXX"
 ```
+
+### Microsoft Clarity Setup
+
+1. Create a Microsoft Clarity account at [clarity.microsoft.com](https://clarity.microsoft.com/)
+2. Create a new project for your website
+3. Copy your Project ID from the dashboard
+4. Add your Project ID to `.env.local`:
+
+```bash
+NEXT_PUBLIC_CLARITY_PROJECT_ID="XXXXXXXXXX"
+```
+
+Microsoft Clarity provides:
+- **Heatmaps** - See where users click, scroll, and engage
+- **Session Recordings** - Watch real user sessions to understand behavior
+- **User Insights** - Analyze user journey and identify pain points
+- **Performance Metrics** - Monitor site performance and user experience
 
 ### Content Management
 

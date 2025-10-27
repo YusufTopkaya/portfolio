@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClientProviders } from "@/components/shared/ClientProviders";
+import MicrosoftClarity from "@/components/shared/MicrosoftClarity";
 import { getSEOMetadata } from "@/lib/i18n/server-content-loader";
 import { defaultLanguage } from "@/lib/i18n/config";
+import { buildMetadataWithAbsoluteUrls } from "@/lib/i18n/metadata-utils";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -27,12 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
   return {
-    ...metadata,
-    metadataBase: new URL(siteUrl),
-    openGraph: {
-      ...metadata.openGraph,
-      url: siteUrl,
-    },
+    ...buildMetadataWithAbsoluteUrls(metadata, siteUrl),
     robots: {
       index: true,
       follow: true,
@@ -54,10 +51,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang={defaultLanguage} suppressHydrationWarning>
+      <head>
+        <MicrosoftClarity />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ClientProviders gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}>
+        <ClientProviders 
+          gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}
+        >
           {children}
         </ClientProviders>
       </body>

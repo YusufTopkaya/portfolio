@@ -20,6 +20,15 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const response = NextResponse.next();
 
+  console.log({
+    timestamp: new Date().toISOString(),
+    method: request.method,
+    url: request.url,
+    pathname,
+    ip: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip"),
+    userAgent: request.headers.get("user-agent"),
+  });
+
   // Essential security headers for all responses
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");

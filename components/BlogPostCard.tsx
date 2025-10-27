@@ -2,9 +2,10 @@
 
 import { type BlogPost } from "@/lib/i18n/content-loader";
 import { Card, CardContent } from "@/components/ui/card";
-import Image from "next/image";
+import { OptimizedImage } from "@/components/shared/OptimizedImage";
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
+import { trackExternalLink } from "@/lib/analytics";
 
 interface BlogPostCardProps {
   post: BlogPost;
@@ -23,16 +24,15 @@ export function BlogPostCard({ post, index, translations }: BlogPostCardProps) {
     <Card className="overflow-hidden flex flex-col hover:shadow-lg transition-shadow w-full">
       {shouldShowImage && (
         <div className="relative w-full aspect-[16/9]">
-          <Image
+          <OptimizedImage
             src={post.imageUrl!}
             alt={post.title}
+            key={index}
             fill
-            className="object-cover"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            priority={index === 0}
-            loading={index === 0 ? "eager" : "lazy"}
             quality={75}
-            onError={() => setImageError(true)}
+            objectFit="cover"
+            onErrorCallback={() => setImageError(true)}
           />
         </div>
       )}
@@ -55,6 +55,7 @@ export function BlogPostCard({ post, index, translations }: BlogPostCardProps) {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center text-sm font-medium text-primary hover:text-primary/90 transition-colors"
+              onClick={() => trackExternalLink(post.blogUrl!, `Blog: ${post.title}`)}
             >
               {translations.readMore}
               <ExternalLink className="h-4 w-4 ml-2" />
