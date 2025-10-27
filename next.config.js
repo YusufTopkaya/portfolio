@@ -10,8 +10,7 @@ const nextConfig = {
 
   // 🎯 Production optimizations
   compiler: {
-    // Remove console.log statements in production for smaller bundles
-    removeConsole: process.env.NODE_ENV === "production",
+    removeConsole: false,
   },
 
   serverExternalPackages: ['pino', 'pino-pretty'],
@@ -37,6 +36,32 @@ const nextConfig = {
             value: "Accept-Encoding",
           },
         ],
+      },
+    ];
+  },
+
+  async redirects() {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+    if (!siteUrl) return [];
+
+    const url = new URL(siteUrl);
+    const targetHost = url.hostname;
+    const sourceHost = targetHost.replace('www.', '');
+
+    if (targetHost === sourceHost) return [];
+
+    return [
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: sourceHost,
+          },
+        ],
+        destination: `${siteUrl}/:path*`,
+        permanent: true,
       },
     ];
   },
