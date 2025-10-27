@@ -9,6 +9,7 @@ import { Certificates } from "@/components/sections/Certificates";
 import { Metadata } from "next";
 import { languageCodes } from "@/lib/i18n/config";
 import { buildMetadataWithAbsoluteUrls } from "@/lib/i18n/metadata-utils";
+import KeySequenceListener from "@/components/KeySequenceListener";
 
 interface PageProps {
   params: Promise<{
@@ -54,6 +55,7 @@ export default async function Home({ params }: PageProps) {
 
   return (
     <div className="flex flex-col min-h-screen">
+      <KeySequenceListener />
       <Header
         profile={profile}
         translations={{
