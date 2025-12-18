@@ -1,0 +1,41 @@
+{
+  "title": "Yusuf Topkaya - 软件工程师",
+  "description": "Yusuf Topkaya的个人作品集网站，软件工程师，专门从事后端开发",
+  "callsign": "TA1YTK",
+  "keywords": [
+    "软件工程师",
+    "后端开发",
+    "全栈",
+    "开发者",
+    "veripark",
+    "dotnet",
+    "微服务",
+    "TA1YTK",
+    "业余无线电",
+    "ham radio",
+    "no code platform developer",
+    "作品集"
+  ],
+  "openGraph": {
+    "title": "Yusuf Topkaya - 软件工程师",
+    "description": "Yusuf Topkaya的个人作品集网站，软件工程师，专门从事后端开发",
+    "siteName": "Yusuf Topkaya作品集",
+    "images": [
+      {
+        "url": "/images/og-banner.en.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - 软件工程师"
+      }
+    ]
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
+    "images": {
+      "url": "/images/og-banner.en.png",
+      "alt": "Yusuf Topkaya - 软件工程师"
+    }
+  }
+}

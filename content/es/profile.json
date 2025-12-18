@@ -1,0 +1,188 @@
+{
+  "personalInfo": {
+    "name": "Yusuf Topkaya",
+    "position": "Ingeniero de Software",
+    "company": "Veripark",
+    "about": "Como Ingeniero de Software en VeriPark, tengo una sólida formación en informática y una pasión por crear soluciones de software innovadoras.",
+    "imageUrl": "/images/profile.jpg",
+    "callsign": "TA1YTK",
+    "cv": {
+      "url": "/files/cv.pdf",
+      "fileName": "Yusuf Topkaya - CV.pdf"
+    }
+  },
+  "skills": [
+    {
+      "name": "IA, Agentes & Automatización",
+      "icon": "brain",
+      "items": [
+        {
+          "name": "Frameworks de IA Agentiva (p.ej. AutoGen)",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "bot"
+        },
+        {
+          "name": "Integración de LLM & Fine-Tuning",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "sparkles"
+        },
+        {
+          "name": "Flujos de trabajo de IA & Automatización",
+          "level": "Experto",
+          "levelType": "expert",
+          "icon": "workflow"
+        },
+        {
+          "name": "Estrategias de Optimización de Costes Automatizadas",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "trending-down"
+        }
+      ]
+    },
+    {
+      "name": "Arquitectura Central & Backend",
+      "icon": "code",
+      "items": [
+        {
+          "name": ".NET & C#",
+          "level": "Experto",
+          "levelType": "expert",
+          "icon": "code-2"
+        },
+        {
+          "name": "Microservicios & Domain-Driven Design (DDD)",
+          "level": "Experto",
+          "levelType": "expert",
+          "icon": "blocks"
+        },
+        {
+          "name": "Node.js",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "server"
+        }
+      ]
+    },
+    {
+      "name": "Datos & Mensajería",
+      "icon": "database",
+      "items": [
+        {
+          "name": "Redis",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "zap"
+        },
+        {
+          "name": "RabbitMQ",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "message-square"
+        },
+        {
+          "name": "MongoDB",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "leaf"
+        }
+      ]
+    },
+    {
+      "name": "Cloud Native & DevOps",
+      "icon": "cloud",
+      "items": [
+        {
+          "name": "Docker & Containerización",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "container"
+        },
+        {
+          "name": "Kubernetes",
+          "level": "Familiarizado",
+          "levelType": "familiar",
+          "icon": "container"
+        },
+        {
+          "name": "Azure DevOps",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "container"
+        }
+      ]
+    },
+    {
+      "name": "Frontend & Capa API",
+      "icon": "monitor",
+      "items": [
+        {
+          "name": "TypeScript",
+          "level": "Experto",
+          "levelType": "expert",
+          "icon": "code"
+        },
+        {
+          "name": "Angular",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "triangle"
+        },
+        {
+          "name": "Diseño de API",
+          "level": "Competente",
+          "levelType": "proficient",
+          "icon": "share-2"
+        }
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "title": "Docker",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "Feb 2023"
+    },
+    {
+      "title": "Sistemas de Información Geográfica",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "Ene 2020"
+    }
+  ],
+  "projects": [
+    {
+      "title": "Türk Eximbank Internet Banking",
+      "description": "Türk Eximbank Internet Banking es una aplicación web que permite a los clientes corporativos gestionar sus cuentas y transacciones en línea.",
+      "projectUrl": "https://esube.eximbank.gov.tr/",
+      "tags": ["Banca", "Finanzas"],
+      "imageUrl": "https://www.eximbank.gov.tr/Content/images/eximbank-logo.svg"
+    },
+    {
+      "title": "Akbank AG Internet Banking",
+      "description": "Desarrollo de una solución integral de banca por internet para Akbank AG Alemania, permitiendo a clientes corporativos y minoristas gestionar de forma segura sus operaciones bancarias. La plataforma ofrece funcionalidades como gestión de cuentas, transferencias de fondos y servicios de banca digital con una interfaz amigable.",
+      "projectUrl": "https://myonline.akbank.de/",
+      "tags": ["Banca", "Finanzas", ".NET"],
+      "imageUrl": "https://play-lh.googleusercontent.com/I0UWKPLG7AeNHSvpV4KUNNgFlfqdD6ZypA36D6GVX30QnMjA-jMnefqh-ij8eQlOePU"
+    },
+    {
+      "title": "Garanti BBVA Romania Internet Banking",
+      "description": "Desarrollo de varios módulos para el sistema de banca por internet de Garanti BBVA Rumania, permitiendo a clientes corporativos gestionar de forma segura sus cuentas, transacciones y operaciones bancarias a través de una plataforma web moderna.",
+      "projectUrl": "https://www.garantibbva.ro",
+      "tags": ["Banca", "Finanzas", ".NET"],
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/7b/66/9b/7b669bc1-d399-2bcd-ca43-e54be6e9c836/AppIcon-0-1x_U007emarketing-0-7-0-0-85-220-0.png/460x0w.webp"
+    }
+  ],
+  "blogPosts": [],
+  "socialLinks": [
+    {
+      "name": "LinkedIn",
+      "url": "https://www.linkedin.com/in/yusuftopkaya"
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/YusufTopkaya"
+    }
+  ]
+}

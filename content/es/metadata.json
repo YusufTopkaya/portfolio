@@ -1,0 +1,41 @@
+{
+  "title": "Yusuf Topkaya - Ingeniero de Software",
+  "description": "Portfolio personal de Yusuf Topkaya, Ingeniero de Software especializado en desarrollo backend",
+  "callsign": "TA1YTK",
+  "keywords": [
+    "ingeniero de software",
+    "desarrollo backend",
+    "full stack",
+    "desarrollador",
+    "veripark",
+    "dotnet",
+    "microservicios",
+    "TA1YTK",
+    "radio aficionado",
+    "ham radio",
+    "no code platform developer",
+    "portfolio"
+  ],
+  "openGraph": {
+    "title": "Yusuf Topkaya - Ingeniero de Software",
+    "description": "Portfolio personal de Yusuf Topkaya, Ingeniero de Software especializado en desarrollo backend",
+    "siteName": "Portfolio de Yusuf Topkaya",
+    "images": [
+      {
+        "url": "/images/og-banner.en.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - Ingeniero de Software"
+      }
+    ]
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
+    "images": {
+      "url": "/images/og-banner.en.png",
+      "alt": "Yusuf Topkaya - Ingeniero de Software"
+    }
+  }
+}

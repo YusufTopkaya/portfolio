@@ -1,0 +1,41 @@
+{
+  "title": "Yusuf Topkaya - ソフトウェアエンジニア",
+  "description": "バックエンド開発を専門とするソフトウェアエンジニア、Yusuf Topkayaの個人ポートフォリオウェブサイト",
+  "callsign": "TA1YTK",
+  "keywords": [
+    "ソフトウェアエンジニア",
+    "バックエンド開発",
+    "フルスタック",
+    "開発者",
+    "veripark",
+    "dotnet",
+    "マイクロサービス",
+    "TA1YTK",
+    "アマチュア無線",
+    "ham radio",
+    "no code platform developer",
+    "ポートフォリオ"
+  ],
+  "openGraph": {
+    "title": "Yusuf Topkaya - ソフトウェアエンジニア",
+    "description": "バックエンド開発を専門とするソフトウェアエンジニア、Yusuf Topkayaの個人ポートフォリオウェブサイト",
+    "siteName": "Yusuf Topkaya ポートフォリオ",
+    "images": [
+      {
+        "url": "/images/og-banner.en.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - ソフトウェアエンジニア"
+      }
+    ]
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
+    "images": {
+      "url": "/images/og-banner.en.png",
+      "alt": "Yusuf Topkaya - ソフトウェアエンジニア"
+    }
+  }
+}

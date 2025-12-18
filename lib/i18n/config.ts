@@ -21,6 +21,62 @@ export const languages: Language[] = [
     locale: "tr-TR",
     direction: "ltr",
   },
+  {
+    code: "de",
+    name: "German",
+    nativeName: "Deutsch",
+    locale: "de-DE",
+    direction: "ltr",
+  },
+  {
+    code: "fr",
+    name: "French",
+    nativeName: "Français",
+    locale: "fr-FR",
+    direction: "ltr",
+  },
+  {
+    code: "es",
+    name: "Spanish",
+    nativeName: "Español",
+    locale: "es-ES",
+    direction: "ltr",
+  },
+  {
+    code: "it",
+    name: "Italian",
+    nativeName: "Italiano",
+    locale: "it-IT",
+    direction: "ltr",
+  },
+  {
+    code: "pt",
+    name: "Portuguese",
+    nativeName: "Português",
+    locale: "pt-BR",
+    direction: "ltr",
+  },
+  {
+    code: "ru",
+    name: "Russian",
+    nativeName: "Русский",
+    locale: "ru-RU",
+    direction: "ltr",
+  },
+  {
+    code: "ja",
+    name: "Japanese",
+    nativeName: "日本語",
+    locale: "ja-JP",
+    direction: "ltr",
+  },
+  {
+    code: "zh",
+    name: "Chinese",
+    nativeName: "简体中文",
+    locale: "zh-CN",
+    direction: "ltr",
+  },
 ];
 
 export const defaultLanguage = "en";

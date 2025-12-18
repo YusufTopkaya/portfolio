@@ -1,0 +1,41 @@
+{
+  "title": "Yusuf Topkaya - Ingénieur Logiciel",
+  "description": "Portfolio personnel de Yusuf Topkaya, Ingénieur Logiciel spécialisé en développement backend",
+  "callsign": "TA1YTK",
+  "keywords": [
+    "ingénieur logiciel",
+    "développement backend",
+    "full stack",
+    "développeur",
+    "veripark",
+    "dotnet",
+    "microservices",
+    "TA1YTK",
+    "radio amateur",
+    "ham radio",
+    "no code platform developer",
+    "portfolio"
+  ],
+  "openGraph": {
+    "title": "Yusuf Topkaya - Ingénieur Logiciel",
+    "description": "Portfolio personnel de Yusuf Topkaya, Ingénieur Logiciel spécialisé en développement backend",
+    "siteName": "Portfolio Yusuf Topkaya",
+    "images": [
+      {
+        "url": "/images/og-banner.en.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - Ingénieur Logiciel"
+      }
+    ]
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
+    "images": {
+      "url": "/images/og-banner.en.png",
+      "alt": "Yusuf Topkaya - Ingénieur Logiciel"
+    }
+  }
+}

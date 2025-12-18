@@ -1,0 +1,41 @@
+{
+  "title": "Yusuf Topkaya - Инженер программного обеспечения",
+  "description": "Личное портфолио Yusuf Topkaya, инженера программного обеспечения, специализирующегося на разработке backend",
+  "callsign": "TA1YTK",
+  "keywords": [
+    "инженер программного обеспечения",
+    "разработка backend",
+    "full stack",
+    "разработчик",
+    "veripark",
+    "dotnet",
+    "микросервисы",
+    "TA1YTK",
+    "радиолюбитель",
+    "ham radio",
+    "no code platform developer",
+    "portfolio"
+  ],
+  "openGraph": {
+    "title": "Yusuf Topkaya - Инженер программного обеспечения",
+    "description": "Личное портфолио Yusuf Topkaya, инженера программного обеспечения, специализирующегося на разработке backend",
+    "siteName": "Портфолио Yusuf Topkaya",
+    "images": [
+      {
+        "url": "/images/og-banner.en.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - Инженер программного обеспечения"
+      }
+    ]
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
+    "images": {
+      "url": "/images/og-banner.en.png",
+      "alt": "Yusuf Topkaya - Инженер программного обеспечения"
+    }
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "personalInfo": {
+    "name": "Yusuf Topkaya",
+    "position": "ソフトウェアエンジニア",
+    "company": "Veripark",
+    "about": "VeriParkのソフトウェアエンジニアとして、コンピュータサイエンスの強固な基礎と革新的なソフトウェアソリューションを創造する情熱を持っています。",
+    "imageUrl": "/images/profile.jpg",
+    "callsign": "TA1YTK",
+    "cv": {
+      "url": "/files/cv.pdf",
+      "fileName": "Yusuf Topkaya - CV.pdf"
+    }
+  },
+  "skills": [
+    {
+      "name": "AI、エージェント & オートメーション",
+      "icon": "brain",
+      "items": [
+        {
+          "name": "エージェント型AIフレームワーク (例: AutoGen)",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "bot"
+        },
+        {
+          "name": "LLM統合 & ファインチューニング",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "sparkles"
+        },
+        {
+          "name": "AIワークフロー & オートメーション",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "workflow"
+        },
+        {
+          "name": "自動化されたコスト最適化戦略",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "trending-down"
+        }
+      ]
+    },
+    {
+      "name": "コアアーキテクチャ & バックエンド",
+      "icon": "code",
+      "items": [
+        {
+          "name": ".NET & C#",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "code-2"
+        },
+        {
+          "name": "マイクロサービス & Domain-Driven Design (DDD)",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "blocks"
+        },
+        {
+          "name": "Node.js",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "server"
+        }
+      ]
+    },
+    {
+      "name": "データ & メッセージング",
+      "icon": "database",
+      "items": [
+        {
+          "name": "Redis",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "zap"
+        },
+        {
+          "name": "RabbitMQ",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "message-square"
+        },
+        {
+          "name": "MongoDB",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "leaf"
+        }
+      ]
+    },
+    {
+      "name": "クラウドネイティブ & DevOps",
+      "icon": "cloud",
+      "items": [
+        {
+          "name": "Docker & コンテナ化",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "container"
+        },
+        {
+          "name": "Kubernetes",
+          "level": "基礎知識",
+          "levelType": "familiar",
+          "icon": "container"
+        },
+        {
+          "name": "Azure DevOps",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "container"
+        }
+      ]
+    },
+    {
+      "name": "フロントエンド & APIレイヤー",
+      "icon": "monitor",
+      "items": [
+        {
+          "name": "TypeScript",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "code"
+        },
+        {
+          "name": "Angular",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "triangle"
+        },
+        {
+          "name": "APIデザイン",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "share-2"
+        }
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "title": "Docker",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "2023年2月"
+    },
+    {
+      "title": "地理情報システム",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "2020年1月"
+    }
+  ],
+  "projects": [
+    {
+      "title": "Türk Eximbank インターネットバンキング",
+      "description": "Türk Eximbank インターネットバンキングは、企業顧客がアカウントと取引をオンラインで管理できるウェブアプリケーションです。",
+      "projectUrl": "https://esube.eximbank.gov.tr/",
+      "tags": ["銀行", "金融"],
+      "imageUrl": "https://www.eximbank.gov.tr/Content/images/eximbank-logo.svg"
+    },
+    {
+      "title": "Akbank AG インターネットバンキング",
+      "description": "ドイツのAkbank AG向けの包括的なインターネットバンキングソリューションの開発。企業および小売顧客が自分の銀行業務を安全に管理できるプラットフォームです。アカウント管理、資金移動、デジタル銀行サービスなど、使いやすいインターフェースで各種機能を提供します。",
+      "projectUrl": "https://myonline.akbank.de/",
+      "tags": ["銀行", "金融", ".NET"],
+      "imageUrl": "https://play-lh.googleusercontent.com/I0UWKPLG7AeNHSvpV4KUNNgFlfqdD6ZypA36D6GVX30QnMjA-jMnefqh-ij8eQlOePU"
+    },
+    {
+      "title": "Garanti BBVA ルーマニア インターネットバンキング",
+      "description": "Garanti BBVA ルーマニアのインターネットバンキングシステムの複数のモジュール開発。企業顧客が最新のウェブプラットフォームを通じてアカウント、取引、銀行業務を安全に管理できるようにします。",
+      "projectUrl": "https://www.garantibbva.ro",
+      "tags": ["銀行", "金融", ".NET"],
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/7b/66/9b/7b669bc1-d399-2bcd-ca43-e54be6e9c836/AppIcon-0-1x_U007emarketing-0-7-0-0-85-220-0.png/460x0w.webp"
+    }
+  ],
+  "blogPosts": [],
+  "socialLinks": [
+    {
+      "name": "LinkedIn",
+      "url": "https://www.linkedin.com/in/yusuftopkaya"
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/YusufTopkaya"
+    }
+  ]
+}
