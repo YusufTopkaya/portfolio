@@ -4,9 +4,9 @@ import Script from "next/script";
 
 export default function MicrosoftClarity() {
   const clarityProjectId = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID;
-  
+
   // Only load in production and if project ID is available
-  if (process.env.NODE_ENV !== 'production' || !clarityProjectId) {
+  if (process.env.NODE_ENV !== "production" || !clarityProjectId) {
     return null;
   }
 

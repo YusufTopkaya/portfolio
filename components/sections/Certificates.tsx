@@ -1,7 +1,7 @@
 "use client";
 
-import { Card, CardContent } from "@/components/ui/card";
 import { ExternalLink } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { trackExternalLink } from "@/lib/analytics";
 
 interface Certificate {
@@ -36,7 +36,15 @@ export function Certificates({
         </h2>
       </div>
 
-      <div className="mx-auto grid justify-center gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]">
+      <div
+        className={`mx-auto grid justify-center gap-4 ${
+          certificates.length === 1
+            ? "max-w-[24rem] grid-cols-1"
+            : certificates.length === 2
+              ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
+        }`}
+      >
         {certificates.map((cert) => (
           <Card
             key={`${cert.title}-${cert.issuer}`}
@@ -65,7 +73,12 @@ export function Certificates({
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center text-sm font-medium text-primary hover:text-primary/90 transition-colors mt-4"
-                  onClick={() => trackExternalLink(cert.credentialUrl!, `Certificate: ${cert.title}`)}
+                  onClick={() =>
+                    trackExternalLink(
+                      cert.credentialUrl!,
+                      `Certificate: ${cert.title}`,
+                    )
+                  }
                 >
                   {translations.viewCredential}
                   <ExternalLink className="h-4 w-4 ml-2" />

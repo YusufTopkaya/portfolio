@@ -1,6 +1,6 @@
 "use client";
-import { SkillCategory, SkillLevel } from "@/lib/i18n/content-loader";
 import { DynamicIcon, getIconName } from "@/components/ui/DynamicIcon";
+import { type SkillCategory, SkillLevel } from "@/lib/i18n/content-loader";
 
 interface SkillsProps {
   skills: string[] | SkillCategory[];
@@ -64,7 +64,15 @@ export function Skills({ skills, translations }: SkillsProps) {
       </div>
 
       {isSkillCategoryFormat ? (
-        <div className="mx-auto grid justify-center gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]">
+        <div
+          className={`mx-auto grid justify-center gap-4 ${
+            skills.length === 1
+              ? "max-w-[24rem] grid-cols-1"
+              : skills.length === 2
+              ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
+          }`}
+        >
           {/* New structured format with categories */}
           {(skills as SkillCategory[]).map((category, categoryIndex) => {
             const iconName = category.icon
@@ -131,21 +139,28 @@ export function Skills({ skills, translations }: SkillsProps) {
         </div>
       ) : (
         // Simple array format - original layout
-        <div className="mx-auto max-w-[64rem]">
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 justify-center">
-            {(skills as string[]).map((skill, index) => (
-              <div
-                key={index}
-                className="border border-border rounded-lg p-4 hover:shadow-lg transition-shadow w-full"
-              >
-                <span className="text-sm font-medium text-foreground">
-                  {skill}
-                </span>
-              </div>
-            ))}
-          </div>
+        <div
+          className={`mx-auto grid justify-center gap-4 ${
+            skills.length === 1
+              ? "max-w-[24rem] grid-cols-1"
+              : skills.length === 2
+              ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
+          }`}
+        >
+          {(skills as string[]).map((skill, index) => (
+            <div
+              key={index}
+              className="border border-border rounded-lg p-4 hover:shadow-lg transition-shadow w-full"
+            >
+              <span className="text-sm font-medium text-foreground">
+                {skill}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </section>
   );
 }
+

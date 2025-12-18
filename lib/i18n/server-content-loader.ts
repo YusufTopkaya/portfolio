@@ -1,6 +1,6 @@
-import { promises as fs } from "fs";
-import path from "path";
-import { Profile, SEOMetadata } from "./content-loader";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import type { Profile, SEOMetadata } from "./content-loader";
 
 export async function getProfile(locale: string): Promise<Profile> {
   const filePath = path.join(process.cwd(), "content", locale, "profile.json");

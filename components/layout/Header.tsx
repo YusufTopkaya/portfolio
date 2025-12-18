@@ -1,13 +1,13 @@
 "use client";
 
-import { Profile } from "@/lib/i18n/content-loader";
-import { Button } from "@/components/ui/button";
 import { FileDown } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import { ThemeToggle } from "@/components/shared/ThemeToggle";
-import { RadioIcon } from "@/components/shared/RadioIcon";
-import { trackCVDownload } from "@/lib/analytics";
 import { OptimizedImage } from "@/components/shared/OptimizedImage";
+import { RadioIcon } from "@/components/shared/RadioIcon";
+import { ThemeToggle } from "@/components/shared/ThemeToggle";
+import { Button } from "@/components/ui/button";
+import { trackCVDownload } from "@/lib/analytics";
+import type { Profile } from "@/lib/i18n/content-loader";
 
 interface CVDownloadButtonProps {
   url: string;
@@ -16,7 +16,12 @@ interface CVDownloadButtonProps {
   language?: string;
 }
 
-function CVDownloadButton({ url, fileName, label, language }: CVDownloadButtonProps) {
+function CVDownloadButton({
+  url,
+  fileName,
+  label,
+  language,
+}: CVDownloadButtonProps) {
   const handleDownload = async (e: React.MouseEvent<HTMLAnchorElement>) => {
     trackCVDownload(language);
 
@@ -24,7 +29,7 @@ function CVDownloadButton({ url, fileName, label, language }: CVDownloadButtonPr
       e.preventDefault();
       try {
         const response = await fetch(
-          `/api/download?url=${encodeURIComponent(url)}`
+          `/api/download?url=${encodeURIComponent(url)}`,
         );
         if (!response.ok) throw new Error("Download failed");
 
@@ -67,7 +72,11 @@ interface HeaderProps {
   language?: string;
 }
 
-export function Header({ profile: profileData, translations, language }: HeaderProps) {
+export function Header({
+  profile: profileData,
+  translations,
+  language,
+}: HeaderProps) {
   const { name, position, about, company, cv, imageUrl, callsign } =
     profileData.personalInfo;
 
@@ -112,7 +121,7 @@ export function Header({ profile: profileData, translations, language }: HeaderP
             <div className="relative w-[300px] h-[300px] rounded-full overflow-hidden border-4 border-slate-700/50 dark:border-border shadow-xl">
               <OptimizedImage
                 src={imageUrl}
-                alt={name}
+                alt={`${name} - ${position} profile photo`}
                 fill
                 sizes="300px"
                 className="hover:scale-105 transition-transform duration-300"

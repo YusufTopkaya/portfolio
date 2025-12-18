@@ -1,7 +1,7 @@
 "use client";
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 import dynamic from "next/dynamic";
-import { FC, memo } from "react";
+import { type FC, memo } from "react";
 
 // Types
 export type IconName = keyof typeof dynamicIconImports;
@@ -36,14 +36,14 @@ export const DynamicIcon = memo(
       return <div className={`${props.className} bg-gray-300 rounded`} />;
     }
     return <Icon {...props} />;
-  }
+  },
 );
 DynamicIcon.displayName = "DynamicIcon";
 
 // Dynamic icon resolver - supports any icon name from Lucide with robust fallback
 export function getIconName(
   iconName?: string,
-  fallback: IconName = "circle"
+  fallback: IconName = "circle",
 ): IconName {
   if (!iconName) {
     return fallback;

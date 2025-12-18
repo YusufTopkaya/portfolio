@@ -3,20 +3,23 @@ const nextConfig = {
   reactStrictMode: true,
 
   // Output standalone build for Docker deployment
-  output: 'standalone',
+  output: "standalone",
 
   // 🚀 GZIP COMPRESSION - Force enable
   compress: true,
 
   // 🎯 Production optimizations
   compiler: {
-    removeConsole: false,
+    removeConsole: process.env.NODE_ENV === "production",
   },
 
-  serverExternalPackages: ['pino', 'pino-pretty'],
+  serverExternalPackages: ["pino", "pino-pretty"],
 
   // 🖼️ Image optimizations for better compression
   images: {
+    formats: ["image/avif", "image/webp"],
+    deviceSizes: [640, 750, 828, 1080, 1200],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
     remotePatterns: [
       {
         protocol: "https",
@@ -47,16 +50,16 @@ const nextConfig = {
 
     const url = new URL(siteUrl);
     const targetHost = url.hostname;
-    const sourceHost = targetHost.replace('www.', '');
+    const sourceHost = targetHost.replace("www.", "");
 
     if (targetHost === sourceHost) return [];
 
     return [
       {
-        source: '/:path*',
+        source: "/:path*",
         has: [
           {
-            type: 'host',
+            type: "host",
             value: sourceHost,
           },
         ],

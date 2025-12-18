@@ -1,9 +1,8 @@
 "use client";
 
-import { LordIcon } from "./LordIcon";
-
 // Static import
 import radioIconData from "../../public/icons/wired-outline-1505-radio-walkie-talkie-hover-pinch.json";
+import { LordIcon } from "./LordIcon";
 
 interface RadioIconProps {
   size?: number;

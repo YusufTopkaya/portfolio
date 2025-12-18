@@ -8,7 +8,7 @@
  */
 export function sanitizeString(
   input: string,
-  maxLength: number = 1000
+  maxLength: number = 1000,
 ): string {
   return input
     .replace(/[<>]/g, "") // Remove < and > characters
@@ -50,7 +50,7 @@ export function validateAndSanitizeInput(data: unknown): unknown {
  */
 export function validateURL(
   url: string,
-  allowedHosts: string[]
+  allowedHosts: string[],
 ): { valid: boolean; url?: URL; error?: string } {
   try {
     const urlObj = new URL(url);

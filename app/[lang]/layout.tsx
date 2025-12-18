@@ -1,7 +1,7 @@
-import { getSEOMetadata } from "@/lib/i18n/server-content-loader";
-import { getLanguageByCode, defaultLanguage } from "@/lib/i18n/config";
 import type { Metadata } from "next";
+import { defaultLanguage, getLanguageByCode } from "@/lib/i18n/config";
 import { buildMetadataWithAbsoluteUrls } from "@/lib/i18n/metadata-utils";
+import { getSEOMetadata } from "@/lib/i18n/server-content-loader";
 
 interface LayoutProps {
   children: React.ReactNode;

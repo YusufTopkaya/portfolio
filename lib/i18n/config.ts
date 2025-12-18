@@ -21,13 +21,6 @@ export const languages: Language[] = [
     locale: "tr-TR",
     direction: "ltr",
   },
-  {
-    code: "de",
-    name: "German",
-    nativeName: "Deutsch",
-    locale: "de-DE",
-    direction: "ltr",
-  },
 ];
 
 export const defaultLanguage = "en";
@@ -52,4 +45,3 @@ export function formatDate(date: string | Date, lang: string): string {
   const locale = getLocaleByLanguage(lang);
   return new Date(date).toLocaleDateString(locale);
 }
-

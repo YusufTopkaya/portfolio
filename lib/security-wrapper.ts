@@ -3,16 +3,16 @@
  * Combines all security utilities into a single wrapper
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { rateLimit, getClientIP } from "./rate-limit";
-import { setCorsHeaders, handleCorsPreflightResponse } from "./cors";
+import { type NextRequest, NextResponse } from "next/server";
+import { handleCorsPreflightResponse, setCorsHeaders } from "./cors";
+import { getClientIP, rateLimit } from "./rate-limit";
 
 /**
  * Security wrapper for API routes
  * Applies rate limiting, CORS, and basic security headers
  */
 export function withSecurity(
-  handler: (request: NextRequest) => Promise<NextResponse>
+  handler: (request: NextRequest) => Promise<NextResponse>,
 ) {
   return async (request: NextRequest) => {
     // Get client IP
@@ -45,7 +45,7 @@ export function withSecurity(
       console.error("API Error:", error);
       return NextResponse.json(
         { error: "Internal server error" },
-        { status: 500 }
+        { status: 500 },
       );
     }
   };

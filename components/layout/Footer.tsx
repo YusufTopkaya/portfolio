@@ -1,7 +1,7 @@
 "use client";
 
-import { Profile } from "@/lib/i18n/content-loader";
 import { trackExternalLink } from "@/lib/analytics";
+import type { Profile } from "@/lib/i18n/content-loader";
 
 interface FooterProps {
   profile: Profile;
@@ -48,4 +48,3 @@ export function Footer({ profile, translations }: FooterProps) {
     </footer>
   );
 }
-

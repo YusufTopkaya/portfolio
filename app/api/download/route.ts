@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { withSecurity } from "@/lib/security-wrapper";
 import { validateAndSanitizeInput, validateURL } from "@/lib/validation";
 
@@ -43,7 +43,7 @@ async function downloadHandler(request: NextRequest) {
 
     // Check content length
     const contentLength = response.headers.get("content-length");
-    if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE) {
+    if (contentLength && parseInt(contentLength, 10) > MAX_FILE_SIZE) {
       return NextResponse.json({ error: "File too large" }, { status: 413 });
     }
 
@@ -69,7 +69,7 @@ async function downloadHandler(request: NextRequest) {
     console.error("Failed to download file:", error);
     return NextResponse.json(
       { error: "Failed to download file" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { type Project } from "@/lib/i18n/content-loader";
-import { Card, CardContent } from "@/components/ui/card";
 import { ExternalLink } from "lucide-react";
-import { trackExternalLink } from "@/lib/analytics";
-import { OptimizedImage } from "@/components/shared/OptimizedImage";
 import { useState } from "react";
+import { OptimizedImage } from "@/components/shared/OptimizedImage";
+import { Card, CardContent } from "@/components/ui/card";
+import { trackExternalLink } from "@/lib/analytics";
+import type { Project } from "@/lib/i18n/content-loader";
 
 interface ProjectCardProps {
   project: Project;
@@ -29,7 +29,7 @@ export function ProjectCard({ project, translations }: ProjectCardProps) {
               <div className="relative w-6 h-6 flex-shrink-0">
                 <OptimizedImage
                   src={project.imageUrl!}
-                  alt={project.title}
+                  alt={`${project.title} project icon`}
                   fill
                   sizes="24px"
                   objectFit="contain"
@@ -61,7 +61,12 @@ export function ProjectCard({ project, translations }: ProjectCardProps) {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center text-sm font-medium text-primary hover:text-primary/90 transition-colors"
-              onClick={() => trackExternalLink(project.projectUrl!, `Project: ${project.title}`)}
+              onClick={() =>
+                trackExternalLink(
+                  project.projectUrl!,
+                  `Project: ${project.title}`,
+                )
+              }
             >
               {translations.viewProject}
               <ExternalLink className="h-4 w-4 ml-2" />

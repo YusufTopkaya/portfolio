@@ -1,7 +1,7 @@
 "use client";
 
 import { Player } from "@lordicon/react";
-import { useRef, useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface LordIconProps {
   iconData: object;

@@ -1,7 +1,7 @@
 "use client";
 
-import { Profile } from "@/lib/i18n/content-loader";
 import { ProjectCard } from "@/components/ProjectCard";
+import type { Profile } from "@/lib/i18n/content-loader";
 
 interface ProjectsProps {
   projects: Profile["projects"];
@@ -26,7 +26,15 @@ export function Projects({ projects, translations }: ProjectsProps) {
         </h2>
       </div>
 
-      <div className="mx-auto grid justify-center gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]">
+      <div
+        className={`mx-auto grid justify-center gap-4 ${
+          projects.length === 1
+            ? "max-w-[24rem] grid-cols-1"
+            : projects.length === 2
+              ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
+        }`}
+      >
         {projects.map((project, index) => (
           <ProjectCard
             key={index}

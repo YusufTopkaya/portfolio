@@ -1,4 +1,4 @@
-import { translations, Translations } from "./translations";
+import { type Translations, translations } from "./translations";
 
 export interface Project {
   title: string;
@@ -99,7 +99,7 @@ export interface SEOMetadata {
 
 export function getTranslation(
   key: string,
-  locale: keyof Translations
+  locale: keyof Translations,
 ): string {
   const keys = key.split(".");
   let translation: unknown = translations[locale];

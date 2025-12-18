@@ -1,11 +1,11 @@
 "use client";
 
-import { type BlogPost } from "@/lib/i18n/content-loader";
-import { Card, CardContent } from "@/components/ui/card";
-import { OptimizedImage } from "@/components/shared/OptimizedImage";
-import { useState } from "react";
 import { ExternalLink } from "lucide-react";
+import { useState } from "react";
+import { OptimizedImage } from "@/components/shared/OptimizedImage";
+import { Card, CardContent } from "@/components/ui/card";
 import { trackExternalLink } from "@/lib/analytics";
+import type { BlogPost } from "@/lib/i18n/content-loader";
 
 interface BlogPostCardProps {
   post: BlogPost;
@@ -26,7 +26,7 @@ export function BlogPostCard({ post, index, translations }: BlogPostCardProps) {
         <div className="relative w-full aspect-[16/9]">
           <OptimizedImage
             src={post.imageUrl!}
-            alt={post.title}
+            alt={`Blog post thumbnail: ${post.title}`}
             key={index}
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -55,7 +55,9 @@ export function BlogPostCard({ post, index, translations }: BlogPostCardProps) {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center text-sm font-medium text-primary hover:text-primary/90 transition-colors"
-              onClick={() => trackExternalLink(post.blogUrl!, `Blog: ${post.title}`)}
+              onClick={() =>
+                trackExternalLink(post.blogUrl!, `Blog: ${post.title}`)
+              }
             >
               {translations.readMore}
               <ExternalLink className="h-4 w-4 ml-2" />

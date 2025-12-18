@@ -125,46 +125,4 @@ export const translations: Translations = {
       allRightsReserved: "Tüm hakları saklıdır.",
     },
   },
-  de: {
-    nav: {
-      home: "Startseite",
-      about: "Über mich",
-      projects: "Projekte",
-      blog: "Blog",
-      certificates: "Zertifikate",
-    },
-    sections: {
-      about: {
-        title: "Über mich",
-        skills: "Fähigkeiten",
-        languages: "Programmiersprachen",
-        frontend: "Frontend",
-        backend: "Backend",
-        databases: "Datenbanken",
-        tools: "Tools & Technologien",
-      },
-      projects: {
-        title: "Projekte",
-        viewProject: "Projekt ansehen",
-        tags: "Tags",
-      },
-      blog: {
-        title: "Beiträge",
-        readMore: "Artikel lesen",
-        publishedOn: "Veröffentlicht am",
-        description: "Aktuelle Artikel und technische Blogbeiträge",
-      },
-      certificates: {
-        title: "Zertifikate & Lizenzen",
-        viewCredential: "Zertifikat ansehen",
-      },
-    },
-    actions: {
-      downloadCV: "Lebenslauf herunterladen",
-    },
-    footer: {
-      allRightsReserved: "Alle Rechte vorbehalten.",
-    },
-  },
 };
-

@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClientProviders } from "@/components/shared/ClientProviders";
+import { GoogleTagManagerHead } from "@/components/shared/GoogleTagManager";
 import MicrosoftClarity from "@/components/shared/MicrosoftClarity";
-import { getSEOMetadata } from "@/lib/i18n/server-content-loader";
 import { defaultLanguage } from "@/lib/i18n/config";
 import { buildMetadataWithAbsoluteUrls } from "@/lib/i18n/metadata-utils";
+import { getSEOMetadata } from "@/lib/i18n/server-content-loader";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -49,16 +51,27 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const gtmId = process.env.NEXT_PUBLIC_GTM_ID;
+
   return (
     <html lang={defaultLanguage} suppressHydrationWarning>
       <head>
+        {/* Preload critical LCP image */}
+        <link
+          rel="preload"
+          href="/images/profile.webp"
+          as="image"
+          type="image/webp"
+        />
+        {gtmId && <GoogleTagManagerHead GTM_ID={gtmId} />}
         <MicrosoftClarity />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ClientProviders 
+        <ClientProviders
           gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}
+          gtmId={gtmId}
         >
           {children}
         </ClientProviders>

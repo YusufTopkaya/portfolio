@@ -1,16 +1,16 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import Link from "next/link";
-import { languages, getLanguageByCode } from "@/lib/i18n/config";
-import { Button } from "@/components/ui/button";
 import { ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getLanguageByCode, languages } from "@/lib/i18n/config";
 
 export function LanguageSwitcher() {
   const pathname = usePathname();
@@ -52,4 +52,3 @@ export function LanguageSwitcher() {
     </DropdownMenu>
   );
 }
-

@@ -16,7 +16,7 @@ const rateLimitMap = new Map<string, number[]>();
 export function rateLimit(
   ip: string,
   limit: number = 100,
-  windowMs: number = 15 * 60 * 1000
+  windowMs: number = 15 * 60 * 1000,
 ): boolean {
   const now = Date.now();
   const windowStart = now - windowMs;

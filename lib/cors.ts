@@ -17,13 +17,13 @@ const DEFAULT_ORIGINS = [
  */
 export function setCorsHeaders(
   response: NextResponse,
-  allowedOrigins: string[] = DEFAULT_ORIGINS
+  allowedOrigins: string[] = DEFAULT_ORIGINS,
 ): NextResponse {
   response.headers.set("Access-Control-Allow-Origin", allowedOrigins[0]);
   response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   response.headers.set(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization"
+    "Content-Type, Authorization",
   );
   response.headers.set("Access-Control-Max-Age", "86400");
 
@@ -34,7 +34,7 @@ export function setCorsHeaders(
  * Handle CORS preflight requests
  */
 export function handleCorsPreflightResponse(
-  allowedOrigins?: string[]
+  allowedOrigins?: string[],
 ): NextResponse {
   const response = new NextResponse(null, { status: 200 });
   return setCorsHeaders(response, allowedOrigins);

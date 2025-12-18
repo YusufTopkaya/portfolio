@@ -1,7 +1,7 @@
 "use client";
 
-import { Profile } from "@/lib/i18n/content-loader";
 import { BlogPostCard } from "@/components/BlogPostCard";
+import type { Profile } from "@/lib/i18n/content-loader";
 
 interface BlogProps {
   profile: Profile;
@@ -34,8 +34,8 @@ export function Blog({ profile, translations: t }: BlogProps) {
           profile.blogPosts.length === 1
             ? "max-w-[24rem] grid-cols-1"
             : profile.blogPosts.length === 2
-            ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
-            : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
+              ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
         }`}
       >
         {profile.blogPosts.map((post, index) => (
