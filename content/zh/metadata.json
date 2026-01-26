@@ -1,0 +1,41 @@
+{
+  "title": "Recep Şen - 软件工程师",
+  "description": "构建高影响力、可扩展的系统。我将复杂的业务挑战转化为服务数十万用户的优雅技术解决方案。",
+  "callsign": "TB1REC",
+  "keywords": [
+    "软件工程师",
+    "后端开发",
+    "全栈",
+    "开发者",
+    "easyapp",
+    "taptoweb",
+    "dotnet",
+    "微服务",
+    "无代码平台开发者",
+    "作品集",
+    "TB1REC",
+    "业余无线电"
+  ],
+  "openGraph": {
+    "title": "Recep Şen - 软件工程师",
+    "description": "构建高影响力、可扩展的系统。我将复杂的业务挑战转化为服务数十万用户的优雅技术解决方案。",
+    "siteName": "Recep Şen 作品集",
+    "images": [
+      {
+        "url": "/images/og-banner.zh.webp",
+        "width": 1200,
+        "height": 630,
+        "alt": "Recep Şen - 软件工程师 | 作品集预览图"
+      }
+    ]
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "site": "@senrecep0",
+    "creator": "@senrecep0",
+    "images": {
+      "url": "/images/og-banner.zh.webp",
+      "alt": "Recep Şen - 软件工程师 | 作品集预览图"
+    }
+  }
+}

@@ -1,0 +1,309 @@
+{
+  "personalInfo": {
+    "name": "Реджеп Шен",
+    "position": "Технический руководитель",
+    "company": "Taptoweb",
+    "about": "Создаю высокоэффективные масштабируемые системы. Превращаю сложные бизнес-задачи в элегантные технические решения, обслуживающие сотни тысяч пользователей.",
+    "imageUrl": "/images/profile.webp",
+    "callsign": "TB1REC",
+    "email": "me@senrecep.com",
+    "phoneNumber": "+905319649002",
+    "cv": {
+      "url": "/files/cv.pdf",
+      "fileName": "Реджеп Шен - Резюме.pdf"
+    }
+  },
+  "skills": [
+    {
+      "name": "ИИ, Агенты и Автоматизация",
+      "icon": "brain",
+      "items": [
+        {
+          "name": "Агентные ИИ-фреймворки (напр., AutoGen)",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "bot"
+        },
+        {
+          "name": "Интеграция и настройка LLM",
+          "level": "Эксперт",
+          "levelType": "expert",
+          "icon": "sparkles"
+        },
+        {
+          "name": "Векторные БД и системы семантического кэширования",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "search"
+        },
+        {
+          "name": "ИИ-процессы и автоматизация",
+          "level": "Эксперт",
+          "levelType": "expert",
+          "icon": "workflow"
+        },
+        {
+          "name": "Стратегии автоматической оптимизации затрат",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "trending-down"
+        }
+      ]
+    },
+    {
+      "name": "Основная архитектура и бэкенд",
+      "icon": "code",
+      "items": [
+        {
+          "name": ".NET & C#",
+          "level": "Эксперт",
+          "levelType": "expert",
+          "icon": "code-2"
+        },
+        {
+          "name": "Микросервисы и DDD",
+          "level": "Эксперт",
+          "levelType": "expert",
+          "icon": "blocks"
+        },
+        {
+          "name": "Node.js & Nest.js",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "server"
+        },
+        {
+          "name": "Go (Golang)",
+          "level": "Знакомый",
+          "levelType": "familiar",
+          "icon": "code-2"
+        }
+      ]
+    },
+    {
+      "name": "Данные и обмен сообщениями",
+      "icon": "database",
+      "items": [
+        {
+          "name": "PostgreSQL",
+          "level": "Эксперт",
+          "levelType": "expert",
+          "icon": "database"
+        },
+        {
+          "name": "Redis",
+          "level": "Эксперт",
+          "levelType": "expert",
+          "icon": "zap"
+        },
+        {
+          "name": "RabbitMQ",
+          "level": "Эксперт",
+          "levelType": "expert",
+          "icon": "message-square"
+        },
+        {
+          "name": "MongoDB",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "leaf"
+        },
+        {
+          "name": "Elasticsearch",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "search"
+        }
+      ]
+    },
+    {
+      "name": "Облачные технологии и DevOps",
+      "icon": "cloud",
+      "items": [
+        {
+          "name": "Google Cloud Platform (GCP)",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "cloud"
+        },
+        {
+          "name": "Docker и контейнеризация",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "container"
+        },
+        {
+          "name": "Архитектура CI/CD пайплайнов",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "git-branch"
+        },
+        {
+          "name": "Kubernetes (K8s)",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "ship"
+        }
+      ]
+    },
+    {
+      "name": "Фронтенд и API-слой",
+      "icon": "monitor",
+      "items": [
+        {
+          "name": "TypeScript",
+          "level": "Эксперт",
+          "levelType": "expert",
+          "icon": "code"
+        },
+        {
+          "name": "Next.js",
+          "level": "Опытный",
+          "levelType": "proficient",
+          "icon": "triangle"
+        },
+        {
+          "name": "Проектирование API",
+          "level": "Эксперт",
+          "levelType": "expert",
+          "icon": "share-2"
+        }
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "title": "Dive Into Refactoring",
+      "issuer": "Refactoring.Guru",
+      "issueDate": "Дек 2024",
+      "credentialId": "#000053812",
+      "credentialUrl": "https://drive.google.com/file/d/1nkuUA7nszo4cnkOL3ZbMU5x7Bxlyjl8F/view?usp=sharing"
+    },
+    {
+      "title": "Pragmatic Clean Architecture",
+      "issuer": "Milan Jovanovic Tech",
+      "issueDate": "Дек 2024",
+      "credentialId": "cert_y7sc2384",
+      "credentialUrl": "https://drive.google.com/file/d/1ywBRKVFl-GlfeduOWuIe7M36ikBB0Qp2/view?usp=sharing"
+    },
+    {
+      "title": "Golang 101",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "Сен 2023"
+    },
+    {
+      "title": "Centralized log management with Graylog",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "Фев 2023"
+    },
+    {
+      "title": "CCNA-1",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "Янв 2020"
+    }
+  ],
+  "projects": [
+    {
+      "title": "Easyapp",
+      "description": "Руководил архитектурой и разработкой платформы на микросервисах, обслуживающей более 150 000 пользователей. Внедрил оптимизацию затрат на основе ИИ и экономичную инфраструктуру по требованию.",
+      "projectUrl": "https://easyapp.ai",
+      "tags": ["ИИ", "Мобильные", "No-Code"],
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/a2/c3/c4/a2c3c4dc-9089-8d16-0579-06850a46c631/AppIconProduction-0-0-1x_U007emarketing-0-6-0-85-220.png/230x0w.webp"
+    },
+    {
+      "title": "Aspire Microservice Starter Template",
+      "description": "Шаблон для создания микросервиса с использованием фреймворка Aspire.",
+      "projectUrl": "https://github.com/senrecep/Aspire",
+      "tags": [".NET", "Aspire", "Микросервисы"],
+      "imageUrl": "https://raw.githubusercontent.com/senrecep/Aspire/refs/heads/main/icon.png"
+    },
+    {
+      "title": "CSharpEssentials",
+      "description": "Упрощает разработку на C#, предоставляя основные строительные блоки, включая фреймворк для реализации распространённых паттернов проектирования: Result Pattern, Any Pattern и Maybe Pattern.",
+      "projectUrl": "https://github.com/senrecep/CSharpEssentials",
+      "tags": [
+        "C#",
+        ".NET",
+        "Паттерны проектирования",
+        "Функциональное программирование"
+      ],
+      "imageUrl": "https://raw.githubusercontent.com/senrecep/CSharpEssentials/refs/heads/main/icon.png"
+    },
+    {
+      "title": "Шаблон портфолио",
+      "description": "Быстрый, SEO-оптимизированный шаблон портфолио с неограниченной языковой поддержкой, тёмной/светлой темами и полностью настраиваемыми разделами для любой профессии. Создан на Next.js 15 и React 19. Лицензия MIT.",
+      "projectUrl": "https://github.com/senrecep/portfolio",
+      "tags": ["Next.js", "React", "TypeScript", "i18n", "Open Source"],
+      "imageUrl": "/images/project-portfolio.webp"
+    },
+    {
+      "title": "Career & Salary Comparison Simulator",
+      "description": "Самый полный симулятор сравнения зарплат в Турции. Сравнивайте чистый доход между наёмными работниками SGK (4/a) и самозанятыми Bağ-Kur (4/b). Расчёты брутто/нетто зарплаты, налогов, взносов, затрат работодателя.",
+      "projectUrl": "https://salary-sim.senrecep.com/",
+      "tags": ["JavaScript", "Финансы", "Налоги", "SGK", "Bağ-Kur"],
+      "imageUrl": "https://salary-sim.senrecep.com/icon.png"
+    }
+  ],
+  "blogPosts": [
+    {
+      "title": "Инструменты кодирования с ИИ: Полное руководство по Claude Code, OpenCode и современной разработке",
+      "description": "От нуля до продакшена: Освойте разработку с поддержкой ИИ с правильными инструментами. Изучите Claude Code, OpenCode, oh-my-opencode, MCP, навыки и продвинутые техники для профессиональной разработки.",
+      "blogUrl": "https://senrecep.medium.com/ai-coding-tools-the-complete-guide-to-claude-code-opencode-modern-development-eb9da4477dc1",
+      "date": "24.01.2026",
+      "imageUrl": "/images/The-Complete-Guide-to-Claude-Code-OpenCode-Modern-Development.webp"
+    },
+    {
+      "title": "Разработка ИИ производственного уровня с Claude Code: Полное руководство по экосистеме",
+      "description": "Превратите Claude Code из простого инструмента вопросов и ответов в профессиональную среду разработки с плагинами, пользовательскими агентами, навыками, серверами MCP и хуками.",
+      "blogUrl": "https://medium.com/@senrecep/production-grade-ai-development-with-claude-code-a-comprehensive-ecosystem-guide-56d7c4a3b744",
+      "date": "21.01.2026",
+      "imageUrl": "/images/production-grade-ai-development-with-claude-code.webp"
+    },
+    {
+      "title": "Анализ производительности методов передачи параметров в C#",
+      "description": "Глубокий анализ передачи параметров в C#: Сравнение struct, class, record и ref-типов с бенчмарками. Изучите лучшие практики оптимизации.",
+      "blogUrl": "https://senrecep.medium.com/performance-analysis-of-parameter-passing-methods-in-c-ceeffcefd624",
+      "date": "20.02.2025",
+      "imageUrl": "/images/parameters.webp"
+    },
+    {
+      "title": "Современный способ управления бизнес-правилами в C#: Rule Engine Pattern",
+      "description": "Современный паттерн C# для управления бизнес-правилами, обеспечивающий централизованный контроль, высокую тестируемость и оптимальную производительность через Result Pattern",
+      "blogUrl": "https://medium.com/@senrecep/the-modern-way-to-manage-c-business-rules-rule-engine-pattern-14bb1c72d700",
+      "date": "04.02.2025",
+      "imageUrl": "/images/rule-engine.webp"
+    },
+    {
+      "title": "Интеграция Google Cloud Secret Manager для ваших .NET приложений",
+      "description": "Библиотека .NET для интеграции с Google Cloud Secret Manager с функциями фильтрации по префиксу, региональной конфигурации и поддержкой JSON/raw секретов",
+      "blogUrl": "https://senrecep.medium.com/google-cloud-secret-manager-integration-for-your-net-applications-84f2576f6027",
+      "date": "30.01.2025",
+      "imageUrl": "/images/dotnet-secret-manager.webp"
+    },
+    {
+      "title": "Система электронного голосования на основе блокчейна",
+      "description": "В данном исследовании предлагается разработка безопасной и быстрой системы онлайн-голосования с использованием технологии блокчейн. Система обеспечивает низкую задержку обработки и высокий уровень безопасности.",
+      "blogUrl": "https://www.researchgate.net/publication/365993522_4_International_New_York_Academic_Research_Congress_Full-Text_Book",
+      "date": "23.01.2022",
+      "imageUrl": "/images/blockchain-research.webp"
+    }
+  ],
+  "socialLinks": [
+    {
+      "name": "LinkedIn",
+      "url": "https://www.linkedin.com/in/senrecep/"
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/senrecep"
+    },
+    {
+      "name": "Medium",
+      "url": "https://medium.com/@senrecep"
+    },
+    {
+      "name": "X",
+      "url": "https://x.com/senrecep0"
+    }
+  ]
+}

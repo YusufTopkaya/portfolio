@@ -1,0 +1,41 @@
+{
+  "title": "Recep Şen - Software Engineer",
+  "description": "Het bouwen van schaalbare systemen met hoge impact. Ik transformeer complexe zakelijke uitdagingen in elegante technische oplossingen die honderdduizenden gebruikers bedienen.",
+  "callsign": "TB1REC",
+  "keywords": [
+    "software engineer",
+    "backend ontwikkeling",
+    "full stack",
+    "ontwikkelaar",
+    "easyapp",
+    "taptoweb",
+    "dotnet",
+    "microservices",
+    "no code platform ontwikkelaar",
+    "portfolio",
+    "TB1REC",
+    "radioamateur"
+  ],
+  "openGraph": {
+    "title": "Recep Şen - Software Engineer",
+    "description": "Het bouwen van schaalbare systemen met hoge impact. Ik transformeer complexe zakelijke uitdagingen in elegante technische oplossingen die honderdduizenden gebruikers bedienen.",
+    "siteName": "Recep Şen Portfolio",
+    "images": [
+      {
+        "url": "/images/og-banner.nl.webp",
+        "width": 1200,
+        "height": 630,
+        "alt": "Recep Şen - Software Engineer | Portfolio voorbeeldafbeelding"
+      }
+    ]
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "site": "@senrecep0",
+    "creator": "@senrecep0",
+    "images": {
+      "url": "/images/og-banner.nl.webp",
+      "alt": "Recep Şen - Software Engineer | Portfolio voorbeeldafbeelding"
+    }
+  }
+}

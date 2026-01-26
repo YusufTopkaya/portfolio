@@ -1,41 +1,42 @@
 {
-  "title": "Yusuf Topkaya - Softwareentwickler",
-  "description": "Persönliche Portfolio-Website von Yusuf Topkaya, einem auf Backend-Entwicklung spezialisierten Softwareentwickler",
-  "callsign": "TA1YTK",
+  "title": "Recep Şen - Software Engineer",
+  "description": "Ich entwickle wirkungsvolle, skalierbare Systeme und verwandle komplexe geschäftliche Herausforderungen in elegante technische Lösungen für hunderttausende von Nutzern.",
+  "callsign": "TB1REC",
   "keywords": [
-    "softwareentwickler",
-    "backend-entwicklung",
+    "software engineer",
+    "backend entwicklung",
     "full stack",
     "entwickler",
-    "veripark",
+    "easyapp",
+    "taptoweb",
     "dotnet",
     "microservices",
     "no code platform entwickler",
     "portfolio",
-    "TA1YTK",
+    "TB1REC",
     "amateur radio",
     "ham radio"
   ],
   "openGraph": {
-    "title": "Yusuf Topkaya - Softwareentwickler",
-    "description": "Persönliche Portfolio-Website von Yusuf Topkaya, einem auf Backend-Entwicklung spezialisierten Softwareentwickler",
-    "siteName": "Yusuf Topkaya Portfolio",
+    "title": "Recep Şen - Software Engineer",
+    "description": "Ich entwickle wirkungsvolle, skalierbare Systeme und verwandle komplexe geschäftliche Herausforderungen in elegante technische Lösungen für hunderttausende von Nutzern.",
+    "siteName": "Recep Şen Portfolio",
     "images": [
       {
-        "url": "/images/og-banner.en.png",
-        "width": 1235,
-        "height": 359,
-        "alt": "Yusuf Topkaya - Softwareentwickler"
+        "url": "/images/og-banner.de.webp",
+        "width": 1200,
+        "height": 630,
+        "alt": "Recep Şen - Software Engineer | Portfolio Vorschaubild"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "site": "@yusuftopkaja",
-    "creator": "@yusuftopkaja",
+    "site": "@senrecep0",
+    "creator": "@senrecep0",
     "images": {
-      "url": "/images/og-banner.en.png",
-      "alt": "Yusuf Topkaya - Softwareentwickler"
+      "url": "/images/og-banner.de.webp",
+      "alt": "Recep Şen - Software Engineer | Portfolio Vorschaubild"
     }
   }
 }

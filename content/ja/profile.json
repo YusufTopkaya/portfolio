@@ -1,0 +1,304 @@
+{
+  "personalInfo": {
+    "name": "Recep Şen",
+    "position": "テクニカルリード",
+    "company": "Taptoweb",
+    "about": "高インパクトでスケーラブルなシステムを構築。複雑なビジネス課題を、数十万人のユーザーに対応するエレガントな技術ソリューションに変換します。",
+    "imageUrl": "/images/profile.webp",
+    "callsign": "TB1REC",
+    "email": "me@senrecep.com",
+    "phoneNumber": "+905319649002",
+    "cv": {
+      "url": "/files/cv.pdf",
+      "fileName": "Recep Şen - CV.pdf"
+    }
+  },
+  "skills": [
+    {
+      "name": "AI、エージェント＆自動化",
+      "icon": "brain",
+      "items": [
+        {
+          "name": "Agentic AI Frameworks（例：AutoGen）",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "bot"
+        },
+        {
+          "name": "LLM統合＆ファインチューニング",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "sparkles"
+        },
+        {
+          "name": "Vector DBs＆セマンティックキャッシュシステム",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "search"
+        },
+        {
+          "name": "AIワークフロー＆自動化",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "workflow"
+        },
+        {
+          "name": "自動化コスト最適化戦略",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "trending-down"
+        }
+      ]
+    },
+    {
+      "name": "アーキテクチャ＆バックエンド",
+      "icon": "code",
+      "items": [
+        {
+          "name": ".NET & C#",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "code-2"
+        },
+        {
+          "name": "Microservices & Domain-Driven Design (DDD)",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "blocks"
+        },
+        {
+          "name": "Node.js & Nest.js",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "server"
+        },
+        {
+          "name": "Go (Golang)",
+          "level": "基礎知識",
+          "levelType": "familiar",
+          "icon": "code-2"
+        }
+      ]
+    },
+    {
+      "name": "データ＆メッセージング",
+      "icon": "database",
+      "items": [
+        {
+          "name": "PostgreSQL",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "database"
+        },
+        {
+          "name": "Redis",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "zap"
+        },
+        {
+          "name": "RabbitMQ",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "message-square"
+        },
+        {
+          "name": "MongoDB",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "leaf"
+        },
+        {
+          "name": "Elasticsearch",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "search"
+        }
+      ]
+    },
+    {
+      "name": "Cloud Native & DevOps",
+      "icon": "cloud",
+      "items": [
+        {
+          "name": "Google Cloud Platform (GCP)",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "cloud"
+        },
+        {
+          "name": "Docker＆コンテナ化",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "container"
+        },
+        {
+          "name": "CI/CDパイプラインアーキテクチャ",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "git-branch"
+        },
+        {
+          "name": "Kubernetes (K8s)",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "ship"
+        }
+      ]
+    },
+    {
+      "name": "フロントエンド＆APIレイヤー",
+      "icon": "monitor",
+      "items": [
+        {
+          "name": "TypeScript",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "code"
+        },
+        {
+          "name": "Next.js",
+          "level": "熟練",
+          "levelType": "proficient",
+          "icon": "triangle"
+        },
+        {
+          "name": "API設計",
+          "level": "エキスパート",
+          "levelType": "expert",
+          "icon": "share-2"
+        }
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "title": "Dive Into Refactoring",
+      "issuer": "Refactoring.Guru",
+      "issueDate": "2024年12月",
+      "credentialId": "#000053812",
+      "credentialUrl": "https://drive.google.com/file/d/1nkuUA7nszo4cnkOL3ZbMU5x7Bxlyjl8F/view?usp=sharing"
+    },
+    {
+      "title": "Pragmatic Clean Architecture",
+      "issuer": "Milan Jovanovic Tech",
+      "issueDate": "2024年12月",
+      "credentialId": "cert_y7sc2384",
+      "credentialUrl": "https://drive.google.com/file/d/1ywBRKVFl-GlfeduOWuIe7M36ikBB0Qp2/view?usp=sharing"
+    },
+    {
+      "title": "Golang 101",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "2023年9月"
+    },
+    {
+      "title": "Centralized log management with Graylog",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "2023年2月"
+    },
+    {
+      "title": "CCNA-1",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "2020年1月"
+    }
+  ],
+  "projects": [
+    {
+      "title": "Easyapp",
+      "description": "15万人以上のユーザーにサービスを提供するマイクロサービスベースのプラットフォームのアーキテクチャと開発をリード。AI駆動のコスト最適化と資本効率の高いオンデマンドインフラを実装。",
+      "projectUrl": "https://easyapp.ai",
+      "tags": ["AI", "モバイル", "No-Code"],
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/a2/c3/c4/a2c3c4dc-9089-8d16-0579-06850a46c631/AppIconProduction-0-0-1x_U007emarketing-0-6-0-85-220.png/230x0w.webp"
+    },
+    {
+      "title": "Aspire Microservice Starter Template",
+      "description": "Aspire Frameworkでマイクロサービスを作成するためのテンプレート。",
+      "projectUrl": "https://github.com/senrecep/Aspire",
+      "tags": [".NET", "Aspire", "Microservices"],
+      "imageUrl": "https://raw.githubusercontent.com/senrecep/Aspire/refs/heads/main/icon.png"
+    },
+    {
+      "title": "CSharpEssentials",
+      "description": "Result Pattern、Any Pattern、Maybe Patternなどの一般的なデザインパターンを実装するためのフレームワークを含む、必須のビルディングブロックを提供することでC#開発を簡素化。",
+      "projectUrl": "https://github.com/senrecep/CSharpEssentials",
+      "tags": ["C#", ".NET", "Design Patterns", "関数型プログラミング"],
+      "imageUrl": "https://raw.githubusercontent.com/senrecep/CSharpEssentials/refs/heads/main/icon.png"
+    },
+    {
+      "title": "ポートフォリオテンプレート",
+      "description": "無制限の言語サポート、ダーク/ライトテーマ、あらゆる職業に対応できる完全カスタマイズ可能なセクションを備えた、高速でSEO最適化されたポートフォリオテンプレート。Next.js 15とReact 19で構築。MITライセンス。",
+      "projectUrl": "https://github.com/senrecep/portfolio",
+      "tags": ["Next.js", "React", "TypeScript", "i18n", "オープンソース"],
+      "imageUrl": "/images/project-portfolio.webp"
+    },
+    {
+      "title": "Career & Salary Comparison Simulator",
+      "description": "トルコで最も包括的な給与比較シミュレーター。SGK被雇用者（4/a）とBağ-Kur自営業者（4/b）の手取り収入を比較。総支給/手取り給与、税金、保険料、雇用主コストの計算。",
+      "projectUrl": "https://salary-sim.senrecep.com/",
+      "tags": ["JavaScript", "ファイナンス", "税金", "SGK", "Bağ-Kur"],
+      "imageUrl": "https://salary-sim.senrecep.com/icon.png"
+    }
+  ],
+  "blogPosts": [
+    {
+      "title": "AIコーディングツール：Claude Code、OpenCode、モダン開発の完全ガイド",
+      "description": "ゼロからプロダクションへ：適切なツールでAI支援開発をマスター。Claude Code、OpenCode、oh-my-opencode、MCP、スキル、プロフェッショナル開発のための高度なテクニックを学びます。",
+      "blogUrl": "https://senrecep.medium.com/ai-coding-tools-the-complete-guide-to-claude-code-opencode-modern-development-eb9da4477dc1",
+      "date": "2026/01/24",
+      "imageUrl": "/images/The-Complete-Guide-to-Claude-Code-OpenCode-Modern-Development.webp"
+    },
+    {
+      "title": "Claude Codeによる本番グレードのAI開発：包括的エコシステムガイド",
+      "description": "Claude Codeを単純なQ&Aツールから、プラグイン、カスタムエージェント、スキル、MCPサーバー、フックを備えたプロフェッショナルな開発環境に変革します。",
+      "blogUrl": "https://medium.com/@senrecep/production-grade-ai-development-with-claude-code-a-comprehensive-ecosystem-guide-56d7c4a3b744",
+      "date": "2026/01/21",
+      "imageUrl": "/images/production-grade-ai-development-with-claude-code.webp"
+    },
+    {
+      "title": "C#におけるパラメータ渡し方法のパフォーマンス分析",
+      "description": "C#のパラメータ渡しの詳細分析：ベンチマークによるstruct、class、record、refタイプの比較。最適化のベストプラクティスを学ぶ。",
+      "blogUrl": "https://senrecep.medium.com/performance-analysis-of-parameter-passing-methods-in-c-ceeffcefd624",
+      "date": "2025/02/20",
+      "imageUrl": "/images/parameters.webp"
+    },
+    {
+      "title": "The Modern Way to Manage C# Business Rules: Rule Engine Pattern",
+      "description": "Result Patternを通じて集中管理、高いテスト可能性、最適なパフォーマンスを提供するビジネスルール管理のための最新のC#パターン。",
+      "blogUrl": "https://medium.com/@senrecep/the-modern-way-to-manage-c-business-rules-rule-engine-pattern-14bb1c72d700",
+      "date": "2025/02/04",
+      "imageUrl": "/images/rule-engine.webp"
+    },
+    {
+      "title": "Google Cloud Secret Manager Integration for Your .NET Applications",
+      "description": "プレフィックスフィルタリング、リージョン固有の設定、JSON/rawシークレットサポートなどの機能を備えたGoogle Cloud Secret Manager統合用の.NETライブラリ。",
+      "blogUrl": "https://senrecep.medium.com/google-cloud-secret-manager-integration-for-your-net-applications-84f2576f6027",
+      "date": "2025/01/30",
+      "imageUrl": "/images/dotnet-secret-manager.webp"
+    },
+    {
+      "title": "Blockchain Based E-Voting System",
+      "description": "この研究では、ブロックチェーン技術を使用した安全で高速なオンライン投票システムの開発を提案。このシステムは、低い処理遅延、高いセキュリティレベル、データ整合性の検証の簡素化を提供。",
+      "blogUrl": "https://www.researchgate.net/publication/365993522_4_International_New_York_Academic_Research_Congress_Full-Text_Book",
+      "date": "2022/01/23",
+      "imageUrl": "/images/blockchain-research.webp"
+    }
+  ],
+  "socialLinks": [
+    {
+      "name": "LinkedIn",
+      "url": "https://www.linkedin.com/in/senrecep/"
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/senrecep"
+    },
+    {
+      "name": "Medium",
+      "url": "https://medium.com/@senrecep"
+    },
+    {
+      "name": "X",
+      "url": "https://x.com/senrecep0"
+    }
+  ]
+}

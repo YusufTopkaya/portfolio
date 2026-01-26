@@ -1,0 +1,41 @@
+{
+  "title": "Recep Şen - Engenheiro de Software",
+  "description": "Construindo sistemas escaláveis de alto impacto. Transformo desafios empresariais complexos em soluções técnicas elegantes que atendem centenas de milhares de usuários.",
+  "callsign": "TB1REC",
+  "keywords": [
+    "engenheiro de software",
+    "desenvolvimento backend",
+    "full stack",
+    "desenvolvedor",
+    "easyapp",
+    "taptoweb",
+    "dotnet",
+    "microservices",
+    "desenvolvedor plataforma no code",
+    "portfolio",
+    "TB1REC",
+    "radioamador"
+  ],
+  "openGraph": {
+    "title": "Recep Şen - Engenheiro de Software",
+    "description": "Construindo sistemas escaláveis de alto impacto. Transformo desafios empresariais complexos em soluções técnicas elegantes que atendem centenas de milhares de usuários.",
+    "siteName": "Portfolio Recep Şen",
+    "images": [
+      {
+        "url": "/images/og-banner.pt.webp",
+        "width": 1200,
+        "height": 630,
+        "alt": "Recep Şen - Engenheiro de Software | Imagem de visualização do portfólio"
+      }
+    ]
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "site": "@senrecep0",
+    "creator": "@senrecep0",
+    "images": {
+      "url": "/images/og-banner.pt.webp",
+      "alt": "Recep Şen - Engenheiro de Software | Imagem de visualização do portfólio"
+    }
+  }
+}

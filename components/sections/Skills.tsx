@@ -9,7 +9,7 @@ interface SkillsProps {
   };
 }
 
-// Skill level badge component - simplified to avoid hydration issues
+// Skill level badge component with glassmorphism
 function SkillBadge({
   level,
   levelType,
@@ -17,23 +17,23 @@ function SkillBadge({
   level: string;
   levelType: SkillLevel;
 }) {
-  // Use direct static classes to avoid any hydration issues
-  let badgeClasses = "px-2 py-1 rounded-full text-xs font-medium ";
+  let badgeClasses =
+    "px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm transition-all duration-200 ";
 
   switch (levelType) {
     case SkillLevel.EXPERT:
-      badgeClasses += "bg-primary text-primary-foreground";
+      badgeClasses += "bg-primary/90 text-primary-foreground shadow-glow-sm";
       break;
     case SkillLevel.PROFICIENT:
-      badgeClasses += "border border-primary/50 text-primary bg-primary/5";
+      badgeClasses += "bg-primary/20 text-primary border border-primary/30";
       break;
     case SkillLevel.FAMILIAR:
       badgeClasses +=
-        "border border-muted-foreground/30 text-muted-foreground bg-muted/50";
+        "bg-muted/50 text-muted-foreground border border-muted-foreground/20";
       break;
     default:
       badgeClasses +=
-        "border border-muted-foreground/30 text-muted-foreground bg-muted/50";
+        "bg-muted/50 text-muted-foreground border border-muted-foreground/20";
       break;
   }
 
@@ -56,72 +56,72 @@ export function Skills({ skills, translations }: SkillsProps) {
     skills.length > 0 && typeof skills[0] === "object";
 
   return (
-    <section className="container space-y-6 py-8 md:py-12 lg:py-24">
+    <section className="container space-y-8 py-12 md:py-16 lg:py-24">
       <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
-        <h2 className="font-heading text-3xl leading-[1.1] sm:text-3xl md:text-6xl">
+        <h2 className="font-heading text-3xl leading-[1.1] sm:text-3xl md:text-6xl text-gradient">
           {translations.title}
         </h2>
       </div>
 
       {isSkillCategoryFormat ? (
         <div
-          className={`mx-auto grid justify-center gap-4 ${
+          className={`mx-auto grid justify-center gap-6 ${
             skills.length === 1
               ? "max-w-[24rem] grid-cols-1"
               : skills.length === 2
-              ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
-              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
+                ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
           }`}
         >
           {/* New structured format with categories */}
           {(skills as SkillCategory[]).map((category, categoryIndex) => {
             const iconName = category.icon
               ? getIconName(category.icon)
-              : "square"; // Fallback to square if no icon defined
+              : "square";
 
             return (
               <div
                 key={categoryIndex}
-                className="border border-border rounded-lg p-6 space-y-4 hover:shadow-lg transition-shadow w-full"
+                className="glass glass-hover rounded-2xl p-6 space-y-4 w-full group/card"
               >
                 {/* Category header with dynamic icon */}
                 <div className="flex items-center space-x-3">
-                  <div className="text-primary flex-shrink-0">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
                     <DynamicIcon
                       name={iconName}
                       fallback="square"
                       className="w-5 h-5"
                     />
                   </div>
-                  <h3 className="font-semibold text-lg text-foreground">
+                  <h3 className="font-semibold text-lg text-foreground group-hover/card:text-primary transition-colors">
                     {category.name}
                   </h3>
                 </div>
 
-                {/* Divider */}
-                <div className="w-full h-px bg-border"></div>
+                {/* Divider with gradient */}
+                <div className="w-full h-px bg-gradient-to-r from-transparent via-border to-transparent" />
 
                 {/* Skills list */}
                 <div className="space-y-3">
                   {category.items.map((skill, skillIndex) => {
                     const skillIconName = skill.icon
                       ? getIconName(skill.icon)
-                      : "circle"; // Fallback to circle if no icon defined
+                      : "circle";
 
                     return (
                       <div
                         key={skillIndex}
-                        className="flex items-center justify-between gap-2"
+                        className="flex items-center justify-between gap-2 group"
                       >
                         <div className="flex items-center gap-2 flex-1">
-                          <div className="text-muted-foreground flex-shrink-0">
+                          <div className="text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0">
                             <DynamicIcon
                               name={skillIconName}
                               fallback="circle"
                               className="w-4 h-4"
                             />
                           </div>
-                          <span className="text-sm text-foreground font-medium">
+                          <span className="text-sm text-foreground font-medium group-hover:text-primary transition-colors">
                             {skill.name}
                           </span>
                         </div>
@@ -138,20 +138,20 @@ export function Skills({ skills, translations }: SkillsProps) {
           })}
         </div>
       ) : (
-        // Simple array format - original layout
+        // Simple array format
         <div
           className={`mx-auto grid justify-center gap-4 ${
             skills.length === 1
               ? "max-w-[24rem] grid-cols-1"
               : skills.length === 2
-              ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
-              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
+                ? "grid-cols-1 sm:grid-cols-2 max-w-[48rem]"
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-[64rem]"
           }`}
         >
           {(skills as string[]).map((skill, index) => (
             <div
               key={index}
-              className="border border-border rounded-lg p-4 hover:shadow-lg transition-shadow w-full"
+              className="glass glass-hover rounded-xl p-4 w-full"
             >
               <span className="text-sm font-medium text-foreground">
                 {skill}
@@ -163,4 +163,3 @@ export function Skills({ skills, translations }: SkillsProps) {
     </section>
   );
 }
-

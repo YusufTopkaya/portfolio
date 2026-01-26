@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Apple Liquid Glass Design Tokens",
+  "description": "Design token contract for glassmorphism design system",
+  "version": "1.0.0",
+  "tokens": {
+    "color": {
+      "light": {
+        "background": {
+          "primary": "#F7F7F7",
+          "secondary": "#FFFFFF"
+        },
+        "foreground": {
+          "primary": "#1D1D1F",
+          "secondary": "#868686"
+        },
+        "accent": "#007AFF",
+        "glass": {
+          "fill": "rgba(255, 255, 255, 0.65)",
+          "border": "rgba(255, 255, 255, 0.25)"
+        }
+      },
+      "dark": {
+        "background": {
+          "primary": "#000000",
+          "secondary": "#1C1C1E"
+        },
+        "foreground": {
+          "primary": "#F5F5F7",
+          "secondary": "#999999"
+        },
+        "accent": "#0A84FF",
+        "glass": {
+          "fill": "rgba(28, 28, 30, 0.50)",
+          "border": "rgba(255, 255, 255, 0.12)"
+        }
+      }
+    },
+    "blur": {
+      "subtle": "8px",
+      "default": "12px",
+      "bold": "20px"
+    },
+    "shadow": {
+      "light": "0 8px 32px rgba(0, 0, 0, 0.08)",
+      "dark": "0 8px 32px rgba(0, 0, 0, 0.4)"
+    },
+    "transition": {
+      "fast": "150ms",
+      "default": "200ms",
+      "slow": "300ms",
+      "easing": {
+        "enter": "ease-out",
+        "exit": "ease-in"
+      }
+    },
+    "spacing": {
+      "hover-lift": "-2px",
+      "focus-ring": "2px"
+    }
+  },
+  "components": {
+    "glass-subtle": {
+      "blur": "8px",
+      "opacity": {
+        "light": 0.55,
+        "dark": 0.4
+      }
+    },
+    "glass-default": {
+      "blur": "12px",
+      "opacity": {
+        "light": 0.65,
+        "dark": 0.5
+      }
+    },
+    "glass-bold": {
+      "blur": "20px",
+      "opacity": {
+        "light": 0.75,
+        "dark": 0.6
+      }
+    }
+  },
+  "accessibility": {
+    "contrast": {
+      "body-text": "4.5:1",
+      "large-text": "3:1",
+      "ui-components": "3:1"
+    },
+    "motion": {
+      "reduced-motion": "prefers-reduced-motion: reduce"
+    }
+  }
+}

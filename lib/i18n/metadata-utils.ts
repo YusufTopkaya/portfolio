@@ -1,6 +1,53 @@
 import type { Metadata } from "next";
 import { defaultLanguage, languageCodes } from "./config";
-import type { SEOMetadata } from "./content-loader";
+import type { Profile, SEOMetadata, SkillCategory } from "./content-loader";
+
+export function extractKeywordsFromProfile(profile: Profile): string[] {
+  const keywords = new Set<string>();
+
+  // Personal Info
+  if (profile.personalInfo.name) keywords.add(profile.personalInfo.name);
+  if (profile.personalInfo.position)
+    keywords.add(profile.personalInfo.position);
+
+  // Projects
+  if (profile.projects) {
+    for (const project of profile.projects) {
+      keywords.add(project.title);
+      if (project.tags) {
+        for (const tag of project.tags) {
+          keywords.add(tag);
+        }
+      }
+    }
+  }
+
+  // Skills
+  if (profile.skills) {
+    for (const skill of profile.skills) {
+      if (typeof skill === "string") {
+        keywords.add(skill);
+      } else {
+        // SkillCategory
+        const category = skill as SkillCategory;
+        if (category.items) {
+          for (const item of category.items) {
+            keywords.add(item.name);
+          }
+        }
+      }
+    }
+  }
+
+  // Blog Posts
+  if (profile.blogPosts) {
+    for (const post of profile.blogPosts) {
+      keywords.add(post.title);
+    }
+  }
+
+  return Array.from(keywords);
+}
 
 export function buildMetadataWithAbsoluteUrls(
   metadata: SEOMetadata,

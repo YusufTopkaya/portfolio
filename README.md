@@ -1,34 +1,79 @@
-# Personal Portfolio Website
+# Portfolio Template
 
-This is a modern, internationalized personal portfolio website built with Next.js 15, React 19, and TailwindCSS. It features a clean, responsive design with support for multiple languages and dark/light themes.
+A modern, internationalized personal portfolio website template built with Next.js 15.5, React 19, and TailwindCSS. Features a clean, responsive design with support for multiple languages, dark/light themes, and comprehensive SEO optimizations.
 
-## 🌟 Features
+## Features
 
-- 🌐 Internationalization (i18n) support
-- 🎨 Dark/Light theme
-- 📱 Fully responsive design
-- ⚡ Built with Next.js 15 and React 19
-- 🎯 SEO optimized
-- 💅 Styled with TailwindCSS and shadcn/ui
-- 🚀 Optimized performance with gzip compression
-- 📊 Google Analytics 4 integration
-- � Microsoft Clarity user behavior analytics
-- �🗜️ Automatic asset compression and caching
-- ⚡ Static asset optimization
-- 🔧 Bundle analysis support
+### Core
 
-## 🚀 Getting Started
+- Next.js 15.5 with App Router and Turbopack
+- React 19 with Server Components
+- TypeScript for type safety
+- TailwindCSS with shadcn/ui components
+
+### Internationalization
+
+- Multi-language support (easily extendable)
+- Built-in support for 15+ languages
+- Automatic language detection from browser
+- hreflang tags for SEO
+- Localized metadata and content
+- **Language creation script** for easy expansion
+
+### SEO & Performance
+
+- JSON-LD structured data (Person + WebSite schema)
+- Automatic sitemap generation with alternates
+- Canonical URLs and hreflang tags
+- Image optimization (AVIF/WebP)
+- LCP optimization with preloading
+- Static page generation (SSG)
+- GZIP compression
+
+### Analytics & Tracking
+
+- Google Analytics 4 integration
+- Google Tag Manager integration
+- Microsoft Clarity user behavior analytics
+
+### Developer Experience
+
+- Biome for fast linting and formatting
+- ESLint with Next.js config
+- Docker support with standalone output
+- Pino logger for structured logging
+- OG Banner preview tool for generating social media images
+
+### Security
+
+- Security headers (HSTS, X-Frame-Options, etc.)
+- Input validation and sanitization
+- Rate limiting support
+
+## Tech Stack
+
+| Category   | Technology             |
+| ---------- | ---------------------- |
+| Framework  | Next.js 15.5           |
+| UI Library | React 19               |
+| Styling    | TailwindCSS 3.4        |
+| Components | shadcn/ui, Radix UI    |
+| Icons      | Lucide React, Lordicon |
+| Linting    | Biome 2.3, ESLint 9    |
+| Language   | TypeScript 5           |
+
+## Quick Start
+
+See [SETUP.md](SETUP.md) for detailed setup instructions.
 
 ### Prerequisites
 
-- Node.js 18.x or later
-- npm or yarn or pnpm
-- Google Analytics 4 account (for analytics)
-- Microsoft Clarity account (for user behavior analytics)
+- Node.js 20.x or later
+- npm, yarn, or pnpm
 
 ### Installation
 
-1. Clone the repository:
+1. Fork or clone the repository:
 
 ```bash
 git clone https://github.com/yourusername/portfolio.git
@@ -39,13 +84,9 @@ cd portfolio
 
 ```bash
 npm install
-# or
-yarn install
-# or
-pnpm install
 ```
 
-3. Create your environment variables:
+3. Create environment variables:
 
 ```bash
 cp .env.example .env.local
@@ -53,12 +94,10 @@ cp .env.example .env.local
 
 4. Configure your environment variables in `.env.local`:
 
-   - Get your Google Analytics Measurement ID from your GA4 property settings
-   - Get your Microsoft Clarity Project ID from your Clarity account
-   - Replace the placeholders with your actual IDs:
-
 ```bash
+NEXT_PUBLIC_SITE_URL="https://yourdomain.com"
 NEXT_PUBLIC_GA_MEASUREMENT_ID="G-XXXXXXXXXX"
+NEXT_PUBLIC_GTM_ID="GTM-XXXXXXXX"
 NEXT_PUBLIC_CLARITY_PROJECT_ID="XXXXXXXXXX"
 ```
 
@@ -66,159 +105,342 @@ NEXT_PUBLIC_CLARITY_PROJECT_ID="XXXXXXXXXX"
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to view your site.
 
-## 📝 Project Structure
+## Available Scripts
+
+| Script               | Description                             |
+| -------------------- | --------------------------------------- |
+| `npm run dev`        | Start development server with Turbopack |
+| `npm run build`      | Build for production                    |
+| `npm run start`      | Start production server                 |
+| `npm run lint`       | Run Next.js ESLint                      |
+| `npm run lint:biome` | Run Biome linter                        |
+| `npm run format`     | Format code with Biome                  |
+| `npm run check`      | Run Biome check (lint + format)         |
+| `npm run check:fix`  | Auto-fix Biome issues                   |
+| `npm run lang:add`   | Add new language(s) support             |
+| `npm run lang:list`  | List all supported languages            |
+| `npm run lang:help`  | Show language script help               |
+
+## Project Structure
 
 ```
 portfolio/
-├── app/                   # Next.js app directory
-├── components/           # React components
-├── content/             # Multilingual content
-│   ├── en/             # English content
-│   ├── tr/             # Turkish content
-│   └── de/             # German content
-├── lib/                 # Utility functions
-├── public/             # Static assets
-└── styles/             # Global styles
+├── app/                    # Next.js App Router
+│   ├── [lang]/            # Language-specific routes
+│   ├── api/               # API routes
+│   ├── og-preview/        # OG Banner generator tool
+│   ├── layout.tsx         # Root layout
+│   ├── sitemap.ts         # Dynamic sitemap
+│   └── robots.ts          # Robots.txt
+├── components/
+│   ├── layout/            # Layout components (Header, Footer)
+│   ├── sections/          # Page sections (Blog, Projects, Skills)
+│   ├── shared/            # Shared components (JsonLd, OptimizedImage)
+│   └── ui/                # UI primitives (Button, Card, etc.)
+├── content/               # Multilingual content
+│   ├── en/               # English (default)
+│   └── tr/               # Turkish (example)
+├── lib/
+│   ├── i18n/             # Internationalization utilities
+│   ├── logger/           # Pino logger configuration
+│   └── utils.ts          # Utility functions
+├── public/
+│   ├── files/            # Downloadable files (CV)
+│   └── images/           # Static images
+├── scripts/
+│   └── create-languages.ts # Language creation script
+├── biome.json            # Biome configuration
+├── next.config.js        # Next.js configuration
+└── tailwind.config.ts    # Tailwind configuration
 ```
 
-## 🔧 Configuration
+## Adding Languages
 
-### Google Analytics Setup
-
-1. Create a Google Analytics 4 property in your [Google Analytics account](https://analytics.google.com/)
-2. Go to: Admin → Data Streams → Web
-3. Create a new stream or select an existing one
-4. Copy your Measurement ID (starts with "G-")
-5. Add your Measurement ID to `.env.local`:
+Use the built-in script to add new language support:
 
 ```bash
-NEXT_PUBLIC_GA_MEASUREMENT_ID="G-XXXXXXXXXX"
+# Add single language
+npm run lang:add -- fr
+
+# Add multiple languages
+npm run lang:add -- de es it
+
+# List all supported languages
+npm run lang:list
 ```
 
-### Microsoft Clarity Setup
+The script automatically:
 
-1. Create a Microsoft Clarity account at [clarity.microsoft.com](https://clarity.microsoft.com/)
-2. Create a new project for your website
-3. Copy your Project ID from the dashboard
-4. Add your Project ID to `.env.local`:
+- Creates `content/{lang}/` directory with template files
+- Updates `lib/i18n/config.ts` with language configuration
+- Updates `lib/i18n/translations.ts` with UI translations
+
+### Supported Languages
+
+| Code | Language   | Native Name |
+| ---- | ---------- | ----------- |
+| en   | English    | English     |
+| tr   | Turkish    | Türkçe      |
+| de   | German     | Deutsch     |
+| fr   | French     | Français    |
+| es   | Spanish    | Español     |
+| nl   | Dutch      | Nederlands  |
+| pt   | Portuguese | Português   |
+| it   | Italian    | Italiano    |
+| pl   | Polish     | Polski      |
+| ja   | Japanese   | 日本語      |
+| ko   | Korean     | 한국어      |
+| zh   | Chinese    | 简体中文    |
+| ar   | Arabic     | العربية     |
+| ru   | Russian    | Русский     |
+| hi   | Hindi      | हिन्दी      |
+
+## Content Management
+
+Content is managed through JSON files:
+
+- `content/{lang}/profile.json` - Personal info, skills, projects, blog posts
+- `content/{lang}/metadata.json` - SEO metadata, OpenGraph, Twitter Card
+
+### profile.json Structure
+
+```json
+{
+  "personalInfo": {
+    "name": "Your Name",
+    "position": "Your Position",
+    "company": "Your Company",
+    "about": "Brief description...",
+    "imageUrl": "/images/profile.webp",
+    "cv": { "url": "/files/cv.pdf", "fileName": "Name - CV.pdf" }
+  },
+  "skills": [...],
+  "certificates": [...],
+  "projects": [...],
+  "blogPosts": [...],
+  "socialLinks": [...]
+}
+```
+
+## Analytics Setup
+
+### Google Analytics 4
+
+1. Create a GA4 property at [analytics.google.com](https://analytics.google.com/)
+2. Get your Measurement ID (G-XXXXXXXXXX)
+3. Add to `.env.local`: `NEXT_PUBLIC_GA_MEASUREMENT_ID="G-XXXXXXXXXX"`
+
+### Google Tag Manager
+
+1. Create a container at [tagmanager.google.com](https://tagmanager.google.com/)
+2. Get your Container ID (GTM-XXXXXXXX)
+3. Add to `.env.local`: `NEXT_PUBLIC_GTM_ID="GTM-XXXXXXXX"`
+
+### Microsoft Clarity
+
+1. Create a project at [clarity.microsoft.com](https://clarity.microsoft.com/)
+2. Get your Project ID
+3. Add to `.env.local`: `NEXT_PUBLIC_CLARITY_PROJECT_ID="XXXXXXXXXX"`
+
+## Deployment
+
+### Docker
+
+Build and run with Docker:
 
 ```bash
-NEXT_PUBLIC_CLARITY_PROJECT_ID="XXXXXXXXXX"
+docker build -t portfolio .
+docker run -p 3000:3000 portfolio
 ```
 
-Microsoft Clarity provides:
-- **Heatmaps** - See where users click, scroll, and engage
-- **Session Recordings** - Watch real user sessions to understand behavior
-- **User Insights** - Analyze user journey and identify pain points
-- **Performance Metrics** - Monitor site performance and user experience
+### Vercel
 
-### Content Management
+Deploy to Vercel with one click:
 
-All content is managed through JSON files in the `content` directory. Each language has its own subdirectory containing:
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/portfolio)
 
-- `profile.json`: Personal information
-- `metadata.json`: SEO and site metadata
-
-### Adding a New Language
-
-1. Create a new directory in `content/` with the language code
-2. Copy the JSON files from an existing language directory
-3. Translate the content
-4. Update `lib/i18n/config.ts` to include the new language
-
-## 📦 Deployment
-
-### Deploying to Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com).
-
-1. Push your code to a Git repository
-2. Import your project to Vercel
-3. Vercel will detect Next.js automatically and configure the build settings
-4. Your app will be deployed to a production URL
-
-### Other Deployment Options
-
-You can also deploy to other platforms that support Node.js:
-
-1. Build your application:
+### Manual Deployment
 
 ```bash
 npm run build
-# or
-yarn build
-# or
-pnpm build
-```
-
-2. Start the production server:
-
-```bash
 npm run start
-# or
-yarn start
-# or
-pnpm start
 ```
 
-## ⚡ Performance Optimizations
+## SEO Features
 
-This portfolio website includes several performance optimizations:
+- **Structured Data**: JSON-LD Person and WebSite schemas
+- **hreflang**: Automatic language alternates
+- **Sitemap**: Dynamic sitemap with language alternates
+- **Meta Tags**: OpenGraph, Twitter Card
+- **Canonical URLs**: Automatic canonical URL generation
+- **OG Banners**: Language-specific social media images
 
-### Compression & Caching
+### OG Banner Generator
 
-- **Gzip Compression**: Enabled by default in Next.js for all responses
-- **Static Asset Caching**: Long-term caching for static assets (CSS, JS, images)
-- **Browser Caching**: Optimized cache headers for different content types
-- **Image Optimization**: Automatic image compression and WebP conversion
+A built-in tool for creating OpenGraph banner images for all languages:
 
-### Bundle Analysis
+1. Start the development server: `npm run dev`
+2. Navigate to [http://localhost:3000/og-preview](http://localhost:3000/og-preview)
+3. Select language, take screenshot, convert to WebP
+4. Save to `public/images/og-banner.{lang}.webp`
 
-To analyze your bundle size:
+## Customization
+
+### Styling
+
+- Edit `app/globals.css` for global styles
+- Modify `tailwind.config.ts` for theme customization
+- Update component styles in respective files
+
+### Adding New Sections
+
+1. Create component in `components/sections/`
+2. Import and use in `app/[lang]/page.tsx`
+3. Add necessary data to `profile.json`
+
+## Updating from Upstream
+
+If you forked this template and want to get updates from the main repository without losing your personal content, follow this safe merge strategy:
+
+### Setup Upstream Remote (One-time)
 
 ```bash
-npm run analyze
-# or
-yarn analyze
-# or
-pnpm analyze
+# Add the original repository as upstream
+git remote add upstream https://github.com/senrecep/portfolio.git
+
+# Verify remotes
+git remote -v
 ```
 
-### Additional Optimizations
+### Safe Update Strategy
 
-- **Turbopack**: Fast bundler for development (enabled with `--turbopack`)
-- **Static Generation**: Pages are statically generated at build time
-- **Code Splitting**: Automatic code splitting for better loading performance
-- **Font Optimization**: Optimized Google Fonts loading with Geist
-- **Tree Shaking**: Unused code elimination
+**Important:** Never use `git merge upstream/main` or `git rebase upstream/main` directly - this will overwrite your personal content!
 
-### Performance Headers
+Instead, selectively pull only the files you want:
 
-The application sets several performance-related headers:
+```bash
+# Fetch latest changes from upstream
+git fetch upstream
 
-- `Vary: Accept-Encoding` for compression negotiation
-- `Cache-Control` headers for optimal caching
-- Security headers for enhanced protection
+# See what changed
+git diff HEAD upstream/main --name-status
 
-## 🤝 Contributing
+# Selectively checkout specific files (safe - won't touch your content)
+git checkout upstream/main -- components/sections/Projects.tsx
+git checkout upstream/main -- components/sections/Skills.tsx
+git checkout upstream/main -- scripts/create-languages.ts
+git checkout upstream/main -- package.json
+# ... add more files as needed
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+# Commit the updates
+git commit -m "feat: sync selected updates from upstream"
+```
 
-## 📄 License
+### Files Safe to Update
+
+These files can typically be updated without losing personal data:
+
+| Category      | Files                                                                |
+| ------------- | -------------------------------------------------------------------- |
+| Components    | `components/sections/*.tsx`, `components/ui/*.tsx`                   |
+| Configuration | `package.json`, `next.config.js`, `biome.json`, `tailwind.config.ts` |
+| Scripts       | `scripts/*.ts`                                                       |
+| Documentation | `README.md`, `SETUP.md`, `CONTRIBUTING.md`                           |
+| API Routes    | `app/api/**/*.ts`                                                    |
+| Middleware    | `middleware.ts`                                                      |
+| Styles        | `app/globals.css`                                                    |
+
+### Files to NEVER Update from Upstream
+
+These contain your personal content - never overwrite them:
+
+| Category    | Files                                                                            |
+| ----------- | -------------------------------------------------------------------------------- |
+| Content     | `content/**/*.json` (profile.json, metadata.json)                                |
+| Images      | `public/images/profile.webp`, `public/images/og-banner.*.webp`                   |
+| Files       | `public/files/cv.pdf`                                                            |
+| i18n Config | `lib/i18n/config.ts`, `lib/i18n/translations.ts` (if you added custom languages) |
+
+### Example: Full Safe Update
+
+```bash
+# 1. Fetch upstream
+git fetch upstream
+
+# 2. Update safe files
+git checkout upstream/main -- \
+  components/sections/Projects.tsx \
+  components/sections/Skills.tsx \
+  components/sections/Certificates.tsx \
+  components/sections/Blog.tsx \
+  components/layout/Header.tsx \
+  components/layout/Footer.tsx \
+  app/robots.ts \
+  middleware.ts \
+  package.json \
+  scripts/create-languages.ts
+
+# 3. Install any new dependencies
+npm install
+
+# 4. Test the build
+npm run build
+
+# 5. Commit if everything works
+git commit -m "feat: sync updates from upstream template"
+```
+
+### Resolving Conflicts
+
+If you've modified a file that also changed upstream:
+
+```bash
+# Option 1: Keep your version
+git checkout --ours path/to/file
+
+# Option 2: Take upstream version
+git checkout upstream/main -- path/to/file
+
+# Option 3: Manual merge - view both versions
+git diff HEAD upstream/main -- path/to/file
+```
+
+### Marking Upstream as Merged (Without Taking Changes)
+
+If you want to tell Git that you've "seen" the upstream changes but prefer to keep your own version (preventing future merge prompts for those changes):
+
+```bash
+# This creates a merge commit but keeps ALL your content unchanged
+git merge -s ours upstream/main -m "chore: mark upstream as merged (keeping local content)"
+```
+
+**When to use this:**
+- You've reviewed upstream changes and decided they don't apply to your fork
+- You want a clean git history without "branch is behind" warnings
+- You've manually cherry-picked the changes you wanted
+
+**What it does:**
+- Creates a merge commit (so Git thinks upstream is merged)
+- Preserves 100% of your current content (nothing changes)
+- Future `git merge upstream/main` won't re-apply those changes
+
+## Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md).
+
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Next.js](https://nextjs.org/)
+- [React](https://react.dev/)
 - [TailwindCSS](https://tailwindcss.com/)
 - [shadcn/ui](https://ui.shadcn.com/)
-- [next-intl](https://next-intl-docs.vercel.app/)
+- [Biome](https://biomejs.dev/)
+- [Radix UI](https://www.radix-ui.com/)

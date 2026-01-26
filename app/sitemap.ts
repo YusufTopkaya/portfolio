@@ -36,5 +36,21 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   };
 
-  return [rootRoute, ...languageRoutes];
+  // Create resume routes for all languages
+  const resumeAlternates: Record<string, string> = {};
+  for (const lang of languageCodes) {
+    resumeAlternates[lang] = `${siteUrl}/${lang}/resume`;
+  }
+
+  const resumeRoutes = languageCodes.map((lang) => ({
+    url: `${siteUrl}/${lang}/resume`,
+    lastModified,
+    changeFrequency: "monthly" as const,
+    priority: 0.8,
+    alternates: {
+      languages: resumeAlternates,
+    },
+  }));
+
+  return [rootRoute, ...languageRoutes, ...resumeRoutes];
 }

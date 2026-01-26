@@ -1,0 +1,41 @@
+{
+  "title": "Recep Şen - ソフトウェアエンジニア",
+  "description": "高インパクトでスケーラブルなシステムを構築。複雑なビジネス課題を、数十万人のユーザーに対応するエレガントな技術ソリューションに変換します。",
+  "callsign": "TB1REC",
+  "keywords": [
+    "ソフトウェアエンジニア",
+    "バックエンド開発",
+    "フルスタック",
+    "デベロッパー",
+    "easyapp",
+    "taptoweb",
+    "dotnet",
+    "マイクロサービス",
+    "ノーコードプラットフォーム開発者",
+    "ポートフォリオ",
+    "TB1REC",
+    "アマチュア無線"
+  ],
+  "openGraph": {
+    "title": "Recep Şen - ソフトウェアエンジニア",
+    "description": "高インパクトでスケーラブルなシステムを構築。複雑なビジネス課題を、数十万人のユーザーに対応するエレガントな技術ソリューションに変換します。",
+    "siteName": "Recep Şen ポートフォリオ",
+    "images": [
+      {
+        "url": "/images/og-banner.ja.webp",
+        "width": 1200,
+        "height": 630,
+        "alt": "Recep Şen - ソフトウェアエンジニア | ポートフォリオプレビュー"
+      }
+    ]
+  },
+  "twitter": {
+    "card": "summary_large_image",
+    "site": "@senrecep0",
+    "creator": "@senrecep0",
+    "images": {
+      "url": "/images/og-banner.ja.webp",
+      "alt": "Recep Şen - ソフトウェアエンジニア | ポートフォリオプレビュー"
+    }
+  }
+}

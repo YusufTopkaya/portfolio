@@ -25,15 +25,26 @@ export function LordIcon({
   const playerRef = useRef<Player>(null);
 
   useEffect(() => {
-    if (!autoplay || !interval) return;
+    // Play animation on mount with a small delay for hydration
+    if (autoplay && playerRef.current) {
+      const initialTimeout = setTimeout(() => {
+        playerRef.current?.playFromBeginning();
+      }, 100);
 
-    const intervalId = setInterval(() => {
-      if (playerRef.current) {
-        playerRef.current.playFromBeginning();
+      // Set up interval for repeated animations
+      if (interval) {
+        const intervalId = setInterval(() => {
+          playerRef.current?.playFromBeginning();
+        }, interval);
+
+        return () => {
+          clearTimeout(initialTimeout);
+          clearInterval(intervalId);
+        };
       }
-    }, interval);
 
-    return () => clearInterval(intervalId);
+      return () => clearTimeout(initialTimeout);
+    }
   }, [autoplay, interval]);
 
   const handleHover = () => {

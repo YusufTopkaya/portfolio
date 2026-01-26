@@ -1,0 +1,304 @@
+{
+  "personalInfo": {
+    "name": "Recep Şen",
+    "position": "Technisch Leider",
+    "company": "Taptoweb",
+    "about": "Het bouwen van schaalbare systemen met hoge impact. Ik transformeer complexe zakelijke uitdagingen in elegante technische oplossingen die honderdduizenden gebruikers bedienen.",
+    "imageUrl": "/images/profile.webp",
+    "callsign": "TB1REC",
+    "email": "me@senrecep.com",
+    "phoneNumber": "+905319649002",
+    "cv": {
+      "url": "/files/cv.pdf",
+      "fileName": "Recep Şen - CV.pdf"
+    }
+  },
+  "skills": [
+    {
+      "name": "AI, Agents & Automatisering",
+      "icon": "brain",
+      "items": [
+        {
+          "name": "Agentic AI Frameworks (bijv. AutoGen)",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "bot"
+        },
+        {
+          "name": "LLM Integratie & Fine-Tuning",
+          "level": "Expert",
+          "levelType": "expert",
+          "icon": "sparkles"
+        },
+        {
+          "name": "Vector DBs & Semantische Cache Systemen",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "search"
+        },
+        {
+          "name": "AI Workflows & Automatisering",
+          "level": "Expert",
+          "levelType": "expert",
+          "icon": "workflow"
+        },
+        {
+          "name": "Geautomatiseerde Kostenoptimalisatie Strategieën",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "trending-down"
+        }
+      ]
+    },
+    {
+      "name": "Architectuur & Backend",
+      "icon": "code",
+      "items": [
+        {
+          "name": ".NET & C#",
+          "level": "Expert",
+          "levelType": "expert",
+          "icon": "code-2"
+        },
+        {
+          "name": "Microservices & Domain-Driven Design (DDD)",
+          "level": "Expert",
+          "levelType": "expert",
+          "icon": "blocks"
+        },
+        {
+          "name": "Node.js & Nest.js",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "server"
+        },
+        {
+          "name": "Go (Golang)",
+          "level": "Bekend",
+          "levelType": "familiar",
+          "icon": "code-2"
+        }
+      ]
+    },
+    {
+      "name": "Data & Messaging",
+      "icon": "database",
+      "items": [
+        {
+          "name": "PostgreSQL",
+          "level": "Expert",
+          "levelType": "expert",
+          "icon": "database"
+        },
+        {
+          "name": "Redis",
+          "level": "Expert",
+          "levelType": "expert",
+          "icon": "zap"
+        },
+        {
+          "name": "RabbitMQ",
+          "level": "Expert",
+          "levelType": "expert",
+          "icon": "message-square"
+        },
+        {
+          "name": "MongoDB",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "leaf"
+        },
+        {
+          "name": "Elasticsearch",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "search"
+        }
+      ]
+    },
+    {
+      "name": "Cloud Native & DevOps",
+      "icon": "cloud",
+      "items": [
+        {
+          "name": "Google Cloud Platform (GCP)",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "cloud"
+        },
+        {
+          "name": "Docker & Containerisatie",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "container"
+        },
+        {
+          "name": "CI/CD Pipeline Architectuur",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "git-branch"
+        },
+        {
+          "name": "Kubernetes (K8s)",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "ship"
+        }
+      ]
+    },
+    {
+      "name": "Frontend & API Laag",
+      "icon": "monitor",
+      "items": [
+        {
+          "name": "TypeScript",
+          "level": "Expert",
+          "levelType": "expert",
+          "icon": "code"
+        },
+        {
+          "name": "Next.js",
+          "level": "Bekwaam",
+          "levelType": "proficient",
+          "icon": "triangle"
+        },
+        {
+          "name": "API Ontwerp",
+          "level": "Expert",
+          "levelType": "expert",
+          "icon": "share-2"
+        }
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "title": "Dive Into Refactoring",
+      "issuer": "Refactoring.Guru",
+      "issueDate": "Dec. 2024",
+      "credentialId": "#000053812",
+      "credentialUrl": "https://drive.google.com/file/d/1nkuUA7nszo4cnkOL3ZbMU5x7Bxlyjl8F/view?usp=sharing"
+    },
+    {
+      "title": "Pragmatic Clean Architecture",
+      "issuer": "Milan Jovanovic Tech",
+      "issueDate": "Dec. 2024",
+      "credentialId": "cert_y7sc2384",
+      "credentialUrl": "https://drive.google.com/file/d/1ywBRKVFl-GlfeduOWuIe7M36ikBB0Qp2/view?usp=sharing"
+    },
+    {
+      "title": "Golang 101",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "Sep. 2023"
+    },
+    {
+      "title": "Centralized log management with Graylog",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "Feb. 2023"
+    },
+    {
+      "title": "CCNA-1",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "Jan. 2020"
+    }
+  ],
+  "projects": [
+    {
+      "title": "Easyapp",
+      "description": "Leidde de architectuur en ontwikkeling van een op microservices gebaseerd platform dat meer dan 250.000 gebruikers bedient. Implementeerde AI-gestuurde kostenoptimalisatie en kapitaalefficiënte, on-demand infrastructuur.",
+      "projectUrl": "https://easyapp.ai",
+      "tags": ["AI", "Mobiel", "No-Code"],
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/a2/c3/c4/a2c3c4dc-9089-8d16-0579-06850a46c631/AppIconProduction-0-0-1x_U007emarketing-0-6-0-85-220.png/230x0w.webp"
+    },
+    {
+      "title": "Aspire Microservice Starter Template",
+      "description": "Een template voor het maken van een microservice met het Aspire Framework.",
+      "projectUrl": "https://github.com/senrecep/Aspire",
+      "tags": [".NET", "Aspire", "Microservices"],
+      "imageUrl": "https://raw.githubusercontent.com/senrecep/Aspire/refs/heads/main/icon.png"
+    },
+    {
+      "title": "CSharpEssentials",
+      "description": "Vereenvoudigt C# ontwikkeling door essentiële bouwstenen te bieden, inclusief een framework voor het implementeren van veelvoorkomende design patterns zoals het Result Pattern, Any Pattern en Maybe Pattern.",
+      "projectUrl": "https://github.com/senrecep/CSharpEssentials",
+      "tags": ["C#", ".NET", "Design Patterns", "Functioneel Programmeren"],
+      "imageUrl": "https://raw.githubusercontent.com/senrecep/CSharpEssentials/refs/heads/main/icon.png"
+    },
+    {
+      "title": "Portfolio Template",
+      "description": "Een snelle, SEO-geoptimaliseerde portfolio template met onbeperkte taalondersteuning, donker/licht thema's en volledig aanpasbare secties voor elk beroep. Gebouwd met Next.js 15 en React 19. MIT gelicenseerd.",
+      "projectUrl": "https://github.com/senrecep/portfolio",
+      "tags": ["Next.js", "React", "TypeScript", "i18n", "Open Source"],
+      "imageUrl": "/images/project-portfolio.webp"
+    },
+    {
+      "title": "Career & Salary Comparison Simulator",
+      "description": "De meest uitgebreide salarisvergelijkingssimulator van Turkije. Vergelijk netto inkomen tussen SGK-werknemers (4/a) en Bağ-Kur zelfstandigen (4/b). Bruto/Netto salaris, belasting, premie en werkgeverskosten berekeningen.",
+      "projectUrl": "https://salary-sim.senrecep.com/",
+      "tags": ["JavaScript", "Financiën", "Belasting", "SGK", "Bağ-Kur"],
+      "imageUrl": "https://salary-sim.senrecep.com/icon.png"
+    }
+  ],
+  "blogPosts": [
+    {
+      "title": "AI Coding Tools: De complete gids voor Claude Code, OpenCode & moderne ontwikkeling",
+      "description": "Van nul naar productie: Beheers AI-ondersteunde ontwikkeling met de juiste tools. Leer Claude Code, OpenCode, oh-my-opencode, MCP, skills en geavanceerde technieken voor professionele ontwikkeling.",
+      "blogUrl": "https://senrecep.medium.com/ai-coding-tools-the-complete-guide-to-claude-code-opencode-modern-development-eb9da4477dc1",
+      "date": "24-01-2026",
+      "imageUrl": "/images/The-Complete-Guide-to-Claude-Code-OpenCode-Modern-Development.webp"
+    },
+    {
+      "title": "Productie-klare AI-ontwikkeling met Claude Code: Een uitgebreide ecosysteemgids",
+      "description": "Transformeer Claude Code van een simpele vraag-en-antwoord tool naar een professionele ontwikkelomgeving met plugins, aangepaste agents, vaardigheden, MCP-servers en hooks.",
+      "blogUrl": "https://medium.com/@senrecep/production-grade-ai-development-with-claude-code-a-comprehensive-ecosystem-guide-56d7c4a3b744",
+      "date": "21-01-2026",
+      "imageUrl": "/images/production-grade-ai-development-with-claude-code.webp"
+    },
+    {
+      "title": "Prestatieanalyse van parameteroverdrachtsmethoden in C#",
+      "description": "Diepgaande analyse van parameter passing in C#: Vergelijking van struct, class, record & ref types met benchmarks. Leer best practices voor optimalisatie.",
+      "blogUrl": "https://senrecep.medium.com/performance-analysis-of-parameter-passing-methods-in-c-ceeffcefd624",
+      "date": "20-02-2025",
+      "imageUrl": "/images/parameters.webp"
+    },
+    {
+      "title": "The Modern Way to Manage C# Business Rules: Rule Engine Pattern",
+      "description": "Een modern C# pattern voor het beheren van business rules dat gecentraliseerde controle, hoge testbaarheid en optimale prestaties biedt via het Result Pattern.",
+      "blogUrl": "https://medium.com/@senrecep/the-modern-way-to-manage-c-business-rules-rule-engine-pattern-14bb1c72d700",
+      "date": "04-02-2025",
+      "imageUrl": "/images/rule-engine.webp"
+    },
+    {
+      "title": "Google Cloud Secret Manager Integration for Your .NET Applications",
+      "description": "Een .NET bibliotheek voor Google Cloud Secret Manager integratie met functies zoals prefix filtering, regio-specifieke configuratie en JSON/raw secret ondersteuning.",
+      "blogUrl": "https://senrecep.medium.com/google-cloud-secret-manager-integration-for-your-net-applications-84f2576f6027",
+      "date": "30-01-2025",
+      "imageUrl": "/images/dotnet-secret-manager.webp"
+    },
+    {
+      "title": "Blockchain Based E-Voting System",
+      "description": "Dit onderzoek stelt de ontwikkeling voor van een veilig en snel online stemsysteem met blockchain-technologie. Dit systeem biedt lage verwerkingsvertraging, hoog beveiligingsniveau en vereenvoudigt de verificatie van data-integriteit.",
+      "blogUrl": "https://www.researchgate.net/publication/365993522_4_International_New_York_Academic_Research_Congress_Full-Text_Book",
+      "date": "23-01-2022",
+      "imageUrl": "/images/blockchain-research.webp"
+    }
+  ],
+  "socialLinks": [
+    {
+      "name": "LinkedIn",
+      "url": "https://www.linkedin.com/in/senrecep/"
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/senrecep"
+    },
+    {
+      "name": "Medium",
+      "url": "https://medium.com/@senrecep"
+    },
+    {
+      "name": "X",
+      "url": "https://x.com/senrecep0"
+    }
+  ]
+}

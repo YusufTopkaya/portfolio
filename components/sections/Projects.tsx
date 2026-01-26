@@ -19,15 +19,15 @@ export function Projects({ projects, translations }: ProjectsProps) {
   }
 
   return (
-    <section className="container space-y-6 py-8 md:py-12 lg:py-24">
+    <section className="container space-y-8 py-12 md:py-16 lg:py-24">
       <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
-        <h2 className="font-heading text-3xl leading-[1.1] sm:text-3xl md:text-6xl">
+        <h2 className="font-heading text-3xl leading-[1.1] sm:text-3xl md:text-6xl text-gradient">
           {translations.title}
         </h2>
       </div>
 
       <div
-        className={`mx-auto grid justify-center gap-4 ${
+        className={`mx-auto grid justify-center gap-6 ${
           projects.length === 1
             ? "max-w-[24rem] grid-cols-1"
             : projects.length === 2

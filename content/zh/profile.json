@@ -1,0 +1,304 @@
+{
+  "personalInfo": {
+    "name": "Recep Şen",
+    "position": "技术负责人",
+    "company": "Taptoweb",
+    "about": "构建高影响力、可扩展的系统。我将复杂的业务挑战转化为服务数十万用户的优雅技术解决方案。",
+    "imageUrl": "/images/profile.webp",
+    "callsign": "TB1REC",
+    "email": "me@senrecep.com",
+    "phoneNumber": "+905319649002",
+    "cv": {
+      "url": "/files/cv.pdf",
+      "fileName": "Recep Şen - CV.pdf"
+    }
+  },
+  "skills": [
+    {
+      "name": "AI、智能体与自动化",
+      "icon": "brain",
+      "items": [
+        {
+          "name": "Agentic AI Frameworks（如 AutoGen）",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "bot"
+        },
+        {
+          "name": "LLM 集成与微调",
+          "level": "专家",
+          "levelType": "expert",
+          "icon": "sparkles"
+        },
+        {
+          "name": "Vector DBs 与语义缓存系统",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "search"
+        },
+        {
+          "name": "AI 工作流与自动化",
+          "level": "专家",
+          "levelType": "expert",
+          "icon": "workflow"
+        },
+        {
+          "name": "自动化成本优化策略",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "trending-down"
+        }
+      ]
+    },
+    {
+      "name": "架构与后端",
+      "icon": "code",
+      "items": [
+        {
+          "name": ".NET & C#",
+          "level": "专家",
+          "levelType": "expert",
+          "icon": "code-2"
+        },
+        {
+          "name": "Microservices & Domain-Driven Design (DDD)",
+          "level": "专家",
+          "levelType": "expert",
+          "icon": "blocks"
+        },
+        {
+          "name": "Node.js & Nest.js",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "server"
+        },
+        {
+          "name": "Go (Golang)",
+          "level": "了解",
+          "levelType": "familiar",
+          "icon": "code-2"
+        }
+      ]
+    },
+    {
+      "name": "数据与消息队列",
+      "icon": "database",
+      "items": [
+        {
+          "name": "PostgreSQL",
+          "level": "专家",
+          "levelType": "expert",
+          "icon": "database"
+        },
+        {
+          "name": "Redis",
+          "level": "专家",
+          "levelType": "expert",
+          "icon": "zap"
+        },
+        {
+          "name": "RabbitMQ",
+          "level": "专家",
+          "levelType": "expert",
+          "icon": "message-square"
+        },
+        {
+          "name": "MongoDB",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "leaf"
+        },
+        {
+          "name": "Elasticsearch",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "search"
+        }
+      ]
+    },
+    {
+      "name": "Cloud Native & DevOps",
+      "icon": "cloud",
+      "items": [
+        {
+          "name": "Google Cloud Platform (GCP)",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "cloud"
+        },
+        {
+          "name": "Docker 与容器化",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "container"
+        },
+        {
+          "name": "CI/CD 流水线架构",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "git-branch"
+        },
+        {
+          "name": "Kubernetes (K8s)",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "ship"
+        }
+      ]
+    },
+    {
+      "name": "前端与 API 层",
+      "icon": "monitor",
+      "items": [
+        {
+          "name": "TypeScript",
+          "level": "专家",
+          "levelType": "expert",
+          "icon": "code"
+        },
+        {
+          "name": "Next.js",
+          "level": "熟练",
+          "levelType": "proficient",
+          "icon": "triangle"
+        },
+        {
+          "name": "API 设计",
+          "level": "专家",
+          "levelType": "expert",
+          "icon": "share-2"
+        }
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "title": "Dive Into Refactoring",
+      "issuer": "Refactoring.Guru",
+      "issueDate": "2024年12月",
+      "credentialId": "#000053812",
+      "credentialUrl": "https://drive.google.com/file/d/1nkuUA7nszo4cnkOL3ZbMU5x7Bxlyjl8F/view?usp=sharing"
+    },
+    {
+      "title": "Pragmatic Clean Architecture",
+      "issuer": "Milan Jovanovic Tech",
+      "issueDate": "2024年12月",
+      "credentialId": "cert_y7sc2384",
+      "credentialUrl": "https://drive.google.com/file/d/1ywBRKVFl-GlfeduOWuIe7M36ikBB0Qp2/view?usp=sharing"
+    },
+    {
+      "title": "Golang 101",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "2023年9月"
+    },
+    {
+      "title": "Centralized log management with Graylog",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "2023年2月"
+    },
+    {
+      "title": "CCNA-1",
+      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
+      "issueDate": "2020年1月"
+    }
+  ],
+  "projects": [
+    {
+      "title": "Easyapp",
+      "description": "领导了一个服务超过15万用户的微服务平台的架构和开发。实施了AI驱动的成本优化和资本高效的按需基础设施。",
+      "projectUrl": "https://easyapp.ai",
+      "tags": ["AI", "移动端", "No-Code"],
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/a2/c3/c4/a2c3c4dc-9089-8d16-0579-06850a46c631/AppIconProduction-0-0-1x_U007emarketing-0-6-0-85-220.png/230x0w.webp"
+    },
+    {
+      "title": "Aspire Microservice Starter Template",
+      "description": "使用 Aspire Framework 创建微服务的模板。",
+      "projectUrl": "https://github.com/senrecep/Aspire",
+      "tags": [".NET", "Aspire", "Microservices"],
+      "imageUrl": "https://raw.githubusercontent.com/senrecep/Aspire/refs/heads/main/icon.png"
+    },
+    {
+      "title": "CSharpEssentials",
+      "description": "通过提供必要的构建块来简化 C# 开发，包括用于实现常见设计模式（如 Result Pattern、Any Pattern 和 Maybe Pattern）的框架。",
+      "projectUrl": "https://github.com/senrecep/CSharpEssentials",
+      "tags": ["C#", ".NET", "Design Patterns", "函数式编程"],
+      "imageUrl": "https://raw.githubusercontent.com/senrecep/CSharpEssentials/refs/heads/main/icon.png"
+    },
+    {
+      "title": "作品集模板",
+      "description": "快速、SEO 优化的作品集模板，支持无限语言、深色/浅色主题，以及适用于任何职业的完全可定制部分。使用 Next.js 15 和 React 19 构建。MIT 许可。",
+      "projectUrl": "https://github.com/senrecep/portfolio",
+      "tags": ["Next.js", "React", "TypeScript", "i18n", "开源"],
+      "imageUrl": "/images/project-portfolio.webp"
+    },
+    {
+      "title": "Career & Salary Comparison Simulator",
+      "description": "土耳其最全面的薪资比较模拟器。比较 SGK 雇员（4/a）和 Bağ-Kur 自雇人员（4/b）的净收入。总工资/净工资、税款、保费、雇主成本计算。",
+      "projectUrl": "https://salary-sim.senrecep.com/",
+      "tags": ["JavaScript", "金融", "税务", "SGK", "Bağ-Kur"],
+      "imageUrl": "https://salary-sim.senrecep.com/icon.png"
+    }
+  ],
+  "blogPosts": [
+    {
+      "title": "AI 编程工具：Claude Code、OpenCode 和现代开发的完整指南",
+      "description": "从零到生产：使用正确的工具掌握 AI 辅助开发。学习 Claude Code、OpenCode、oh-my-opencode、MCP、技能和专业开发的高级技术。",
+      "blogUrl": "https://senrecep.medium.com/ai-coding-tools-the-complete-guide-to-claude-code-opencode-modern-development-eb9da4477dc1",
+      "date": "2026/01/24",
+      "imageUrl": "/images/The-Complete-Guide-to-Claude-Code-OpenCode-Modern-Development.webp"
+    },
+    {
+      "title": "使用 Claude Code 进行生产级 AI 开发：全面生态系统指南",
+      "description": "将 Claude Code 从简单的问答工具转变为具有插件、自定义代理、技能、MCP 服务器和钩子的专业开发环境。",
+      "blogUrl": "https://medium.com/@senrecep/production-grade-ai-development-with-claude-code-a-comprehensive-ecosystem-guide-56d7c4a3b744",
+      "date": "2026/01/21",
+      "imageUrl": "/images/production-grade-ai-development-with-claude-code.webp"
+    },
+    {
+      "title": "C# 参数传递方法的性能分析",
+      "description": "深入分析 C# 参数传递：通过基准测试比较 struct、class、record 和 ref 类型。学习优化最佳实践。",
+      "blogUrl": "https://senrecep.medium.com/performance-analysis-of-parameter-passing-methods-in-c-ceeffcefd624",
+      "date": "2025/02/20",
+      "imageUrl": "/images/parameters.webp"
+    },
+    {
+      "title": "The Modern Way to Manage C# Business Rules: Rule Engine Pattern",
+      "description": "一种现代 C# 模式，用于管理业务规则，通过 Result Pattern 提供集中控制、高可测试性和最佳性能。",
+      "blogUrl": "https://medium.com/@senrecep/the-modern-way-to-manage-c-business-rules-rule-engine-pattern-14bb1c72d700",
+      "date": "2025/02/04",
+      "imageUrl": "/images/rule-engine.webp"
+    },
+    {
+      "title": "Google Cloud Secret Manager Integration for Your .NET Applications",
+      "description": "一个用于 Google Cloud Secret Manager 集成的 .NET 库，具有前缀过滤、区域特定配置和 JSON/raw 密钥支持等功能。",
+      "blogUrl": "https://senrecep.medium.com/google-cloud-secret-manager-integration-for-your-net-applications-84f2576f6027",
+      "date": "2025/01/30",
+      "imageUrl": "/images/dotnet-secret-manager.webp"
+    },
+    {
+      "title": "Blockchain Based E-Voting System",
+      "description": "本研究提出使用区块链技术开发安全快速的在线投票系统。该系统提供低处理延迟、高安全级别，并简化数据完整性验证。",
+      "blogUrl": "https://www.researchgate.net/publication/365993522_4_International_New_York_Academic_Research_Congress_Full-Text_Book",
+      "date": "2022/01/23",
+      "imageUrl": "/images/blockchain-research.webp"
+    }
+  ],
+  "socialLinks": [
+    {
+      "name": "LinkedIn",
+      "url": "https://www.linkedin.com/in/senrecep/"
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/senrecep"
+    },
+    {
+      "name": "Medium",
+      "url": "https://medium.com/@senrecep"
+    },
+    {
+      "name": "X",
+      "url": "https://x.com/senrecep0"
+    }
+  ]
+}

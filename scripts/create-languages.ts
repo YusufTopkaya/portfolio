@@ -835,11 +835,11 @@ function createContentFiles(lang: string): void {
 
   fs.writeFileSync(
     profilePath,
-    JSON.stringify(getProfileTemplate(lang), null, 2)
+    JSON.stringify(getProfileTemplate(lang), null, 2),
   );
   fs.writeFileSync(
     metadataPath,
-    JSON.stringify(getMetadataTemplate(lang), null, 2)
+    JSON.stringify(getMetadataTemplate(lang), null, 2),
   );
 
   console.log(`  ✓ Created content/${lang}/profile.json`);
@@ -865,7 +865,7 @@ function updateConfigFile(lang: string): void {
   // Insert before the closing bracket of the languages array
   content = content.replace(
     /(export const languages: Language\[\] = \[[\s\S]*?)(];)/,
-    `$1${languageEntry}\n$2`
+    `$1${languageEntry}\n$2`,
   );
 
   fs.writeFileSync(CONFIG_FILE, content);
@@ -924,7 +924,7 @@ function updateTranslationsFile(lang: string): void {
   // Insert before the closing bracket of the translations object
   content = content.replace(
     /(export const translations: Translations = \{[\s\S]*?)(};)/,
-    `$1${translationEntry}\n$2`
+    `$1${translationEntry}\n$2`,
   );
 
   fs.writeFileSync(TRANSLATIONS_FILE, content);
@@ -988,7 +988,7 @@ Supported languages: ${Object.keys(SUPPORTED_LANGUAGES).join(", ")}
       updateConfigFile(lang);
       updateTranslationsFile(lang);
       console.log(
-        `✅ ${SUPPORTED_LANGUAGES[lang].name} created successfully!\n`
+        `✅ ${SUPPORTED_LANGUAGES[lang].name} created successfully!\n`,
       );
     } catch (error) {
       console.error(`❌ Error creating ${lang}:`, error);
@@ -999,9 +999,8 @@ Supported languages: ${Object.keys(SUPPORTED_LANGUAGES).join(", ")}
   console.log("   1. Translate content in content/<lang>/profile.json");
   console.log("   2. Update metadata in content/<lang>/metadata.json");
   console.log(
-    "   3. Create OG banner at /public/images/og-banner.<lang>.webp\n"
+    "   3. Create OG banner at /public/images/og-banner.<lang>.webp\n",
   );
 }
 
 main();
-

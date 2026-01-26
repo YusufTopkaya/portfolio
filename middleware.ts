@@ -7,9 +7,7 @@ import {
 } from "@/lib/i18n/config";
 import logger from "@/lib/logger";
 
-// Check user's language
 async function getLocale(request: NextRequest) {
-  // Check browser language
   const acceptLanguage = request.headers.get("accept-language");
   const browserLang = acceptLanguage?.split(",")?.[0].split("-")?.[0];
   return browserLang && isValidLanguage(browserLang)
@@ -23,23 +21,23 @@ export async function middleware(request: NextRequest) {
 
   const forwardedFor = request.headers.get("x-forwarded-for");
   const realIp = request.headers.get("x-real-ip");
-  const cfConnectingIp = request.headers.get("cf-connecting-ip");
 
   const clientIp =
-    cfConnectingIp ||
     (forwardedFor ? forwardedFor.split(",")[0].trim() : null) ||
     realIp ||
+    request.headers.get("x-client-ip") ||
     "unknown";
 
-  logger.info({
-    method: request.method,
-    url: request.url,
-    pathname,
-    ip: clientIp,
-    userAgent: request.headers.get("user-agent"),
-  });
+  if (process.env.NODE_ENV === "development") {
+    logger.info({
+      method: request.method,
+      url: request.url,
+      pathname,
+      ip: clientIp,
+      userAgent: request.headers.get("user-agent"),
+    });
+  }
 
-  // Essential security headers for all responses
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("X-XSS-Protection", "1; mode=block");
@@ -49,17 +47,14 @@ export async function middleware(request: NextRequest) {
     "max-age=31536000; includeSubDomains",
   );
 
-  // Compression header
   response.headers.set("Vary", "Accept-Encoding");
 
-  // Skip API requests, special files, and internal tools
   if (
     pathname.startsWith("/api") ||
     pathname.startsWith("/og-preview") ||
     pathname === "/sitemap.xml" ||
     pathname === "/robots.txt"
   ) {
-    // Add specific headers for API and special files
     if (pathname.startsWith("/api")) {
       response.headers.set(
         "Cache-Control",
@@ -71,16 +66,13 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // Check requests to home page
   if (pathname === "/") {
     const locale = await getLocale(request);
     return NextResponse.redirect(new URL(`/${locale}`, request.url));
   }
 
-  // If pathname already contains a valid language, continue
   const langPattern = languageCodes.join("|");
   if (new RegExp(`^/(${langPattern})(?:/|$)`).test(pathname)) {
-    // Add performance headers for language-specific pages
     response.headers.set(
       "Cache-Control",
       "public, max-age=3600, must-revalidate",
@@ -88,7 +80,6 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // Redirect all other requests with language
   const locale = await getLocale(request);
   request.nextUrl.pathname = `/${locale}${pathname}`;
   return NextResponse.redirect(request.nextUrl);
@@ -96,7 +87,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Catch all pages for language redirection, but exclude certain files and folders
     "/((?!_next/static|_next/image|favicon.ico|files/|images/|sitemap.xml|robots.txt).*)",
   ],
 };

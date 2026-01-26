@@ -1,68 +1,11 @@
 "use client";
 
-import { FileDown } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { CVDownloadButton } from "@/components/shared/CVDownloadButton";
 import { OptimizedImage } from "@/components/shared/OptimizedImage";
 import { RadioIcon } from "@/components/shared/RadioIcon";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
-import { Button } from "@/components/ui/button";
-import { trackCVDownload } from "@/lib/analytics";
 import type { Profile } from "@/lib/i18n/content-loader";
-
-interface CVDownloadButtonProps {
-  url: string;
-  fileName: string;
-  label: string;
-  language?: string;
-}
-
-function CVDownloadButton({
-  url,
-  fileName,
-  label,
-  language,
-}: CVDownloadButtonProps) {
-  const handleDownload = async (e: React.MouseEvent<HTMLAnchorElement>) => {
-    trackCVDownload(language);
-
-    if (url.startsWith("http")) {
-      e.preventDefault();
-      try {
-        const response = await fetch(
-          `/api/download?url=${encodeURIComponent(url)}`,
-        );
-        if (!response.ok) throw new Error("Download failed");
-
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = downloadUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(downloadUrl);
-      } catch (error) {
-        console.error("Failed to download CV:", error);
-      }
-    }
-  };
-
-  return (
-    <Button asChild className="mt-4" variant="secondary">
-      <a
-        href={url}
-        download={fileName}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={handleDownload}
-      >
-        <FileDown className="mr-2 h-4 w-4" />
-        {label}
-      </a>
-    </Button>
-  );
-}
 
 interface HeaderProps {
   profile: Profile;
@@ -81,31 +24,43 @@ export function Header({
     profileData.personalInfo;
 
   return (
-    <header className="bg-slate-900 dark:bg-slate-950 text-slate-50">
-      <div className="container mx-auto px-4 md:px-6 py-8">
-        <div className="flex justify-end items-center gap-4 mb-4">
-          <ThemeToggle />
-          <LanguageSwitcher />
+    <header className="relative overflow-hidden bg-background">
+      {/* Subtle background accent - Apple Liquid Glass style */}
+      <div className="absolute inset-0 bg-gradient-to-b from-accent/5 to-transparent dark:from-accent/10 dark:to-transparent" />
+
+      {/* Content */}
+      <div className="relative container mx-auto px-4 md:px-6 py-8">
+        {/* Top bar with glass effect */}
+        <div className="flex justify-end items-center gap-3 mb-8">
+          <div className="flex items-center gap-3 glass-subtle rounded-full px-2 py-1">
+            <ThemeToggle />
+            <div className="w-px h-6 bg-border" />
+            <LanguageSwitcher />
+          </div>
         </div>
+
+        {/* Main content */}
         <div className="grid md:grid-cols-2 gap-8 items-center">
-          <div className="space-y-4">
-            <h1 className="text-4xl md:text-6xl font-bold">{name}</h1>
+          <div className="space-y-5">
+            <h1 className="text-4xl md:text-6xl font-bold text-foreground">
+              {name}
+            </h1>
             {callsign && (
-              <div className="flex items-center gap-2 text-lg md:text-xl text-slate-400 dark:text-slate-400 font-mono">
+              <div className="inline-flex items-center gap-2 text-lg md:text-xl text-muted-foreground font-mono glass-subtle rounded-full px-4 py-2">
                 <RadioIcon color="currentColor" size={24} />
                 {callsign}
               </div>
             )}
-            <h2 className="text-2xl md:text-3xl font-semibold">
+            <h2 className="text-2xl md:text-3xl font-semibold text-foreground">
               {position}
               {company && company.trim() !== "" && (
-                <span className="text-xl md:text-2xl text-slate-300 dark:text-muted-foreground">
+                <span className="text-xl md:text-2xl text-muted-foreground">
                   {" "}
                   @{company}
                 </span>
               )}
             </h2>
-            <p className="text-lg md:text-xl text-slate-300 dark:text-muted-foreground">
+            <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
               {about}
             </p>
             {cv?.url && cv?.fileName && (
@@ -114,20 +69,25 @@ export function Header({
                 fileName={cv.fileName}
                 label={translations.downloadCV}
                 language={language}
+                className="mt-4"
               />
             )}
           </div>
           <div className="flex justify-center">
-            <div className="relative w-[300px] h-[300px] rounded-full overflow-hidden border-4 border-slate-700/50 dark:border-border shadow-xl">
-              <OptimizedImage
-                src={imageUrl}
-                alt={`${name} - ${position} profile photo`}
-                fill
-                sizes="300px"
-                className="hover:scale-105 transition-transform duration-300"
-                priority
-                objectFit="cover"
-              />
+            {/* Profile image with glass border */}
+            <div className="relative">
+              <div className="absolute -inset-2 bg-accent/10 dark:bg-accent/20 rounded-full blur-xl" />
+              <div className="relative w-[280px] h-[280px] md:w-[320px] md:h-[320px] rounded-full overflow-hidden glass border border-border">
+                <OptimizedImage
+                  src={imageUrl}
+                  alt={`${name} - ${position} profile photo`}
+                  fill
+                  sizes="320px"
+                  className="hover:scale-105 transition-transform duration-500"
+                  priority
+                  objectFit="cover"
+                />
+              </div>
             </div>
           </div>
         </div>

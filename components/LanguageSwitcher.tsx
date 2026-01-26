@@ -26,7 +26,7 @@ export function LanguageSwitcher() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="bg-white/15 hover:bg-secondary/90 text-white hover:text-white"
+          className="rounded-full text-foreground hover:bg-accent/10"
         >
           {currentLanguage?.nativeName}
           <ChevronDown className="ml-2 h-4 w-4" />
@@ -34,7 +34,7 @@ export function LanguageSwitcher() {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="bg-primary border-primary-foreground/20"
+        className="max-h-[300px] overflow-y-auto"
       >
         {languages
           .filter((lang) => lang.code !== currentLang)
@@ -42,7 +42,7 @@ export function LanguageSwitcher() {
             <DropdownMenuItem key={lang.code} asChild>
               <Link
                 href={getTargetPath(lang.code)}
-                className="w-full cursor-pointer text-primary-foreground hover:bg-white/20"
+                className="w-full cursor-pointer"
               >
                 {lang.nativeName}
               </Link>

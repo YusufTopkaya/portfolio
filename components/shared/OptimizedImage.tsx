@@ -2,7 +2,7 @@
 
 import { ImageIcon } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface OptimizedImageProps {
   src: string;
@@ -19,6 +19,10 @@ interface OptimizedImageProps {
   fallbackIcon?: React.ReactNode;
   onLoadComplete?: () => void;
   onErrorCallback?: () => void;
+  /** Timeout in ms before showing error state (default: 15000) */
+  loadingTimeout?: number;
+  /** Fallback image URL to try if main src fails */
+  fallbackSrc?: string;
 }
 
 export function OptimizedImage({
@@ -36,19 +40,79 @@ export function OptimizedImage({
   fallbackIcon,
   onLoadComplete,
   onErrorCallback,
+  loadingTimeout = 15000,
+  fallbackSrc,
 }: OptimizedImageProps) {
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(src);
+  const [triedFallback, setTriedFallback] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadStartTimeRef = useRef<number>(Date.now());
+
+  // Reset state when src changes
+  useEffect(() => {
+    setCurrentSrc(src);
+    setImageLoading(true);
+    setImageError(false);
+    setTriedFallback(false);
+    loadStartTimeRef.current = Date.now();
+  }, [src]);
+
+  // Timeout mechanism - if image doesn't load within timeout, try fallback or show error
+  useEffect(() => {
+    if (!imageLoading) return;
+
+    timeoutRef.current = setTimeout(() => {
+      if (imageLoading) {
+        // Try fallback if available and not already tried
+        if (fallbackSrc && !triedFallback) {
+          setCurrentSrc(fallbackSrc);
+          setTriedFallback(true);
+          loadStartTimeRef.current = Date.now();
+        } else {
+          setImageError(true);
+          setImageLoading(false);
+          onErrorCallback?.();
+        }
+      }
+    }, loadingTimeout);
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [
+    imageLoading,
+    loadingTimeout,
+    fallbackSrc,
+    triedFallback,
+    onErrorCallback,
+  ]);
 
   const handleLoad = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
     setImageLoading(false);
     onLoadComplete?.();
   };
 
   const handleError = () => {
-    setImageError(true);
-    setImageLoading(false);
-    onErrorCallback?.();
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    // Try fallback if available and not already tried
+    if (fallbackSrc && !triedFallback) {
+      setCurrentSrc(fallbackSrc);
+      setTriedFallback(true);
+      loadStartTimeRef.current = Date.now();
+    } else {
+      setImageError(true);
+      setImageLoading(false);
+      onErrorCallback?.();
+    }
   };
 
   if (imageError) {
@@ -69,7 +133,7 @@ export function OptimizedImage({
         </div>
       )}
       <Image
-        src={src}
+        src={currentSrc}
         alt={alt}
         fill={fill}
         width={width}
