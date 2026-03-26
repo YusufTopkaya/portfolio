@@ -39,6 +39,12 @@
           "level": "Proficient",
           "levelType": "proficient",
           "icon": "trending-down"
+        },
+        {
+          "name": "Vector DBs & Semantic Caching Systems",
+          "level": "Proficient",
+          "levelType": "proficient",
+          "icon": "search"
         }
       ]
     },
