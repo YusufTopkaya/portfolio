@@ -7,7 +7,7 @@ Quick workflow:
 - If you do not know the valid folder paths yet, run `oc folder ls --all` first.
 - If you are not sure which docs to read, run `oc search "<query>" --format json` to narrow down candidates.
 - Then run `oc context manifest <folder> --limit 10` (or `oc context manifest . --limit 10` for root/all) and load each `abs_path` into your workspace.
-- Index builds (`oc index build`) may incur external embedding cost; do not auto-trigger by default—ask for approval or let the platform handle it.
+- Index builds (`oc index build`) may incur external embedding cost; do not auto-trigger by default-ask for approval or let the platform handle it.
 - Create or update docs with `oc doc create` / `oc doc set-desc` (keep descriptions fresh for triage).
 - If MCP tools are enabled, call `oc_manifest` / `oc_list_docs` (and optionally `oc_search`) instead of manual CLI steps.
 
@@ -23,3 +23,12 @@ OpenContext Stable Links (Document ID References):
 
 Keep this block so `oc init` can refresh the instructions.
 <!-- OPENCONTEXT:END -->
+
+## Project Notes
+
+- **Design**: the site is retro-only (NES/CRT style) — `light`/`dark`/`system` themes via next-themes only switch the retro palette in `app/globals.css` (`:root` = paper beige, `.dark` = CRT navy). The old glassmorphism design was removed; `.glass*` class names are kept as a legacy API but render as solid pixel panels. Pixel font: Press Start 2P (`--font-press-start` in `app/layout.tsx`). Do NOT import nes.css globally, it clashes with Tailwind preflight.
+- **CRT boot effect**: `components/retro/RetroBootEffect.tsx` toggles `html.crt-boot` once on page load; the animation lives at the end of `app/globals.css` and runs on `body` (dot → line → expand → glitch shake).
+- **Retro stock ticker**: `components/retro/RetroStockComputer.tsx` (mounted in `components/shared/ClientProviders.tsx`) — desktop: floating CRT PC bottom-left with a working monitor power button (mini CRT on/off animation in `app/globals.css`); mobile (<md): slim ticker bar pinned to the bottom edge. Fetches `/api/stocks` (`app/api/stocks/route.ts`, Yahoo Finance v8 chart API, server-side 15-min revalidate; route response is `Cache-Control: no-store` and the client fetches with `cache: "no-store"` so quotes stay ≤15 min stale). Symbols rotate every 1.5s.
+- **Retro micro-components** (all hand-rolled, no retro-react/nes.css dependency): `components/retro/TypewriterText.tsx` (hero name typing, inherits h1 styles), `components/retro/GlitchImage.tsx` (profile photo hover — slice-based "magnet near CRT" wave with chromatic aberration).
+- **Personal content**: only `content/en/` and `content/tr/` carry real personal data; other locales are template placeholders. `LICENSE`, `package.json#name`, `public/manifest.json`, `public/.well-known/ai.*` are personalized — keep them on future upstream merges.
+- Custom features kept from upstream deletions: `lib/content-protection.ts`, `components/shared/ContentProtection.tsx`, `components/KeySequenceListener.tsx`.

@@ -11,10 +11,10 @@
 **Next.js 15 portfolio** with i18n (12 languages) using App Router, TypeScript 5, React 19, Tailwind CSS, Shadcn UI.
 
 ### Key Directories
-- `app/[lang]/` — Internationalized routes
-- `components/` — UI (ui/, sections/, layout/, shared/)
-- `content/{lang}/` — JSON translations
-- `lib/` — Utilities, i18n loaders
+- `app/[lang]/` - Internationalized routes
+- `components/` - UI (ui/, sections/, layout/, shared/)
+- `content/{lang}/` - JSON translations
+- `lib/` - Utilities, i18n loaders
 
 ## WHY - Architecture Decisions
 - **App Router**: Server Components for SEO and performance
@@ -24,17 +24,17 @@
 
 ## HOW - Code Conventions
 ### TypeScript
-- Explicit types — *inference caused bugs*
-- No `any` — *production bugs from untyped data*
-- Interface over type for objects — *better extensibility*
+- Explicit types - *inference caused bugs*
+- No `any` - *production bugs from untyped data*
+- Interface over type for objects - *better extensibility*
 
 ### React
-- Server Components by default — *smaller bundles*
-- `"use client"` only when needed — *minimize JS*
+- Server Components by default - *smaller bundles*
+- `"use client"` only when needed - *minimize JS*
 
 ### Styling
-- `cn()` for conditional classes — *consistent merging*
-- Mobile-first design — *most visitors are mobile*
+- `cn()` for conditional classes - *consistent merging*
+- Mobile-first design - *most visitors are mobile*
 
 ## Boundaries
 - ✅ **Always**: Run `npm run check:fix`, follow existing patterns
@@ -88,8 +88,8 @@ Core workflow:
 4. Re-snapshot after page changes
 
 ## Active Technologies
-- TypeScript 5.x + Next.js 15.x, React 19.x, Tailwind CSS 3.4.x, Shadcn UI (001-glassmorphism-design)
-- N/A (visual-only changes) (001-glassmorphism-design)
+- TypeScript 5.x + Next.js 15.x, React 19.x, Tailwind CSS 3.4.x, Shadcn UI (retro-only NES/CRT design; glassmorphism removed)
 
 ## Recent Changes
 - 001-glassmorphism-design: Added TypeScript 5.x + Next.js 15.x, React 19.x, Tailwind CSS 3.4.x, Shadcn UI
+- Retro-only redesign: NES/CRT palette + Press Start 2P, CRT boot effect, hand-rolled retro micro-components (TypewriterText, GlitchImage, RetroStockComputer)
