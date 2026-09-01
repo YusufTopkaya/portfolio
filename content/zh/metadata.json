@@ -1,41 +1,41 @@
 {
-  "title": "Recep Şen - 软件工程师",
-  "description": "构建高影响力、可扩展的系统。我将复杂的业务挑战转化为服务数十万用户的优雅技术解决方案。",
-  "callsign": "TB1REC",
+  "title": "Yusuf Topkaya - 软件工程师",
+  "description": "Yusuf Topkaya 的个人作品集网站，一位专注于后端开发的软件工程师",
+  "callsign": "TA1YTK",
   "keywords": [
     "软件工程师",
     "后端开发",
     "全栈",
     "开发者",
-    "easyapp",
-    "taptoweb",
+    "veripark",
     "dotnet",
     "微服务",
-    "无代码平台开发者",
-    "作品集",
-    "TB1REC",
-    "业余无线电"
+    "TA1YTK",
+    "业余无线电",
+    "火腿无线电",
+    "低代码平台开发者",
+    "作品集"
   ],
   "openGraph": {
-    "title": "Recep Şen - 软件工程师",
-    "description": "构建高影响力、可扩展的系统。我将复杂的业务挑战转化为服务数十万用户的优雅技术解决方案。",
-    "siteName": "Recep Şen 作品集",
+    "title": "Yusuf Topkaya - 软件工程师",
+    "description": "Yusuf Topkaya 的个人作品集网站，一位专注于后端开发的软件工程师",
+    "siteName": "Yusuf Topkaya 作品集",
     "images": [
       {
-        "url": "/images/og-banner.zh.webp",
-        "width": 1200,
-        "height": 630,
-        "alt": "Recep Şen - 软件工程师 | 作品集预览图"
+        "url": "/images/og-banner.zh.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - 软件工程师"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "site": "@senrecep0",
-    "creator": "@senrecep0",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.zh.webp",
-      "alt": "Recep Şen - 软件工程师 | 作品集预览图"
+      "url": "/images/og-banner.zh.png",
+      "alt": "Yusuf Topkaya - 软件工程师"
     }
   }
 }

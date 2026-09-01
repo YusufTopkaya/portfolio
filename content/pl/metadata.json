@@ -1,41 +1,41 @@
 {
-  "title": "Recep Şen - Inżynier Oprogramowania",
-  "description": "Buduję skalowalne systemy o wysokim wpływie. Przekształcam złożone wyzwania biznesowe w eleganckie rozwiązania techniczne obsługujące setki tysięcy użytkowników.",
-  "callsign": "TB1REC",
+  "title": "Yusuf Topkaya - Inżynier Oprogramowania",
+  "description": "Osobista strona portfolio Yusufa Topkayi, Inżyniera Oprogramowania specjalizującego się w tworzeniu backendu",
+  "callsign": "TA1YTK",
   "keywords": [
     "inżynier oprogramowania",
-    "rozwój backend",
+    "rozwój backendu",
     "full stack",
     "programista",
-    "easyapp",
-    "taptoweb",
+    "veripark",
     "dotnet",
-    "microservices",
-    "programista platformy no code",
-    "portfolio",
-    "TB1REC",
-    "krótkofalowiec"
+    "mikroserwisy",
+    "TA1YTK",
+    "radioamatorstwo",
+    "radio krótkofalarskie",
+    "programista platform no code",
+    "portfolio"
   ],
   "openGraph": {
-    "title": "Recep Şen - Inżynier Oprogramowania",
-    "description": "Buduję skalowalne systemy o wysokim wpływie. Przekształcam złożone wyzwania biznesowe w eleganckie rozwiązania techniczne obsługujące setki tysięcy użytkowników.",
-    "siteName": "Portfolio Recep Şen",
+    "title": "Yusuf Topkaya - Inżynier Oprogramowania",
+    "description": "Osobista strona portfolio Yusufa Topkayi, Inżyniera Oprogramowania specjalizującego się w tworzeniu backendu",
+    "siteName": "Portfolio Yusufa Topkayi",
     "images": [
       {
-        "url": "/images/og-banner.pl.webp",
-        "width": 1200,
-        "height": 630,
-        "alt": "Recep Şen - Inżynier Oprogramowania | Podgląd portfolio"
+        "url": "/images/og-banner.pl.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - Inżynier Oprogramowania"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "site": "@senrecep0",
-    "creator": "@senrecep0",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.pl.webp",
-      "alt": "Recep Şen - Inżynier Oprogramowania | Podgląd portfolio"
+      "url": "/images/og-banner.pl.png",
+      "alt": "Yusuf Topkaya - Inżynier Oprogramowania"
     }
   }
 }

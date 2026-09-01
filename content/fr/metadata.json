@@ -1,41 +1,41 @@
 {
-  "title": "Recep Şen - Ingénieur Logiciel",
-  "description": "Création de systèmes évolutifs à fort impact. Je transforme des défis commerciaux complexes en solutions techniques élégantes qui servent des centaines de milliers d'utilisateurs.",
-  "callsign": "TB1REC",
+  "title": "Yusuf Topkaya - Ingénieur logiciel",
+  "description": "Site portfolio personnel de Yusuf Topkaya, ingénieur logiciel spécialisé dans le développement backend",
+  "callsign": "TA1YTK",
   "keywords": [
     "ingénieur logiciel",
     "développement backend",
     "full stack",
     "développeur",
-    "easyapp",
-    "taptoweb",
+    "veripark",
     "dotnet",
     "microservices",
-    "développeur plateforme no code",
-    "portfolio",
-    "TB1REC",
-    "radio amateur"
+    "TA1YTK",
+    "radioamateur",
+    "radio amateur",
+    "développeur de plateforme no code",
+    "portfolio"
   ],
   "openGraph": {
-    "title": "Recep Şen - Ingénieur Logiciel",
-    "description": "Création de systèmes évolutifs à fort impact. Je transforme des défis commerciaux complexes en solutions techniques élégantes qui servent des centaines de milliers d'utilisateurs.",
-    "siteName": "Portfolio Recep Şen",
+    "title": "Yusuf Topkaya - Ingénieur logiciel",
+    "description": "Site portfolio personnel de Yusuf Topkaya, ingénieur logiciel spécialisé dans le développement backend",
+    "siteName": "Portfolio de Yusuf Topkaya",
     "images": [
       {
-        "url": "/images/og-banner.fr.webp",
-        "width": 1200,
-        "height": 630,
-        "alt": "Recep Şen - Ingénieur Logiciel | Aperçu du portfolio"
+        "url": "/images/og-banner.fr.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - Ingénieur logiciel"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "site": "@senrecep0",
-    "creator": "@senrecep0",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.fr.webp",
-      "alt": "Recep Şen - Ingénieur Logiciel | Aperçu du portfolio"
+      "url": "/images/og-banner.fr.png",
+      "alt": "Yusuf Topkaya - Ingénieur logiciel"
     }
   }
 }

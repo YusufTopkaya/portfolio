@@ -1,41 +1,41 @@
 {
-  "title": "Recep Şen - Software Engineer",
-  "description": "Het bouwen van schaalbare systemen met hoge impact. Ik transformeer complexe zakelijke uitdagingen in elegante technische oplossingen die honderdduizenden gebruikers bedienen.",
-  "callsign": "TB1REC",
+  "title": "Yusuf Topkaya - Software Engineer",
+  "description": "Persoonlijke portfolio-website van Yusuf Topkaya, een Software Engineer gespecialiseerd in backend-ontwikkeling",
+  "callsign": "TA1YTK",
   "keywords": [
     "software engineer",
-    "backend ontwikkeling",
+    "backend-ontwikkeling",
     "full stack",
     "ontwikkelaar",
-    "easyapp",
-    "taptoweb",
+    "veripark",
     "dotnet",
     "microservices",
-    "no code platform ontwikkelaar",
-    "portfolio",
-    "TB1REC",
-    "radioamateur"
+    "TA1YTK",
+    "amateurradio",
+    "zendamateur",
+    "no-code platformontwikkelaar",
+    "portfolio"
   ],
   "openGraph": {
-    "title": "Recep Şen - Software Engineer",
-    "description": "Het bouwen van schaalbare systemen met hoge impact. Ik transformeer complexe zakelijke uitdagingen in elegante technische oplossingen die honderdduizenden gebruikers bedienen.",
-    "siteName": "Recep Şen Portfolio",
+    "title": "Yusuf Topkaya - Software Engineer",
+    "description": "Persoonlijke portfolio-website van Yusuf Topkaya, een Software Engineer gespecialiseerd in backend-ontwikkeling",
+    "siteName": "Yusuf Topkaya Portfolio",
     "images": [
       {
-        "url": "/images/og-banner.nl.webp",
-        "width": 1200,
-        "height": 630,
-        "alt": "Recep Şen - Software Engineer | Portfolio voorbeeldafbeelding"
+        "url": "/images/og-banner.nl.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - Software Engineer"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "site": "@senrecep0",
-    "creator": "@senrecep0",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.nl.webp",
-      "alt": "Recep Şen - Software Engineer | Portfolio voorbeeldafbeelding"
+      "url": "/images/og-banner.nl.png",
+      "alt": "Yusuf Topkaya - Software Engineer"
     }
   }
 }

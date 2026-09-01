@@ -1,41 +1,41 @@
 {
-  "title": "Recep Şen - ソフトウェアエンジニア",
-  "description": "高インパクトでスケーラブルなシステムを構築。複雑なビジネス課題を、数十万人のユーザーに対応するエレガントな技術ソリューションに変換します。",
-  "callsign": "TB1REC",
+  "title": "Yusuf Topkaya - ソフトウェアエンジニア",
+  "description": "バックエンド開発を専門とするソフトウェアエンジニア、Yusuf Topkayaの個人ポートフォリオサイト",
+  "callsign": "TA1YTK",
   "keywords": [
     "ソフトウェアエンジニア",
     "バックエンド開発",
     "フルスタック",
-    "デベロッパー",
-    "easyapp",
-    "taptoweb",
+    "開発者",
+    "veripark",
     "dotnet",
     "マイクロサービス",
+    "TA1YTK",
+    "アマチュア無線",
+    "ハム無線",
     "ノーコードプラットフォーム開発者",
-    "ポートフォリオ",
-    "TB1REC",
-    "アマチュア無線"
+    "ポートフォリオ"
   ],
   "openGraph": {
-    "title": "Recep Şen - ソフトウェアエンジニア",
-    "description": "高インパクトでスケーラブルなシステムを構築。複雑なビジネス課題を、数十万人のユーザーに対応するエレガントな技術ソリューションに変換します。",
-    "siteName": "Recep Şen ポートフォリオ",
+    "title": "Yusuf Topkaya - ソフトウェアエンジニア",
+    "description": "バックエンド開発を専門とするソフトウェアエンジニア、Yusuf Topkayaの個人ポートフォリオサイト",
+    "siteName": "Yusuf Topkaya ポートフォリオ",
     "images": [
       {
-        "url": "/images/og-banner.ja.webp",
-        "width": 1200,
-        "height": 630,
-        "alt": "Recep Şen - ソフトウェアエンジニア | ポートフォリオプレビュー"
+        "url": "/images/og-banner.ja.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - ソフトウェアエンジニア"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "site": "@senrecep0",
-    "creator": "@senrecep0",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.ja.webp",
-      "alt": "Recep Şen - ソフトウェアエンジニア | ポートフォリオプレビュー"
+      "url": "/images/og-banner.ja.png",
+      "alt": "Yusuf Topkaya - ソフトウェアエンジニア"
     }
   }
 }

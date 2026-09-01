@@ -1,41 +1,41 @@
 {
-  "title": "Recep Şen - Engenheiro de Software",
-  "description": "Construindo sistemas escaláveis de alto impacto. Transformo desafios empresariais complexos em soluções técnicas elegantes que atendem centenas de milhares de usuários.",
-  "callsign": "TB1REC",
+  "title": "Yusuf Topkaya - Engenheiro de Software",
+  "description": "Site de portfólio pessoal de Yusuf Topkaya, Engenheiro de Software especializado em desenvolvimento backend",
+  "callsign": "TA1YTK",
   "keywords": [
     "engenheiro de software",
     "desenvolvimento backend",
     "full stack",
     "desenvolvedor",
-    "easyapp",
-    "taptoweb",
+    "veripark",
     "dotnet",
-    "microservices",
-    "desenvolvedor plataforma no code",
-    "portfolio",
-    "TB1REC",
-    "radioamador"
+    "microsserviços",
+    "TA1YTK",
+    "rádio amador",
+    "radioamadorismo",
+    "desenvolvedor de plataforma no code",
+    "portfólio"
   ],
   "openGraph": {
-    "title": "Recep Şen - Engenheiro de Software",
-    "description": "Construindo sistemas escaláveis de alto impacto. Transformo desafios empresariais complexos em soluções técnicas elegantes que atendem centenas de milhares de usuários.",
-    "siteName": "Portfolio Recep Şen",
+    "title": "Yusuf Topkaya - Engenheiro de Software",
+    "description": "Site de portfólio pessoal de Yusuf Topkaya, Engenheiro de Software especializado em desenvolvimento backend",
+    "siteName": "Portfólio de Yusuf Topkaya",
     "images": [
       {
-        "url": "/images/og-banner.pt.webp",
-        "width": 1200,
-        "height": 630,
-        "alt": "Recep Şen - Engenheiro de Software | Imagem de visualização do portfólio"
+        "url": "/images/og-banner.pt.png",
+        "width": 1235,
+        "height": 359,
+        "alt": "Yusuf Topkaya - Engenheiro de Software"
       }
     ]
   },
   "twitter": {
     "card": "summary_large_image",
-    "site": "@senrecep0",
-    "creator": "@senrecep0",
+    "site": "@yusuftopkaja",
+    "creator": "@yusuftopkaja",
     "images": {
-      "url": "/images/og-banner.pt.webp",
-      "alt": "Recep Şen - Engenheiro de Software | Imagem de visualização do portfólio"
+      "url": "/images/og-banner.pt.png",
+      "alt": "Yusuf Topkaya - Engenheiro de Software"
     }
   }
 }

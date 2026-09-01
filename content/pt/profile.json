@@ -1,105 +1,92 @@
 {
   "personalInfo": {
-    "name": "Recep Şen",
-    "position": "Líder Técnico",
-    "company": "Taptoweb",
-    "about": "Construindo sistemas escaláveis de alto impacto. Transformo desafios empresariais complexos em soluções técnicas elegantes que atendem centenas de milhares de usuários.",
-    "imageUrl": "/images/profile.webp",
-    "callsign": "TB1REC",
-    "email": "me@senrecep.com",
-    "phoneNumber": "+905319649002",
+    "name": "Yusuf Topkaya",
+    "position": "Engenheiro de Software",
+    "company": "Veripark",
+    "about": "Como Engenheiro de Software na VeriPark, tenho uma sólida base em ciência da computação e paixão por criar soluções de software inovadoras.",
+    "imageUrl": "/images/profile.jpg",
+    "email": "yusuftopkaya1@gmail.com",
+    "callsign": "TA1YTK",
     "cv": {
       "url": "/files/cv.pdf",
-      "fileName": "Recep Şen - CV.pdf"
+      "fileName": "Yusuf Topkaya - CV.pdf"
     }
   },
   "skills": [
     {
-      "name": "IA, Agentes & Automação",
+      "name": "IA, Agentes e Automação",
       "icon": "brain",
       "items": [
         {
-          "name": "Agentic AI Frameworks (ex. AutoGen)",
+          "name": "Frameworks de IA Agêntica (ex.: AutoGen)",
           "level": "Proficiente",
           "levelType": "proficient",
           "icon": "bot"
         },
         {
-          "name": "Integração & Fine-Tuning de LLM",
-          "level": "Especialista",
-          "levelType": "expert",
+          "name": "Integração e Fine-Tuning de LLM",
+          "level": "Proficiente",
+          "levelType": "proficient",
           "icon": "sparkles"
         },
         {
-          "name": "Vector DBs & Sistemas de Cache Semântico",
-          "level": "Proficiente",
-          "levelType": "proficient",
-          "icon": "search"
-        },
-        {
-          "name": "Workflows de IA & Automação",
+          "name": "Fluxos de Trabalho de IA e Automação",
           "level": "Especialista",
           "levelType": "expert",
           "icon": "workflow"
         },
         {
-          "name": "Estratégias de Otimização de Custos Automatizadas",
+          "name": "Estratégias Automatizadas de Otimização de Custos",
           "level": "Proficiente",
           "levelType": "proficient",
           "icon": "trending-down"
+        },
+        {
+          "name": "Bancos de Dados Vetoriais e Sistemas de Cache Semântico",
+          "level": "Proficiente",
+          "levelType": "proficient",
+          "icon": "search"
         }
       ]
     },
     {
-      "name": "Arquitetura & Backend",
+      "name": "Arquitetura Central e Backend",
       "icon": "code",
       "items": [
         {
-          "name": ".NET & C#",
+          "name": ".NET e C#",
           "level": "Especialista",
           "levelType": "expert",
           "icon": "code-2"
         },
         {
-          "name": "Microservices & Domain-Driven Design (DDD)",
+          "name": "Microsserviços e Domain-Driven Design (DDD)",
           "level": "Especialista",
           "levelType": "expert",
           "icon": "blocks"
         },
         {
-          "name": "Node.js & Nest.js",
+          "name": "Node.js",
           "level": "Proficiente",
           "levelType": "proficient",
           "icon": "server"
-        },
-        {
-          "name": "Go (Golang)",
-          "level": "Familiar",
-          "levelType": "familiar",
-          "icon": "code-2"
         }
       ]
     },
     {
-      "name": "Dados & Mensageria",
+      "name": "Dados e Mensageria",
       "icon": "database",
       "items": [
         {
-          "name": "PostgreSQL",
-          "level": "Especialista",
-          "levelType": "expert",
-          "icon": "database"
-        },
-        {
           "name": "Redis",
-          "level": "Especialista",
-          "levelType": "expert",
+          "level": "Proficiente",
+          "levelType": "proficient",
           "icon": "zap"
         },
         {
           "name": "RabbitMQ",
-          "level": "Especialista",
-          "levelType": "expert",
+          "level": "Proficiente",
+          "levelType": "proficient",
           "icon": "message-square"
         },
         {
@@ -107,47 +94,29 @@
           "level": "Proficiente",
           "levelType": "proficient",
           "icon": "leaf"
-        },
-        {
-          "name": "Elasticsearch",
-          "level": "Proficiente",
-          "levelType": "proficient",
-          "icon": "search"
         }
       ]
     },
     {
-      "name": "Cloud Native & DevOps",
+      "name": "Cloud Native e DevOps",
       "icon": "cloud",
       "items": [
         {
-          "name": "Google Cloud Platform (GCP)",
-          "level": "Proficiente",
-          "levelType": "proficient",
-          "icon": "cloud"
-        },
-        {
-          "name": "Docker & Containerização",
+          "name": "Docker e Conteinerização",
           "level": "Proficiente",
           "levelType": "proficient",
           "icon": "container"
         },
         {
-          "name": "Arquitetura de Pipelines CI/CD",
+          "name": "Azure DevOps",
           "level": "Proficiente",
           "levelType": "proficient",
-          "icon": "git-branch"
-        },
-        {
-          "name": "Kubernetes (K8s)",
-          "level": "Proficiente",
-          "levelType": "proficient",
-          "icon": "ship"
+          "icon": "container"
         }
       ]
     },
     {
-      "name": "Frontend & Camada API",
+      "name": "Frontend e Camada de API",
       "icon": "monitor",
       "items": [
         {
@@ -157,15 +126,15 @@
           "icon": "code"
         },
         {
-          "name": "Next.js",
+          "name": "Angular",
           "level": "Proficiente",
           "levelType": "proficient",
           "icon": "triangle"
         },
         {
-          "name": "Design de API",
-          "level": "Especialista",
-          "levelType": "expert",
+          "name": "Design de APIs",
+          "level": "Proficiente",
+          "levelType": "proficient",
           "icon": "share-2"
         }
       ]
@@ -173,132 +142,48 @@
   ],
   "certificates": [
     {
-      "title": "Dive Into Refactoring",
-      "issuer": "Refactoring.Guru",
-      "issueDate": "Dez. 2024",
-      "credentialId": "#000053812",
-      "credentialUrl": "https://drive.google.com/file/d/1nkuUA7nszo4cnkOL3ZbMU5x7Bxlyjl8F/view?usp=sharing"
-    },
-    {
-      "title": "Pragmatic Clean Architecture",
-      "issuer": "Milan Jovanovic Tech",
-      "issueDate": "Dez. 2024",
-      "credentialId": "cert_y7sc2384",
-      "credentialUrl": "https://drive.google.com/file/d/1ywBRKVFl-GlfeduOWuIe7M36ikBB0Qp2/view?usp=sharing"
-    },
-    {
-      "title": "Golang 101",
+      "title": "Docker",
       "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
-      "issueDate": "Set. 2023"
+      "issueDate": "Fev 2023"
     },
     {
-      "title": "Centralized log management with Graylog",
+      "title": "Sistemas de Informação Geográfica",
       "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
-      "issueDate": "Fev. 2023"
-    },
-    {
-      "title": "CCNA-1",
-      "issuer": "Mustafa Akgül Özgür Yazılım Kampı",
-      "issueDate": "Jan. 2020"
+      "issueDate": "Jan 2020"
     }
   ],
   "projects": [
     {
-      "title": "Easyapp",
-      "description": "Liderei a arquitetura e desenvolvimento de uma plataforma baseada em microserviços que atende mais de 250.000 usuários. Implementei otimização de custos orientada por IA e infraestrutura sob demanda eficiente em capital.",
-      "projectUrl": "https://easyapp.ai",
-      "tags": ["IA", "Mobile", "No-Code"],
-      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/a2/c3/c4/a2c3c4dc-9089-8d16-0579-06850a46c631/AppIconProduction-0-0-1x_U007emarketing-0-6-0-85-220.png/230x0w.webp"
+      "title": "Türk Eximbank Internet Banking",
+      "description": "O Türk Eximbank Internet Banking é uma aplicação web que permite a clientes corporativos gerenciar suas contas e transações online.",
+      "projectUrl": "https://esube.eximbank.gov.tr/",
+      "tags": ["Bancário", "Financeiro"],
+      "imageUrl": "https://www.eximbank.gov.tr/Content/images/eximbank-logo.svg"
     },
     {
-      "title": "Aspire Microservice Starter Template",
-      "description": "Um template para criar um microserviço com o Framework Aspire.",
-      "projectUrl": "https://github.com/senrecep/Aspire",
-      "tags": [".NET", "Aspire", "Microservices"],
-      "imageUrl": "https://raw.githubusercontent.com/senrecep/Aspire/refs/heads/main/icon.png"
+      "title": "Akbank AG Internet Banking",
+      "description": "Desenvolvi uma solução abrangente de internet banking para o Akbank AG Alemanha, permitindo que clientes corporativos e pessoas físicas gerenciem suas operações bancárias com segurança. A plataforma oferece recursos como gestão de contas, transferências de fundos e serviços bancários digitais com uma interface amigável.",
+      "projectUrl": "https://myonline.akbank.de/",
+      "tags": ["Bancário", "Financeiro", ".NET"],
+      "imageUrl": "https://play-lh.googleusercontent.com/I0UWKPLG7AeNHSvpV4KUNNgFlfqdD6ZypA36D6GVX30QnMjA-jMnefqh-ij8eQlOePU"
     },
     {
-      "title": "CSharpEssentials",
-      "description": "Simplifica o desenvolvimento em C# fornecendo blocos de construção essenciais, incluindo um framework para implementar design patterns comuns como Result Pattern, Any Pattern e Maybe Pattern.",
-      "projectUrl": "https://github.com/senrecep/CSharpEssentials",
-      "tags": ["C#", ".NET", "Design Patterns", "Programação Funcional"],
-      "imageUrl": "https://raw.githubusercontent.com/senrecep/CSharpEssentials/refs/heads/main/icon.png"
-    },
-    {
-      "title": "Template de Portfólio",
-      "description": "Um template de portfólio rápido e otimizado para SEO com suporte ilimitado a idiomas, temas escuro/claro e seções totalmente personalizáveis para qualquer profissão. Construído com Next.js 15 e React 19. Licença MIT.",
-      "projectUrl": "https://github.com/senrecep/portfolio",
-      "tags": ["Next.js", "React", "TypeScript", "i18n", "Open Source"],
-      "imageUrl": "/images/project-portfolio.webp"
-    },
-    {
-      "title": "Career & Salary Comparison Simulator",
-      "description": "O simulador de comparação de salários mais completo da Turquia. Compare a renda líquida entre funcionários SGK (4/a) e autônomos Bağ-Kur (4/b). Cálculos de salário bruto/líquido, impostos, prêmios e custos do empregador.",
-      "projectUrl": "https://salary-sim.senrecep.com/",
-      "tags": ["JavaScript", "Finanças", "Impostos", "SGK", "Bağ-Kur"],
-      "imageUrl": "https://salary-sim.senrecep.com/icon.png"
+      "title": "Garanti BBVA Romania Internet Banking",
+      "description": "Desenvolvi diversos módulos para o sistema de internet banking do Garanti BBVA Romênia, permitindo que clientes corporativos gerenciem com segurança suas contas, transações e operações bancárias por meio de uma plataforma web moderna.",
+      "projectUrl": "https://www.garantibbva.ro",
+      "tags": ["Bancário", "Financeiro", ".NET"],
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/7b/66/9b/7b669bc1-d399-2bcd-ca43-e54be6e9c836/AppIcon-0-1x_U007emarketing-0-7-0-0-85-220-0.png/460x0w.webp"
     }
   ],
-  "blogPosts": [
-    {
-      "title": "Ferramentas de codificação com IA: O guia completo para Claude Code, OpenCode e desenvolvimento moderno",
-      "description": "Do zero à produção: Domine o desenvolvimento assistido por IA com as ferramentas certas. Aprenda Claude Code, OpenCode, oh-my-opencode, MCP, skills e técnicas avançadas para desenvolvimento profissional.",
-      "blogUrl": "https://senrecep.medium.com/ai-coding-tools-the-complete-guide-to-claude-code-opencode-modern-development-eb9da4477dc1",
-      "date": "24/01/2026",
-      "imageUrl": "/images/The-Complete-Guide-to-Claude-Code-OpenCode-Modern-Development.webp"
-    },
-    {
-      "title": "Desenvolvimento de IA de nível de produção com Claude Code: Guia completo do ecossistema",
-      "description": "Transforme o Claude Code de uma simples ferramenta de perguntas e respostas em um ambiente de desenvolvimento profissional com plugins, agentes personalizados, habilidades, servidores MCP e hooks.",
-      "blogUrl": "https://medium.com/@senrecep/production-grade-ai-development-with-claude-code-a-comprehensive-ecosystem-guide-56d7c4a3b744",
-      "date": "21/01/2026",
-      "imageUrl": "/images/production-grade-ai-development-with-claude-code.webp"
-    },
-    {
-      "title": "Análise de desempenho de métodos de passagem de parâmetros em C#",
-      "description": "Análise aprofundada de passagem de parâmetros em C#: Comparação de tipos struct, class, record e ref com benchmarks. Aprenda as melhores práticas de otimização.",
-      "blogUrl": "https://senrecep.medium.com/performance-analysis-of-parameter-passing-methods-in-c-ceeffcefd624",
-      "date": "20/02/2025",
-      "imageUrl": "/images/parameters.webp"
-    },
-    {
-      "title": "The Modern Way to Manage C# Business Rules: Rule Engine Pattern",
-      "description": "Um pattern C# moderno para gerenciar regras de negócio que fornece controle centralizado, alta testabilidade e performance otimizada através do Result Pattern.",
-      "blogUrl": "https://medium.com/@senrecep/the-modern-way-to-manage-c-business-rules-rule-engine-pattern-14bb1c72d700",
-      "date": "04/02/2025",
-      "imageUrl": "/images/rule-engine.webp"
-    },
-    {
-      "title": "Google Cloud Secret Manager Integration for Your .NET Applications",
-      "description": "Uma biblioteca .NET para integração com Google Cloud Secret Manager com recursos como filtragem por prefixo, configuração específica por região e suporte JSON/raw.",
-      "blogUrl": "https://senrecep.medium.com/google-cloud-secret-manager-integration-for-your-net-applications-84f2576f6027",
-      "date": "30/01/2025",
-      "imageUrl": "/images/dotnet-secret-manager.webp"
-    },
-    {
-      "title": "Blockchain Based E-Voting System",
-      "description": "Esta pesquisa propõe o desenvolvimento de um sistema de votação online seguro e rápido usando tecnologia blockchain. Este sistema oferece baixo atraso de processamento, alto nível de segurança e simplifica a verificação da integridade dos dados.",
-      "blogUrl": "https://www.researchgate.net/publication/365993522_4_International_New_York_Academic_Research_Congress_Full-Text_Book",
-      "date": "23/01/2022",
-      "imageUrl": "/images/blockchain-research.webp"
-    }
-  ],
+  "blogPosts": [],
   "socialLinks": [
     {
       "name": "LinkedIn",
-      "url": "https://www.linkedin.com/in/senrecep/"
+      "url": "https://www.linkedin.com/in/yusuftopkaya"
     },
     {
       "name": "GitHub",
-      "url": "https://github.com/senrecep"
-    },
-    {
-      "name": "Medium",
-      "url": "https://medium.com/@senrecep"
-    },
-    {
-      "name": "X",
-      "url": "https://x.com/senrecep0"
+      "url": "https://github.com/YusufTopkaya"
     }
   ]
 }
