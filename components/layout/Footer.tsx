@@ -1,16 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { trackExternalLink } from "@/lib/analytics";
 import type { Profile } from "@/lib/i18n/content-loader";
 
 interface FooterProps {
   profile: Profile;
+  lang?: string;
   translations: {
     allRightsReserved: string;
   };
 }
 
-export function Footer({ profile, translations }: FooterProps) {
+export function Footer({ profile, lang, translations }: FooterProps) {
   const handleSocialClick = (linkName: string, url: string) => {
     // Fire-and-forget analytics tracking for external social links
     try {
@@ -35,18 +37,28 @@ export function Footer({ profile, translations }: FooterProps) {
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="glass-subtle rounded-full px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-primary/10 transition-all duration-300"
+                  className="glass-subtle rounded-none px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-primary/10 transition-all duration-300"
                   onClick={() => handleSocialClick(link.name, link.url)}
                 >
                   {link.name}
                 </a>
               ))}
             </div>
-            {/* Copyright */}
-            <p className="text-muted-foreground text-sm">
-              © {new Date().getFullYear()} {profile.personalInfo.name}.{" "}
-              {translations.allRightsReserved}
-            </p>
+            {/* Copyright + Privacy */}
+            <div className="flex flex-col items-center md:items-end gap-1">
+              <p className="text-muted-foreground text-sm">
+                © {new Date().getFullYear()} {profile.personalInfo.name}.{" "}
+                {translations.allRightsReserved}
+              </p>
+              {lang && (
+                <Link
+                  href={`/${lang}/privacy`}
+                  className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                >
+                  Privacy Policy
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       </div>

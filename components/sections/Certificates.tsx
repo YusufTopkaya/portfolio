@@ -52,7 +52,7 @@ export function Certificates({
           >
             <CardContent className="p-6 flex flex-col flex-1">
               <div className="flex-1">
-                <h3 className="font-heading text-lg mb-2 group-hover:text-primary transition-colors">
+                <h3 className="font-heading hyphens-auto text-lg mb-2 group-hover:text-primary transition-colors">
                   {cert.credentialUrl ? (
                     <a
                       href={cert.credentialUrl}
@@ -79,7 +79,7 @@ export function Certificates({
                     {cert.issueDate}
                   </p>
                   {cert.credentialId && (
-                    <p className="text-xs text-muted-foreground glass-subtle rounded-full px-2 py-0.5">
+                    <p className="text-xs text-muted-foreground glass-subtle rounded-none px-2 py-0.5">
                       ID: {cert.credentialId}
                     </p>
                   )}

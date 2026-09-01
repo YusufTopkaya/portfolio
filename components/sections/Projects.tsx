@@ -1,5 +1,3 @@
-"use client";
-
 import { ProjectCard } from "@/components/ProjectCard";
 import type { Profile } from "@/lib/i18n/content-loader";
 

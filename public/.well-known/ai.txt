@@ -1,0 +1,22 @@
+# Yusuf Topkaya - Software Engineer Portfolio
+
+> Personal portfolio of Yusuf Topkaya, Software Engineer at VeriPark. Strong foundation in computer science and a passion for creating innovative software solutions.
+
+## Contact
+- Website: https://yusuftopkaya.com
+- Organization: VeriPark
+
+## AI-readable resources
+- [llms.txt](https://yusuftopkaya.com/llms.txt) - Concise AI-readable profile overview
+- [llms-full.txt](https://yusuftopkaya.com/llms-full.txt) - Detailed AI-readable professional profile
+- [Sitemap](https://yusuftopkaya.com/sitemap.xml)
+- [RSS Feed](https://yusuftopkaya.com/feed.xml)
+
+## Policies
+- scraping: allowed
+- training: allowed
+- attributionRequired: true
+
+## Preferred citation
+Yusuf Topkaya, Software Engineer (https://yusuftopkaya.com)
+updated: 2026-09-01

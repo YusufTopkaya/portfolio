@@ -20,19 +20,19 @@ Comprehensive performance optimization guide for React and Next.js applications,
 
 ## Table of Contents
 
-1. [Eliminating Waterfalls](#1-eliminating-waterfalls) — **CRITICAL**
+1. [Eliminating Waterfalls](#1-eliminating-waterfalls) - **CRITICAL**
    - 1.1 [Defer Await Until Needed](#11-defer-await-until-needed)
    - 1.2 [Dependency-Based Parallelization](#12-dependency-based-parallelization)
    - 1.3 [Prevent Waterfall Chains in API Routes](#13-prevent-waterfall-chains-in-api-routes)
    - 1.4 [Promise.all() for Independent Operations](#14-promiseall-for-independent-operations)
    - 1.5 [Strategic Suspense Boundaries](#15-strategic-suspense-boundaries)
-2. [Bundle Size Optimization](#2-bundle-size-optimization) — **CRITICAL**
+2. [Bundle Size Optimization](#2-bundle-size-optimization) - **CRITICAL**
    - 2.1 [Avoid Barrel File Imports](#21-avoid-barrel-file-imports)
    - 2.2 [Conditional Module Loading](#22-conditional-module-loading)
    - 2.3 [Defer Non-Critical Third-Party Libraries](#23-defer-non-critical-third-party-libraries)
    - 2.4 [Dynamic Imports for Heavy Components](#24-dynamic-imports-for-heavy-components)
    - 2.5 [Preload Based on User Intent](#25-preload-based-on-user-intent)
-3. [Server-Side Performance](#3-server-side-performance) — **HIGH**
+3. [Server-Side Performance](#3-server-side-performance) - **HIGH**
    - 3.1 [Authenticate Server Actions Like API Routes](#31-authenticate-server-actions-like-api-routes)
    - 3.2 [Avoid Duplicate Serialization in RSC Props](#32-avoid-duplicate-serialization-in-rsc-props)
    - 3.3 [Cross-Request LRU Caching](#33-cross-request-lru-caching)
@@ -40,12 +40,12 @@ Comprehensive performance optimization guide for React and Next.js applications,
    - 3.5 [Parallel Data Fetching with Component Composition](#35-parallel-data-fetching-with-component-composition)
    - 3.6 [Per-Request Deduplication with React.cache()](#36-per-request-deduplication-with-reactcache)
    - 3.7 [Use after() for Non-Blocking Operations](#37-use-after-for-non-blocking-operations)
-4. [Client-Side Data Fetching](#4-client-side-data-fetching) — **MEDIUM-HIGH**
+4. [Client-Side Data Fetching](#4-client-side-data-fetching) - **MEDIUM-HIGH**
    - 4.1 [Deduplicate Global Event Listeners](#41-deduplicate-global-event-listeners)
    - 4.2 [Use Passive Event Listeners for Scrolling Performance](#42-use-passive-event-listeners-for-scrolling-performance)
    - 4.3 [Use SWR for Automatic Deduplication](#43-use-swr-for-automatic-deduplication)
    - 4.4 [Version and Minimize localStorage Data](#44-version-and-minimize-localstorage-data)
-5. [Re-render Optimization](#5-re-render-optimization) — **MEDIUM**
+5. [Re-render Optimization](#5-re-render-optimization) - **MEDIUM**
    - 5.1 [Defer State Reads to Usage Point](#51-defer-state-reads-to-usage-point)
    - 5.2 [Extract to Memoized Components](#52-extract-to-memoized-components)
    - 5.3 [Narrow Effect Dependencies](#53-narrow-effect-dependencies)
@@ -53,7 +53,7 @@ Comprehensive performance optimization guide for React and Next.js applications,
    - 5.5 [Use Functional setState Updates](#55-use-functional-setstate-updates)
    - 5.6 [Use Lazy State Initialization](#56-use-lazy-state-initialization)
    - 5.7 [Use Transitions for Non-Urgent Updates](#57-use-transitions-for-non-urgent-updates)
-6. [Rendering Performance](#6-rendering-performance) — **MEDIUM**
+6. [Rendering Performance](#6-rendering-performance) - **MEDIUM**
    - 6.1 [Animate SVG Wrapper Instead of SVG Element](#61-animate-svg-wrapper-instead-of-svg-element)
    - 6.2 [CSS content-visibility for Long Lists](#62-css-content-visibility-for-long-lists)
    - 6.3 [Hoist Static JSX Elements](#63-hoist-static-jsx-elements)
@@ -61,7 +61,7 @@ Comprehensive performance optimization guide for React and Next.js applications,
    - 6.5 [Prevent Hydration Mismatch Without Flickering](#65-prevent-hydration-mismatch-without-flickering)
    - 6.6 [Use Activity Component for Show/Hide](#66-use-activity-component-for-showhide)
    - 6.7 [Use Explicit Conditional Rendering](#67-use-explicit-conditional-rendering)
-7. [JavaScript Performance](#7-javascript-performance) — **LOW-MEDIUM**
+7. [JavaScript Performance](#7-javascript-performance) - **LOW-MEDIUM**
    - 7.1 [Batch DOM CSS Changes](#71-batch-dom-css-changes)
    - 7.2 [Build Index Maps for Repeated Lookups](#72-build-index-maps-for-repeated-lookups)
    - 7.3 [Cache Property Access in Loops](#73-cache-property-access-in-loops)
@@ -74,7 +74,7 @@ Comprehensive performance optimization guide for React and Next.js applications,
    - 7.10 [Use Loop for Min/Max Instead of Sort](#710-use-loop-for-minmax-instead-of-sort)
    - 7.11 [Use Set/Map for O(1) Lookups](#711-use-setmap-for-o1-lookups)
    - 7.12 [Use toSorted() Instead of sort() for Immutability](#712-use-tosorted-instead-of-sort-for-immutability)
-8. [Advanced Patterns](#8-advanced-patterns) — **LOW**
+8. [Advanced Patterns](#8-advanced-patterns) - **LOW**
    - 8.1 [Store Event Handlers in Refs](#81-store-event-handlers-in-refs)
    - 8.2 [useLatest for Stable Callback Refs](#82-uselatest-for-stable-callback-refs)
 
@@ -574,7 +574,7 @@ Optimizing server-side rendering and data fetching eliminates server-side waterf
 
 **Impact: CRITICAL (prevents unauthorized access to server mutations)**
 
-Server Actions (functions with `"use server"`) are exposed as public endpoints, just like API routes. Always verify authentication and authorization **inside** each Server Action—do not rely solely on middleware, layout guards, or page-level checks, as Server Actions can be invoked directly.
+Server Actions (functions with `"use server"`) are exposed as public endpoints, just like API routes. Always verify authentication and authorization **inside** each Server Action-do not rely solely on middleware, layout guards, or page-level checks, as Server Actions can be invoked directly.
 
 Next.js documentation explicitly states: "Treat Server Actions with the same security considerations as public-facing API endpoints, and verify if the user is allowed to perform a mutation."
 
@@ -1427,7 +1427,7 @@ function TodoList() {
 }
 ```
 
-The first callback is recreated every time `items` changes, which can cause child components to re-render unnecessarily. The second callback has a stale closure bug—it will always reference the initial `items` value.
+The first callback is recreated every time `items` changes, which can cause child components to re-render unnecessarily. The second callback has a stale closure bug-it will always reference the initial `items` value.
 
 **Correct: stable callbacks, no stale closures**
 

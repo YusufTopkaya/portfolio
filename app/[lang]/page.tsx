@@ -70,6 +70,7 @@ export default async function Home({ params }: PageProps) {
         profile={profile}
         siteUrl={siteUrl}
         siteName={metadata.openGraph?.siteName || metadata.title || "Portfolio"}
+        lang={lang}
       />
       <div className="flex flex-col min-h-screen">
         <Header
@@ -83,6 +84,7 @@ export default async function Home({ params }: PageProps) {
           {hasBlogPosts && (
             <Blog
               profile={profile}
+              lang={lang}
               translations={{
                 title: t.sections.blog.title,
                 description: t.sections.blog.description || "",
@@ -120,6 +122,7 @@ export default async function Home({ params }: PageProps) {
         </main>
         <Footer
           profile={profile}
+          lang={lang}
           translations={{
             allRightsReserved: t.footer.allRightsReserved,
           }}

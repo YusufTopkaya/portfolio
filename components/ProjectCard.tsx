@@ -37,7 +37,7 @@ export function ProjectCard({ project, translations }: ProjectCardProps) {
               />
             </div>
           )}
-          <h3 className="text-xl font-semibold group-hover:text-primary transition-colors">
+          <h3 className="min-w-0 text-xl font-semibold group-hover:text-primary transition-colors">
             {project.projectUrl ? (
               <a
                 href={project.projectUrl}
@@ -64,7 +64,7 @@ export function ProjectCard({ project, translations }: ProjectCardProps) {
           {project.tags.map((tag, tagIndex) => (
             <span
               key={tagIndex}
-              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              className="inline-flex items-center px-2.5 py-0.5 rounded-none text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
             >
               {tag}
             </span>

@@ -13,6 +13,7 @@ interface OptimizedImageProps {
   sizes?: string;
   className?: string;
   priority?: boolean;
+  fetchPriority?: "high" | "low" | "auto";
   quality?: number;
   objectFit?: "contain" | "cover";
   showLoadingSpinner?: boolean;
@@ -34,6 +35,7 @@ export function OptimizedImage({
   sizes,
   className = "",
   priority = false,
+  fetchPriority,
   quality = 75,
   objectFit = "cover",
   showLoadingSpinner = true,
@@ -141,6 +143,7 @@ export function OptimizedImage({
         sizes={sizes}
         className={`${className} ${objectFit === "cover" ? "object-cover" : "object-contain"}`}
         priority={priority}
+        fetchPriority={fetchPriority}
         quality={quality}
         onLoad={handleLoad}
         onError={handleError}

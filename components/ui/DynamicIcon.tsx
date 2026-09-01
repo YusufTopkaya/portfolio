@@ -52,11 +52,11 @@ export function getIconName(
   // Convert to kebab-case (Lucide naming convention)
   const kebabCase = iconName
     .toLowerCase()
-    .replace(/([A-Z])/g, "-$1")
-    .replace(/^-/, "")
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replaceAll(/([A-Z])/g, "-$1")
+    .replaceAll(/^-/g, "")
+    .replaceAll(/[^a-z0-9-]/g, "-")
+    .replaceAll(/-+/g, "-")
+    .replaceAll(/^-|-$/g, "");
 
   // Check if icon exists in dynamicIconImports
   if (kebabCase in dynamicIconImports) {
@@ -65,12 +65,12 @@ export function getIconName(
 
   // Try some common variations
   const variations = [
-    iconName.toLowerCase().replace(/[^a-z0-9]/g, ""),
-    iconName.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+    iconName.toLowerCase().replaceAll(/[^a-z0-9]/g, ""),
+    iconName.toLowerCase().replaceAll(/[^a-z0-9]/g, "-"),
     iconName
-      .replace(/([A-Z])/g, "-$1")
+      .replaceAll(/([A-Z])/g, "-$1")
       .toLowerCase()
-      .replace(/^-/, ""),
+      .replaceAll(/^-/g, ""),
   ];
 
   for (const variation of variations) {

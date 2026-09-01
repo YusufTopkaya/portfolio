@@ -1,0 +1,322 @@
+# SEO Notları — Yusuf Topkaya Portfolio Projesi
+
+Bu dokümanda, Next.js 15 App Router tabanlı portfolio projesinde uygulanan tüm SEO çalışmaları ve SEO kalitesini artıran teknik iyileştirmeler detaylı şekilde not alınmıştır.
+
+---
+
+## 1. Temel Altyapı & Teknik SEO
+
+### Next.js 15 App Router Kullanımı
+- App Router, Metadata API, generateMetadata, generateStaticParams gibi modern Next.js SEO özellikleri kullanılıyor.
+- Sayfalar `dynamic = "force-static"` ve `revalidate = false` ile tamamen statik olarak üretiliyor (SSG).
+- `generateStaticParams()` ile 13 dil varyantı build zamanında önceden render ediliyor.
+
+### next.config.js SEO Ayarları
+- `compress: true` aktif — gzip/brotli sıkıştırma ile daha hızlı sayfa yüklemesi.
+- `output: "standalone"` kullanılarak performanslı self-hosting build'i üretiliyor.
+- `compiler.removeConsole` ile production ortamında console log'ları kaldırılıyor.
+- `formats: ["image/avif", "image/webp"]` ile modern görsel formatları destekleniyor.
+- Responsive `deviceSizes` ve `imageSizes` yapılandırılmış.
+- Host canonical yönlendirmesi: `www` ↔ apex (kök domain) arasında `permanent: true` ile 308 yönlendirme.
+- `Vary: Accept-Encoding` header'ı tüm rotalar için ayarlanmış.
+
+---
+
+## 2. Metadata API & Meta Tag Yönetimi
+
+### Dinamik Metadata Üretimi
+- Her dil için ayrı `content/{lang}/metadata.json` dosyaları var.
+- `app/layout.tsx` root layout'ta `generateMetadata()` çalışıyor.
+- `app/[lang]/layout.tsx` ve `app/[lang]/page.tsx` içinde de `generateMetadata()` ile dil bazlı metadata üretiliyor.
+- `lib/i18n/metadata-utils.ts` içinde `buildMetadataWithAbsoluteUrls()` fonksiyonu ile:
+  - `metadataBase` ayarlanıyor.
+  - `alternates.canonical` oluşturuluyor.
+  - `alternates.languages` (hreflang) tüm diller + `x-default` için oluşturuluyor.
+  - OG ve Twitter görsel URL'leri göreceli yerine mutlak URL'lere çevriliyor.
+
+### Robots Meta Yönergeleri
+- Root layout'ta açıkça şunlar belirtilmiş:
+  - `index: true`
+  - `follow: true`
+  - Googlebot için:
+    - `max-image-preview: "large"`
+    - `max-snippet: -1`
+    - `max-video-preview: -1`
+
+### Title, Description & Keywords
+- Her dil için özel `title`, `description` ve `keywords` dizileri mevcut.
+- `extractKeywordsFromProfile()` fonksiyonu ile profil verisinden otomatik keyword çıkarımı yapılıyor:
+  - Kişi adı ve pozisyon
+  - Proje başlıkları ve etiketleri
+  - Yetenek isimleri
+  - Blog yazı başlıkları
+- Böylece metadata keyword'leri statik JSON + dinamik profil verisiyle zenginleştiriliyor.
+
+---
+
+## 3. Uluslararasılaştırma (i18n) SEO
+
+### 13 Dil Desteği
+- Desteklenen diller: en, tr, de, fr, es, nl, pt, it, pl, ja, ko, zh, ru.
+- Her dilin BCP-47 locale kodu (`en-US`, `tr-TR`, vb.) `lib/i18n/config.ts` içinde tanımlı.
+- Her dil için ayrı `content/{lang}/profile.json` ve `content/{lang}/metadata.json` içerik dosyaları var.
+
+### Hreflang & Canonical Yapısı
+- Her sayfa için `<link rel="canonical">` ve `<link rel="alternate" hreflang="...">` etiketleri üretiliyor.
+- `x-default` olarak varsayılan dil (`en`) gösteriliyor.
+- URL yapısı: `/{lang}` ve `/{lang}/resume` şeklinde temiz ve anlamlı.
+
+### Dil Yönlendirmeleri (middleware.ts)
+- `/` kök URL'i, kullanıcının `Accept-Language` header'ına göre uygun dile 302 yönlendiriliyor.
+- Dil öneki olmayan URL'ler otomatik olarak `/{locale}{pathname}` şeklinde yönlendiriliyor.
+- Statik dosyalar, `_next/`, `sitemap.xml`, `robots.txt` gibi öğeler matcher dışında tutuluyor.
+
+### Dil Değiştirici
+- `components/LanguageSwitcher.tsx` mevcut path'i koruyarak dil değiştiriyor.
+- Bu, farklı dil versiyonları arasında internal link oluşturarak SEO'yu destekliyor.
+
+---
+
+## 4. Open Graph & Twitter Cards
+
+### Statik OG/Twitter Görselleri
+- Her dil için ayrı OG banner'lar: `public/images/og-banner.{lang}.webp` (ve .png)
+- `content/{lang}/metadata.json` içinde `openGraph.images` ve `twitter.images` referansları var.
+- `buildMetadataWithAbsoluteUrls()` bu görselleri mutlak URL'lere çeviriyor.
+
+### OG Meta Verileri
+- Her sayfa için:
+  - `og:title`
+  - `og:description`
+  - `og:siteName`
+  - `og:url`
+  - `og:locale`
+  - `og:image` (mutlak URL)
+- Twitter Card için:
+  - `twitter:card` = `summary_large_image`
+  - `twitter:site`
+  - `twitter:creator`
+  - `twitter:image`
+
+### OG Preview Aracı
+- `app/og-preview/page.tsx` ile sosyal medya banner'larının önizlemesi yapılabiliyor.
+- `robots.ts` ile `/og-preview` arama motorlarına kapatılmış.
+
+---
+
+## 5. Yapılandırılmış Veri (JSON-LD / Schema.org)
+
+### components/shared/JsonLd.tsx
+Ana sayfada iki adet `application/ld+json` script'i render ediliyor:
+
+1. **Person Schema** (`@type: "Person"`)
+   - `name`
+   - `jobTitle`
+   - `worksFor`
+   - `description`
+   - `url`
+   - `image`
+   - `sameAs` (sosyal medya linkleri)
+   - `knowsAbout` (yetenekler)
+
+2. **WebSite Schema** (`@type: "WebSite"`)
+   - `name`
+   - `url`
+   - `inLanguage` (tüm dil kodları dizisi)
+   - `author`
+
+Bu yapılandırılmış veriler, Google'ın kişi bilgilerini ve site bilgilerini zengin snippet'lerde göstermesini destekliyor.
+
+---
+
+## 6. Sitemap.xml & Robots.txt
+
+### app/sitemap.ts
+- Dinamik `MetadataRoute.Sitemap` export ediliyor.
+- Şu URL'ler dahil:
+  - Kök `/` (x-default ile `/en`)
+  - Her dil için ana sayfa: `/{lang}` — `priority: 1`, `changeFrequency: "weekly"`
+  - Her dil için özgeçmiş sayfası: `/{lang}/resume` — `priority: 0.8`, `changeFrequency: "monthly"`
+- Her giriş için `alternates.languages` (hreflang) desteği mevcut.
+- `NEXT_PUBLIC_SITE_URL` kullanılarak mutlak URL'ler oluşturuluyor.
+
+### app/robots.ts
+- Dinamik `MetadataRoute.Robots` export ediliyor.
+- Tüm ana crawler'lara izin veriliyor: `allow: "/"`
+- Yasaklanan dizinler:
+  - `/api/`
+  - `/og-preview`
+  - `/_next/`
+- Açıkça belirtilen user-agent'lar:
+  - Googlebot, Bingbot, Slurp
+  - GPTBot, ChatGPT-User, anthropic-ai, Claude-Web
+  - CCBot, PerplexityBot, Google-Extended, Applebot-Extended
+  - Bytespider, Diffbot, FacebookBot, ImagesiftBot
+  - Omgilibot, Omgili, cohere-ai
+- `sitemap` ve `host` değerleri belirtilmiş.
+
+---
+
+## 7. URL Yapısı, Yönlendirmeler & Canonicalizasyon
+
+### URL Yapısı
+- `/{lang}` — ana sayfa
+- `/{lang}/resume` — özgeçmiş/CV sayfası
+- `/api/...` — API rotaları
+- `/sitemap.xml` ve `/robots.txt` — SEO dosyaları
+
+### Canonicalizasyon
+- `next.config.js` redirects ile www ↔ apex yönlendirmesi `permanent: true` ile yapılıyor.
+- Her sayfa için `rel="canonical"` link etiketi mevcut.
+- `/` kök URL'i dil algılaması ile yönlendiriliyor, böylece duplicate content riski azaltılıyor.
+
+---
+
+## 8. Semantik HTML & İçerik SEO
+
+### Semantik Etiket Kullanımı
+- `<header>` — `components/layout/Header.tsx`
+- `<main>` — `app/[lang]/page.tsx`, `app/[lang]/resume/page.tsx`
+- `<section>` — Blog, Projects, Certificates, Skills bölümleri
+- `<footer>` — `components/layout/Footer.tsx`
+- Başlık hiyerarşisi:
+  - `<h1>` — kişi adı (Header) ve Resume sayfası başlığı
+  - `<h2>` — bölüm başlıkları
+  - `<h3>` — kart başlıkları (BlogPostCard, ProjectCard, Certificates, Skills)
+
+### Erişilebilirlik Özellikleri
+- Görsellerde açıklayıcı `alt` metinleri kullanılıyor.
+- `sr-only` sınıfı ile ekran okuyucular için gizli etiketler.
+- `aria-label` ve `aria-hidden="true"` kullanımları mevcut.
+- `prefers-reduced-motion` medya sorgusu ile hareket hassasiyeti desteği.
+- `scrollbar-gutter: stable` ile layout shift önleniyor.
+
+### Internal Linking
+- `LanguageSwitcher` ile dil alternatifleri arasında linkler.
+- Footer'da sosyal medya linkleri `rel="noopener noreferrer"` ile veriliyor.
+- Blog, proje ve sertifika kartları dış linkleri yine güvenli `rel` özellikleriyle açıyor.
+
+---
+
+## 9. Görsel Optimizasyonu
+
+### next/image Kullanımı
+- `components/shared/OptimizedImage.tsx` ile `next/image` sarmalanmış.
+- `priority`, `sizes`, `quality` (varsayılan 75), `objectFit` desteği var.
+- Yükleme spinner'ı ve hata durumunda fallback ikon mevcut.
+
+### Modern Görsel Formatları
+- `next.config.js` ile AVIF ve WebP formatları aktif.
+- Hero profil görseli `/images/profile.webp` olarak preload ediliyor:
+  - `<link rel="preload" href="/images/profile.webp" as="image" type="image/webp" />`
+- Bu, Largest Contentful Paint (LCP) metriğini iyileştiriyor.
+
+### Alt Metin Optimizasyonu
+- Header profil fotoğrafı: `"{name} - {position} profile photo"`
+- Blog küçük resimleri: `"Blog post thumbnail: {title}"`
+- Proje ikonları: `"{title} project icon"`
+
+---
+
+## 10. Performans Optimizasyonları (Core Web Vitals)
+
+### Statik Üretim
+- Tüm ana sayfa ve resume sayfaları SSG ile üretiliyor.
+- `dynamic = "force-static"` ve `revalidate = false` kullanımı.
+
+### Font Optimizasyonu
+- `next/font/google` ile Geist ve Geist_Mono fontları yükleniyor.
+- `display: "swap"` ve `preload: true` kullanılıyor.
+- Tailwind'de CSS variable'ları olarak font family tanımlanmış.
+
+### Kod Bölme (Code Splitting)
+- `components/ui/DynamicIcon.tsx` ile Lucide ikonları dinamik import ediliyor (`ssr: false`).
+- Analytics script'leri `next/script` ile `lazyOnload` stratejisiyle yükleniyor.
+
+### Önbellek (Caching) — middleware.ts
+- Statik sayfalar: `public, max-age=3600, must-revalidate`
+- API rotaları: `max-age=300, s-maxage=3600`
+- Statik dosyalar: `max-age=86400`
+- Sitemap/robots: `max-age=86400`
+
+---
+
+## 11. Güvenlik Header'ları & API Güvenliği
+
+### middleware.ts Güvenlik Header'ları
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `X-XSS-Protection: 1; mode=block`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains` (HSTS)
+- `Vary: Accept-Encoding`
+
+### API Güvenliği
+- `lib/security-wrapper.ts` ile API rotalarına rate limiting ve CORS desteği.
+- `lib/rate-limit.ts` ile IP bazlı rate limit (varsayılan 100 istek / 15 dakika).
+- `lib/validation.ts` ile input sanitizasyonu ve URL validasyonu.
+- `app/api/download/route.ts` güvenli dosya indirme mantığına sahip.
+
+---
+
+## 12. Analytics & SEO Takibi
+
+### Entegre Analitik Araçları
+- `lib/analytics.ts` — GA4/DataLayer event helper'ları.
+- `components/shared/GoogleAnalytics.tsx` — GA4 yükleme.
+- `components/shared/GoogleTagManager.tsx` — GTM yükleme.
+- `components/shared/MicrosoftClarity.tsx` — Clarity (sadece production).
+
+### İzlenen Etkileşimler
+- CV indirme
+- Dosya indirme
+- Buton tıklamaları
+- Dış link tıklamaları (sosyal medya, blog, proje, sertifika)
+
+---
+
+## 13. İçerik Yönetimi & Çok Dilli İçerik
+
+### content/{lang}/profile.json
+- Her dil için ayrı profil içeriği.
+- İçerikler: personalInfo, summary, skills, projects, certificates, blogPosts, socialLinks.
+- Bu içerikler hem sayfada render ediliyor hem de JSON-LD schema'da kullanılıyor.
+
+### content/{lang}/metadata.json
+- Her dil için özel SEO metadata'sı.
+- title, description, keywords, openGraph, twitter alanları.
+
+---
+
+## 14. SEO Kalitesini Artıran Başlıca Güçlü Yönler
+
+1. **Tam statik üretim (SSG)** — Hızlı TTFB ve iyi caching.
+2. **Çok dilli SEO** — 13 dil, hreflang, canonical, alternatif linkler.
+3. **Dinamik metadata** — Dil + profil bazlı zengin meta tag'ler.
+4. **JSON-LD schema** — Person ve WebSite yapılandırılmış veriler.
+5. **Sitemap + Robots.txt** — Arama motorlarına rehberlik.
+6. **Modern görsel optimizasyonu** — AVIF/WebP, responsive sizes, LCP preload.
+7. **Font optimizasyonu** — next/font ile swap + preload.
+8. **Güvenlik header'ları** — HSTS, XSS, clickjacking koruması.
+9. **Canonical yönlendirmeler** — www/apex birleştirme.
+10. **Analytics entegrasyonu** — Davranış takibi ve dönüşüm ölçümü.
+11. **Semantik HTML** — Doğru heading hiyerarşisi ve anlamlı etiketler.
+12. **Açıklayıcı alt metinler** — Erişilebilirlik ve görsel arama SEO'su.
+13. **Kod bölme** — Daha hafif initial bundle.
+
+---
+
+## Not: İleride Değerlendirilebilecek SEO İyileştirmeleri
+
+- `html lang` özniteliği dil bazlı dinamik hale getirilebilir (şu an root layout'ta sabit "en").
+- Web App Manifest (`app/manifest.ts`) eklenebilir.
+- `/og-preview` için sayfa içinde `<meta name="robots" content="noindex">` eklenebilir.
+- Özel `not-found.tsx` ve `error.tsx` sayfaları eklenebilir.
+- Breadcrumb schema ve Article schema eklenebilir.
+- Skip-to-content link eklenebilir.
+- Ana navigasyon `<nav>` etiketi ile sarmalanabilir.
+
+---
+
+Hazırlanma Tarihi: 2026-07-10
+Proje: c:\Users\Yusuf\source\portfolio

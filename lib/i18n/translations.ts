@@ -28,6 +28,12 @@ export type Translations = {
         readMore: string;
         publishedOn: string;
         description: string;
+        copyForLLM: string;
+        copied: string;
+        copyLink: string;
+        copyCode: string;
+        tableOfContents: string;
+        minRead: string;
       };
       certificates: {
         title: string;
@@ -80,6 +86,12 @@ export const translations: Translations = {
         readMore: "Read Article",
         publishedOn: "Published on",
         description: "Latest articles and technical blog posts",
+        copyForLLM: "Copy for AI",
+        copied: "Copied!",
+        copyLink: "Copy link to section",
+        copyCode: "Copy code",
+        tableOfContents: "In this article",
+        minRead: "min read",
       },
       certificates: {
         title: "Certificates & Licenses",
@@ -129,6 +141,12 @@ export const translations: Translations = {
         readMore: "Yazıyı Oku",
         publishedOn: "Yayınlanma Tarihi",
         description: "En son makaleler ve teknik blog yazıları",
+        copyForLLM: "AI için Kopyala",
+        copied: "Kopyalandı!",
+        copyLink: "Bölüm bağlantısını kopyala",
+        copyCode: "Kodu kopyala",
+        tableOfContents: "Bu makalede",
+        minRead: "dakika okuma",
       },
       certificates: {
         title: "Sertifikalar & Lisanslar",
@@ -178,6 +196,12 @@ export const translations: Translations = {
         readMore: "Artikel lesen",
         publishedOn: "Veröffentlicht am",
         description: "Aktuelle Artikel und technische Blogbeiträge",
+        copyForLLM: "Für AI kopieren",
+        copied: "Kopiert!",
+        copyLink: "Link zum Abschnitt kopieren",
+        copyCode: "Code kopieren",
+        tableOfContents: "In diesem Artikel",
+        minRead: "Min. Lesezeit",
       },
       certificates: {
         title: "Zertifikate & Lizenzen",
@@ -227,6 +251,12 @@ export const translations: Translations = {
         readMore: "Lire l'article",
         publishedOn: "Publié le",
         description: "Derniers articles et publications techniques",
+        copyForLLM: "Copier pour AI",
+        copied: "Copié !",
+        copyLink: "Copier le lien de la section",
+        copyCode: "Copier le code",
+        tableOfContents: "Dans cet article",
+        minRead: "min de lecture",
       },
       certificates: {
         title: "Certificats & Licences",
@@ -276,6 +306,12 @@ export const translations: Translations = {
         readMore: "Leer artículo",
         publishedOn: "Publicado el",
         description: "Últimos artículos y publicaciones técnicas",
+        copyForLLM: "Copiar para AI",
+        copied: "¡Copiado!",
+        copyLink: "Copiar enlace a la sección",
+        copyCode: "Copiar código",
+        tableOfContents: "En este artículo",
+        minRead: "min de lectura",
       },
       certificates: {
         title: "Certificados y Licencias",
@@ -325,6 +361,12 @@ export const translations: Translations = {
         readMore: "Lees artikel",
         publishedOn: "Gepubliceerd op",
         description: "Laatste artikelen en technische blogposts",
+        copyForLLM: "Kopiëren voor AI",
+        copied: "Gekopieerd!",
+        copyLink: "Link naar sectie kopiëren",
+        copyCode: "Code kopiëren",
+        tableOfContents: "In dit artikel",
+        minRead: "min leestijd",
       },
       certificates: {
         title: "Certificaten & Licenties",
@@ -374,6 +416,12 @@ export const translations: Translations = {
         readMore: "Ler artigo",
         publishedOn: "Publicado em",
         description: "Últimos artigos e posts técnicos",
+        copyForLLM: "Copiar para AI",
+        copied: "Copiado!",
+        copyLink: "Copiar link da seção",
+        copyCode: "Copiar código",
+        tableOfContents: "Neste artigo",
+        minRead: "min de leitura",
       },
       certificates: {
         title: "Certificados & Licenças",
@@ -423,6 +471,12 @@ export const translations: Translations = {
         readMore: "Leggi articolo",
         publishedOn: "Pubblicato il",
         description: "Ultimi articoli e post tecnici",
+        copyForLLM: "Copia per AI",
+        copied: "Copiato!",
+        copyLink: "Copia link alla sezione",
+        copyCode: "Copia codice",
+        tableOfContents: "In questo articolo",
+        minRead: "min di lettura",
       },
       certificates: {
         title: "Certificati & Licenze",
@@ -472,6 +526,12 @@ export const translations: Translations = {
         readMore: "Czytaj artykuł",
         publishedOn: "Opublikowano",
         description: "Najnowsze artykuły i posty techniczne",
+        copyForLLM: "Kopiuj dla AI",
+        copied: "Skopiowano!",
+        copyLink: "Kopiuj link do sekcji",
+        copyCode: "Kopiuj kod",
+        tableOfContents: "W tym artykule",
+        minRead: "min czytania",
       },
       certificates: {
         title: "Certyfikaty i Licencje",
@@ -521,6 +581,12 @@ export const translations: Translations = {
         readMore: "記事を読む",
         publishedOn: "公開日",
         description: "最新の記事と技術ブログ投稿",
+        copyForLLM: "AI用にコピー",
+        copied: "コピーしました！",
+        copyLink: "セクションのリンクをコピー",
+        copyCode: "コードをコピー",
+        tableOfContents: "この記事の内容",
+        minRead: "分で読める",
       },
       certificates: {
         title: "資格＆ライセンス",
@@ -570,6 +636,12 @@ export const translations: Translations = {
         readMore: "글 읽기",
         publishedOn: "게시일",
         description: "최신 기사 및 기술 블로그 포스트",
+        copyForLLM: "AI용 복사",
+        copied: "복사됨!",
+        copyLink: "섹션 링크 복사",
+        copyCode: "코드 복사",
+        tableOfContents: "이 글에서",
+        minRead: "분 읽기",
       },
       certificates: {
         title: "자격증 & 라이선스",
@@ -619,6 +691,12 @@ export const translations: Translations = {
         readMore: "阅读文章",
         publishedOn: "发布于",
         description: "最新文章和技术博客",
+        copyForLLM: "复制给AI",
+        copied: "已复制！",
+        copyLink: "复制段落链接",
+        copyCode: "复制代码",
+        tableOfContents: "本文内容",
+        minRead: "分钟阅读",
       },
       certificates: {
         title: "证书与执照",
@@ -668,6 +746,12 @@ export const translations: Translations = {
         readMore: "Читать статью",
         publishedOn: "Опубликовано",
         description: "Последние статьи и технические публикации",
+        copyForLLM: "Копировать для AI",
+        copied: "Скопировано!",
+        copyLink: "Скопировать ссылку на раздел",
+        copyCode: "Скопировать код",
+        tableOfContents: "В этой статье",
+        minRead: "мин чтения",
       },
       certificates: {
         title: "Сертификаты и лицензии",

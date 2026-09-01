@@ -6,6 +6,52 @@ import { languageCodes } from "@/lib/i18n/config";
 import { getProfile } from "@/lib/i18n/server-content-loader";
 import { translations } from "@/lib/i18n/translations";
 
+// Resume page JSON-LD: BreadcrumbList + DigitalDocument schemas
+// Safe: all data from static build-time JSON files, escaped via JSON.stringify
+function ResumeJsonLd({
+  name,
+  siteUrl,
+  lang,
+}: {
+  name: string;
+  siteUrl: string;
+  lang: string;
+}) {
+  const langUrl = `${siteUrl}/${lang}`;
+  const resumeUrl = `${langUrl}/resume`;
+
+  const schemas = [
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name, item: langUrl },
+        { "@type": "ListItem", position: 2, name: "Resume", item: resumeUrl },
+      ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "DigitalDocument",
+      name: `${name} - Resume / CV`,
+      url: resumeUrl,
+      encodingFormat: "application/pdf",
+      about: { "@id": `${siteUrl}/#person` },
+    },
+  ];
+
+  return (
+    <>
+      {schemas.map((s, i) => (
+        <script
+          key={i}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(s) }}
+        />
+      ))}
+    </>
+  );
+}
+
 interface PageProps {
   params: Promise<{
     lang: string;
@@ -56,6 +102,7 @@ export default async function ResumePage({ params }: PageProps) {
         </main>
         <Footer
           profile={profile}
+          lang={lang}
           translations={{
             allRightsReserved: t.footer.allRightsReserved,
           }}
@@ -64,40 +111,50 @@ export default async function ResumePage({ params }: PageProps) {
     );
   }
 
-  return (
-    <div className="flex flex-col min-h-screen">
-      <Header
-        profile={profile}
-        translations={{
-          downloadCV: t.actions.downloadCV,
-        }}
-        language={lang}
-      />
-      <main className="container mx-auto px-4 py-8 flex-1 flex flex-col gap-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">{t.sections.about.resume}</h1>
-          <CVDownloadButton
-            url={cvUrl}
-            fileName={profile.personalInfo.cv?.fileName || "cv.pdf"}
-            label={t.actions.downloadPDF}
-            language={lang}
-          />
-        </div>
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-        <div className="flex-1 w-full border rounded-lg overflow-hidden bg-muted/20 min-h-[600px] shadow-sm">
-          <iframe
-            src={cvUrl}
-            className="w-full h-full min-h-[800px]"
-            title="Resume PDF"
-          />
-        </div>
-      </main>
-      <Footer
-        profile={profile}
-        translations={{
-          allRightsReserved: t.footer.allRightsReserved,
-        }}
+  return (
+    <>
+      <ResumeJsonLd
+        name={profile.personalInfo.name}
+        siteUrl={siteUrl}
+        lang={lang}
       />
-    </div>
+      <div className="flex flex-col min-h-screen">
+        <Header
+          profile={profile}
+          translations={{
+            downloadCV: t.actions.downloadCV,
+          }}
+          language={lang}
+        />
+        <main className="container mx-auto px-4 py-8 flex-1 flex flex-col gap-6">
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold">{t.sections.about.resume}</h1>
+            <CVDownloadButton
+              url={cvUrl}
+              fileName={profile.personalInfo.cv?.fileName || "cv.pdf"}
+              label={t.actions.downloadPDF}
+              language={lang}
+            />
+          </div>
+
+          <div className="flex-1 w-full border rounded-none overflow-hidden bg-muted/20 min-h-[600px] shadow-sm">
+            <iframe
+              src={cvUrl}
+              className="w-full h-full min-h-[800px]"
+              title="Resume PDF"
+            />
+          </div>
+        </main>
+        <Footer
+          profile={profile}
+          lang={lang}
+          translations={{
+            allRightsReserved: t.footer.allRightsReserved,
+          }}
+        />
+      </div>
+    </>
   );
 }

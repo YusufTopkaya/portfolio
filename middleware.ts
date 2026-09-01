@@ -48,12 +48,26 @@ export async function middleware(request: NextRequest) {
   );
 
   response.headers.set("Vary", "Accept-Encoding");
+  const scriptSrc =
+    "'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.clarity.ms";
+  response.headers.set(
+    "Content-Security-Policy",
+    `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://www.google-analytics.com https://www.googletagmanager.com https://clarity.ms; frame-src 'self' https:; object-src 'none';`,
+  );
+  response.headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=()",
+  );
 
   if (
     pathname.startsWith("/api") ||
     pathname.startsWith("/og-preview") ||
     pathname === "/sitemap.xml" ||
-    pathname === "/robots.txt"
+    pathname === "/robots.txt" ||
+    pathname === "/llms.txt" ||
+    pathname === "/llms-full.txt" ||
+    pathname === "/feed.xml" ||
+    pathname.startsWith("/.well-known")
   ) {
     if (pathname.startsWith("/api")) {
       response.headers.set(
@@ -72,7 +86,9 @@ export async function middleware(request: NextRequest) {
   }
 
   const langPattern = languageCodes.join("|");
-  if (new RegExp(`^/(${langPattern})(?:/|$)`).test(pathname)) {
+  const langMatch = pathname.match(new RegExp(`^/(${langPattern})(?:/|$)`));
+  if (langMatch) {
+    response.headers.set("Content-Language", langMatch[1]);
     response.headers.set(
       "Cache-Control",
       "public, max-age=3600, must-revalidate",
@@ -87,6 +103,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|files/|images/|sitemap.xml|robots.txt).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|icon\\.png|icon\\.svg|apple-icon\\.png|manifest\\.json|web-app-manifest-.*\\.png|files/|images/|sitemap\\.xml|robots\\.txt|llms\\.txt|llms-full\\.txt|feed\\.xml|\\.well-known).*)",
   ],
 };

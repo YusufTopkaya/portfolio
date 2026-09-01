@@ -9,7 +9,7 @@ interface SkillsProps {
   };
 }
 
-// Skill level badge component with glassmorphism
+// Skill level badge component
 function SkillBadge({
   level,
   levelType,
@@ -18,7 +18,7 @@ function SkillBadge({
   levelType: SkillLevel;
 }) {
   let badgeClasses =
-    "px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm transition-all duration-200 ";
+    "px-3 py-1 rounded-none text-xs font-medium backdrop-blur-sm transition-all duration-200 ";
 
   switch (levelType) {
     case SkillLevel.EXPERT:
@@ -37,7 +37,7 @@ function SkillBadge({
       break;
   }
 
-  return <span className={badgeClasses}>{level}</span>;
+  return <span className={`shrink-0 ${badgeClasses}`}>{level}</span>;
 }
 
 export function Skills({ skills, translations }: SkillsProps) {
@@ -82,18 +82,18 @@ export function Skills({ skills, translations }: SkillsProps) {
             return (
               <div
                 key={categoryIndex}
-                className="glass glass-hover rounded-2xl p-6 space-y-4 w-full group/card"
+                className="glass glass-hover rounded-none p-6 space-y-4 w-full group/card"
               >
                 {/* Category header with dynamic icon */}
                 <div className="flex items-center space-x-3">
-                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                  <div className="p-2 rounded-none bg-primary/10 text-primary">
                     <DynamicIcon
                       name={iconName}
                       fallback="square"
                       className="w-5 h-5"
                     />
                   </div>
-                  <h3 className="font-semibold text-lg text-foreground group-hover/card:text-primary transition-colors">
+                  <h3 className="min-w-0 hyphens-auto font-semibold text-lg text-foreground group-hover/card:text-primary transition-colors">
                     {category.name}
                   </h3>
                 </div>
@@ -113,7 +113,7 @@ export function Skills({ skills, translations }: SkillsProps) {
                         key={skillIndex}
                         className="flex items-center justify-between gap-2 group"
                       >
-                        <div className="flex items-center gap-2 flex-1">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
                           <div className="text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0">
                             <DynamicIcon
                               name={skillIconName}
@@ -121,7 +121,12 @@ export function Skills({ skills, translations }: SkillsProps) {
                               className="w-4 h-4"
                             />
                           </div>
-                          <span className="text-sm text-foreground font-medium group-hover:text-primary transition-colors">
+                          {/* wrap-anywhere (not break-words) shrinks the
+                              flex item's min-content so long compounds like
+                              "Kostenoptimierungsstrategien" can't push the
+                              badge out of the card; hyphens:auto adds proper
+                              per-language hyphenation first */}
+                          <span className="min-w-0 text-sm text-foreground font-medium wrap-anywhere hyphens-auto group-hover:text-primary transition-colors">
                             {skill.name}
                           </span>
                         </div>
@@ -151,7 +156,7 @@ export function Skills({ skills, translations }: SkillsProps) {
           {(skills as string[]).map((skill, index) => (
             <div
               key={index}
-              className="glass glass-hover rounded-xl p-4 w-full"
+              className="glass glass-hover rounded-none p-4 w-full"
             >
               <span className="text-sm font-medium text-foreground">
                 {skill}

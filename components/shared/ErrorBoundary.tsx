@@ -16,12 +16,19 @@ class ErrorBoundary extends React.Component<
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    // Log the error for debugging
+    // Known lottie-web regression with React Strict Mode (dev only):
+    // ICompElement.destroyElements calls .destroy() on elements[] entries that
+    // may be `true` (partially initialized), causing a TypeError. This does not
+    // affect production or app functionality.
+    if (error.message?.includes("destroy is not a function")) {
+      return { hasError: false };
+    }
     console.error("Error boundary caught an error:", error);
     return { hasError: true };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    if (error.message?.includes("destroy is not a function")) return;
     console.error("Error caught by boundary:", error, errorInfo);
   }
 

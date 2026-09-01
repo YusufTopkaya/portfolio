@@ -40,9 +40,14 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         disallow: ["/api/", "/og-preview", "/_next/"],
       },
+      {
+        userAgent: "OAI-SearchBot",
+        allow: "/",
+        disallow: ["/api/", "/og-preview", "/_next/"],
+      },
       // AI Crawlers - Anthropic (Claude)
       {
-        userAgent: "anthropic-ai",
+        userAgent: "ClaudeBot",
         allow: "/",
         disallow: ["/api/", "/og-preview", "/_next/"],
       },
@@ -51,9 +56,29 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         disallow: ["/api/", "/og-preview", "/_next/"],
       },
+      {
+        userAgent: "anthropic-ai",
+        allow: "/",
+        disallow: ["/api/", "/og-preview", "/_next/"],
+      },
       // AI Crawlers - Others
       {
+        userAgent: "Applebot",
+        allow: "/",
+        disallow: ["/api/", "/og-preview", "/_next/"],
+      },
+      {
+        userAgent: "Applebot-Extended",
+        allow: "/",
+        disallow: ["/api/", "/og-preview", "/_next/"],
+      },
+      {
         userAgent: "CCBot",
+        allow: "/",
+        disallow: ["/api/", "/og-preview", "/_next/"],
+      },
+      {
+        userAgent: "meta-externalagent",
         allow: "/",
         disallow: ["/api/", "/og-preview", "/_next/"],
       },
@@ -68,7 +93,7 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/api/", "/og-preview", "/_next/"],
       },
       {
-        userAgent: "Applebot-Extended",
+        userAgent: "DuckAssistant",
         allow: "/",
         disallow: ["/api/", "/og-preview", "/_next/"],
       },
@@ -102,14 +127,25 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         disallow: ["/api/", "/og-preview", "/_next/"],
       },
-      // Cohere AI
+      // Other AI crawlers
       {
         userAgent: "cohere-ai",
         allow: "/",
         disallow: ["/api/", "/og-preview", "/_next/"],
       },
+      {
+        userAgent: "YouBot",
+        allow: "/",
+        disallow: ["/api/", "/og-preview", "/_next/"],
+      },
     ],
-    sitemap: `${siteUrl}/sitemap.xml`,
+    sitemap: [
+      `${siteUrl}/sitemap.xml`,
+      `${siteUrl}/llms.txt`,
+      `${siteUrl}/llms-full.txt`,
+      `${siteUrl}/.well-known/ai.txt`,
+      `${siteUrl}/.well-known/ai.json`,
+    ],
     host: siteUrl,
   };
 }

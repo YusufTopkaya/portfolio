@@ -1,0 +1,30 @@
+{
+  "name": "Yusuf Topkaya",
+  "type": "person",
+  "url": "https://yusuftopkaya.com",
+  "description": "Software Engineer at VeriPark. Strong foundation in computer science and a passion for creating innovative software solutions.",
+  "aiReadableResources": [
+    {
+      "url": "https://yusuftopkaya.com/llms.txt",
+      "description": "Concise AI-readable profile overview"
+    },
+    {
+      "url": "https://yusuftopkaya.com/llms-full.txt",
+      "description": "Detailed AI-readable professional profile"
+    },
+    {
+      "url": "https://yusuftopkaya.com/sitemap.xml",
+      "description": "Full site map"
+    },
+    { "url": "https://yusuftopkaya.com/feed.xml", "description": "Blog RSS feed" }
+  ],
+  "allowedPaths": ["/"],
+  "disallowedPaths": [],
+  "policies": {
+    "scraping": "allowed",
+    "training": "allowed",
+    "attributionRequired": true
+  },
+  "preferredCitation": "Yusuf Topkaya, Software Engineer (https://yusuftopkaya.com)",
+  "updatedAt": "2026-09-01"
+}

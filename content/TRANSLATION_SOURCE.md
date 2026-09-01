@@ -52,12 +52,12 @@ Use this as a reference for professional translation services.
 
 ### About Text
 ```
-Building high-impact, scalable systems. I turn complex business challenges into elegant technical solutions that serve hundreds of thousands of users.
+Personal portfolio website of Yusuf Topkaya, a Software Engineer specialized in backend development.
 ```
 
 ### Position
 ```
-Technical Lead
+CTO
 ```
 
 ---
@@ -133,12 +133,12 @@ This research proposes the development of a secure and fast online voting system
 
 ### Title
 ```
-Recep Şen - Software Engineer
+Yusuf Topkaya - Software Engineer
 ```
 
 ### Description
 ```
-Building high-impact, scalable systems. I turn complex business challenges into elegant technical solutions that serve hundreds of thousands of users.
+Personal portfolio website of Yusuf Topkaya, a Software Engineer specialized in backend development.
 ```
 
 ### Keywords (Translate where applicable)
@@ -151,10 +151,10 @@ Building high-impact, scalable systems. I turn complex business challenges into 
 ### OpenGraph
 | Field | English |
 |-------|---------|
-| title | Recep Şen - Software Engineer |
-| description | Building high-impact, scalable systems. I turn complex business challenges into elegant technical solutions that serve hundreds of thousands of users. |
-| siteName | Recep Şen Portfolio |
-| alt | Recep Şen - Software Engineer |
+| title | Yusuf Topkaya - Software Engineer |
+| description | Personal portfolio website of Yusuf Topkaya, a Software Engineer specialized in backend development. |
+| siteName | Yusuf Topkaya Portfolio |
+| alt | Yusuf Topkaya - Software Engineer |
 
 ---
 

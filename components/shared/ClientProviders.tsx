@@ -1,26 +1,18 @@
 "use client";
 
 import { ThemeProvider as NextThemesProvider } from "next-themes";
+import { RetroBootEffect } from "@/components/retro/RetroBootEffect";
+import { RetroStockComputer } from "@/components/retro/RetroStockComputer";
 import { ContentProtection } from "@/components/shared/ContentProtection";
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
-import GoogleAnalytics from "@/components/shared/GoogleAnalytics";
-import { GoogleTagManagerBody } from "@/components/shared/GoogleTagManager";
 
 interface ClientProvidersProps {
   children: React.ReactNode;
-  gaId?: string;
-  gtmId?: string;
 }
 
-export function ClientProviders({
-  children,
-  gaId,
-  gtmId,
-}: ClientProvidersProps) {
+export function ClientProviders({ children }: ClientProvidersProps) {
   return (
     <ErrorBoundary>
-      <ContentProtection />
-      {gtmId && <GoogleTagManagerBody GTM_ID={gtmId} />}
       <NextThemesProvider
         attribute="class"
         defaultTheme="system"
@@ -29,9 +21,10 @@ export function ClientProviders({
         storageKey="theme"
       >
         {children}
+        <ContentProtection />
+        <RetroBootEffect />
+        <RetroStockComputer />
       </NextThemesProvider>
-
-      {gaId && <GoogleAnalytics GA_MEASUREMENT_ID={gaId} />}
     </ErrorBoundary>
   );
 }

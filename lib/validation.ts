@@ -3,6 +3,9 @@
  * Prevents XSS, parameter pollution, and other input-based attacks
  */
 
+import { Err } from "tsentials/errors";
+import { Result } from "tsentials/result";
+
 /**
  * Sanitize string input to prevent XSS attacks
  */
@@ -48,25 +51,25 @@ export function validateAndSanitizeInput(data: unknown): unknown {
 /**
  * Validate URL and check against allowed domains
  */
-export function validateURL(
-  url: string,
-  allowedHosts: string[],
-): { valid: boolean; url?: URL; error?: string } {
-  try {
-    const urlObj = new URL(url);
+export function validateURL(url: string, allowedHosts: string[]): Result<URL> {
+  const parsed = Result.try(
+    () => new URL(url),
+    () => Err.validation("Url.Invalid", "Invalid URL format"),
+  );
 
+  return Result.then(parsed, (urlObj) => {
     // Only allow HTTPS for security
     if (urlObj.protocol !== "https:") {
-      return { valid: false, error: "Only HTTPS URLs are allowed" };
+      return Result.failure(
+        Err.forbidden("Url.Protocol", "Only HTTPS URLs are allowed"),
+      );
     }
 
     // Check against allowed hosts
     if (!allowedHosts.some((host) => urlObj.hostname.endsWith(host))) {
-      return { valid: false, error: "Domain not allowed" };
+      return Result.failure(Err.forbidden("Url.Host", "Domain not allowed"));
     }
 
-    return { valid: true, url: urlObj };
-  } catch {
-    return { valid: false, error: "Invalid URL format" };
-  }
+    return Result.success(urlObj);
+  });
 }

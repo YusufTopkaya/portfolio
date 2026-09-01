@@ -52,7 +52,7 @@ React Server Components (RSC) are the default. Client components MUST be justifi
 - MUST NOT use `useEffect` for data fetching; use Server Components instead
 - MUST minimize client-side JavaScript to improve Core Web Vitals
 
-**Rationale:** Server Components reduce bundle size, improve SEO, and provide faster initial page loads—critical for a portfolio site where first impressions matter.
+**Rationale:** Server Components reduce bundle size, improve SEO, and provide faster initial page loads-critical for a portfolio site where first impressions matter.
 
 ### III. Internationalization Excellence
 
@@ -79,7 +79,7 @@ Every feature MUST be directly requested. No speculative abstractions.
 - MUST NOT add docstrings, type annotations, or refactors beyond the task scope
 - MUST prefer three similar lines over a premature abstraction
 
-**Rationale:** Over-engineering creates maintenance burden. A portfolio is a finite, well-understood domain—complexity serves no one.
+**Rationale:** Over-engineering creates maintenance burden. A portfolio is a finite, well-understood domain-complexity serves no one.
 
 ### V. Performance by Default
 

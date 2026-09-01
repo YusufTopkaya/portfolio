@@ -1,0 +1,26 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "Recep",
+    "Şen",
+    "apos",
+    "Taptoweb",
+    "senrecep",
+    "hreflang",
+    "llms",
+    "llmstxt",
+    "webmaster",
+    "modifieddate",
+    "readingtime",
+    "wordcount",
+    "feedxml",
+    "Omgilibot",
+    "Omgili",
+    "Bytespider",
+    "cohere",
+    "turbopack",
+    "pino"
+  ],
+  "ignorePaths": ["node_modules/**", ".next/**", "*.lock", "content/**"]
+}

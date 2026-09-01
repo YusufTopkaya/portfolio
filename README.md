@@ -1,6 +1,6 @@
 # Portfolio Template
 
-A modern, internationalized personal portfolio website template built with Next.js 15.5, React 19, and TailwindCSS. Features a clean, responsive design with support for multiple languages, dark/light themes, and comprehensive SEO optimizations.
+A modern, internationalized personal portfolio website template built with Next.js 15.5, React 19, and TailwindCSS. Features a clean, responsive design with support for multiple languages, dark/light themes, and comprehensive SEO optimizations — including AI discoverability (GEO) features for LLM citation and AI crawler indexing.
 
 ## Features
 
@@ -22,13 +22,41 @@ A modern, internationalized personal portfolio website template built with Next.
 
 ### SEO & Performance
 
-- JSON-LD structured data (Person + WebSite schema)
+- JSON-LD structured data (Person + WebSite + Article/TechArticle schema)
+- FAQPage schema for AI citation (add `faq` to blog frontmatter)
+- `speakable` property for voice and AI systems
 - Automatic sitemap generation with alternates
 - Canonical URLs and hreflang tags
 - Image optimization (AVIF/WebP)
 - LCP optimization with preloading
 - Static page generation (SSG)
 - GZIP compression
+
+### AI Discoverability & GEO
+
+- **llms.txt** — Machine-readable profile summary for AI language models (GPT, Claude, Gemini, Perplexity)
+- **llms-full.txt** — Extended AI context file with complete professional profile
+- **/.well-known/ai.txt** — AI crawler discovery standard (ai.txt spec)
+- **/.well-known/ai.json** — Structured JSON profile for AI systems
+- **RSS Feed** (`/feed.xml`) — Blog content distribution with hreflang support
+- **robots.txt** — Explicit allowlist for 20+ AI crawlers (GPTBot, ClaudeBot, PerplexityBot, etc.)
+- **Article JSON-LD** — BlogPosting + BreadcrumbList + FAQPage schema on every blog post
+- **Dynamic hreflang** — Blog posts only reference languages with actual translated content
+- **sitemap.xml** — Includes AI discovery files alongside standard pages
+
+### Blog System
+
+- Markdown-based blog with frontmatter metadata
+- Server-side rendering for SEO
+- Article/TechArticle JSON-LD schema per post
+- FAQPage schema (add `faq` to frontmatter)
+- Automatic reading time calculation
+- Copy-to-clipboard code blocks (mobile-friendly)
+- Anchor links on all headings
+- Table of contents support
+- External link security (`rel="noopener noreferrer"`)
+- RSS feed with hreflang support
+- Dynamic hreflang based on available translations
 
 ### Analytics & Tracking
 
@@ -101,6 +129,8 @@ NEXT_PUBLIC_GTM_ID="GTM-XXXXXXXX"
 NEXT_PUBLIC_CLARITY_PROJECT_ID="XXXXXXXXXX"
 ```
 
+> **Note:** `NEXT_PUBLIC_SITE_URL` is required for AI discovery files (`llms.txt`, `llms-full.txt`, `/.well-known/ai.txt`, `/.well-known/ai.json`) to generate correct absolute URLs.
+
 5. Start the development server:
 
 ```bash
@@ -132,10 +162,12 @@ portfolio/
 ├── app/                    # Next.js App Router
 │   ├── [lang]/            # Language-specific routes
 │   ├── api/               # API routes
+│   ├── llms.txt/          # AI-readable profile summary (route handler)
+│   ├── llms-full.txt/     # Extended AI context file (route handler)
 │   ├── og-preview/        # OG Banner generator tool
 │   ├── layout.tsx         # Root layout
 │   ├── sitemap.ts         # Dynamic sitemap
-│   └── robots.ts          # Robots.txt
+│   └── robots.ts          # Robots.txt with AI crawler allowlist
 ├── components/
 │   ├── layout/            # Layout components (Header, Footer)
 │   ├── sections/          # Page sections (Blog, Projects, Skills)
@@ -149,6 +181,7 @@ portfolio/
 │   ├── logger/           # Pino logger configuration
 │   └── utils.ts          # Utility functions
 ├── public/
+│   ├── .well-known/      # AI discovery files (ai.txt, ai.json)
 │   ├── files/            # Downloadable files (CV)
 │   └── images/           # Static images
 ├── scripts/
@@ -273,11 +306,14 @@ npm run start
 ## SEO Features
 
 - **Structured Data**: JSON-LD Person and WebSite schemas
+- **Article JSON-LD**: BlogPosting + TechArticle schema on every blog post
+- **FAQPage Schema**: AI citation support via `faq` frontmatter field
 - **hreflang**: Automatic language alternates
 - **Sitemap**: Dynamic sitemap with language alternates
 - **Meta Tags**: OpenGraph, Twitter Card
 - **Canonical URLs**: Automatic canonical URL generation
 - **OG Banners**: Language-specific social media images
+- **`speakable`**: Property for voice assistants and AI systems
 
 ### OG Banner Generator
 
@@ -301,6 +337,62 @@ A built-in tool for creating OpenGraph banner images for all languages:
 1. Create component in `components/sections/`
 2. Import and use in `app/[lang]/page.tsx`
 3. Add necessary data to `profile.json`
+
+## Customization Guide
+
+### 1. Update Your Profile
+
+Edit `content/en/profile.json` with your personal information:
+- `personalInfo`: Name, position, company, contact details
+- `socialLinks`: Your social media profiles
+- `projects`: Your notable projects
+- `blogPosts`: Links to your blog posts (Medium, Dev.to, etc.)
+
+For other languages, edit `content/{locale}/profile.json`.
+
+### 2. Configure AI Discovery
+
+Update these files with your information:
+- `public/.well-known/ai.txt` — Your name, description, and links
+- `public/.well-known/ai.json` — Structured profile for AI systems
+- `app/llms.txt/route.ts` — Profile summary for AI language models
+- `app/llms-full.txt/route.ts` — Extended profile for deep AI context
+
+### 3. Add Blog Posts
+
+Create markdown files in `content/blog/en/`:
+
+```yaml
+---
+title: "Your Post Title"
+description: "SEO meta description"
+date: "2026-01-01"
+slug: "your-post-slug"
+mediumUrl: "https://medium.com/@you/your-post"
+imageUrl: "/images/your-post.webp"
+keywords: ["keyword1", "keyword2"]
+author: "Your Name"
+category: "Tutorial"
+faq:
+  - q: "Common question about your post topic?"
+    a: "Detailed answer that AI systems can cite."
+---
+Your content here...
+```
+
+### 4. Set Environment Variables
+
+Copy `.env.example` to `.env.local` and fill in:
+- `NEXT_PUBLIC_SITE_URL` — Your production domain (e.g., `https://yourname.dev`)
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID` — Google Analytics ID
+- `NEXT_PUBLIC_GTM_ID` — Google Tag Manager ID
+- `NEXT_PUBLIC_CLARITY_PROJECT_ID` — Microsoft Clarity ID
+
+### 5. Replace Images
+
+- `public/images/profile.webp` — Your profile photo (recommended: 400x400px)
+- `public/images/og-banner.*.webp` — OG banners per language (1200x630px)
+- Blog post images in `public/images/`
 
 ## Updating from Upstream
 
@@ -364,6 +456,7 @@ These contain your personal content - never overwrite them:
 | Images      | `public/images/profile.webp`, `public/images/og-banner.*.webp`                   |
 | Files       | `public/files/cv.pdf`                                                            |
 | i18n Config | `lib/i18n/config.ts`, `lib/i18n/translations.ts` (if you added custom languages) |
+| AI Discovery | `public/.well-known/ai.txt`, `public/.well-known/ai.json`                       |
 
 ### Example: Full Safe Update
 

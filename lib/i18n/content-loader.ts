@@ -6,6 +6,8 @@ export interface Project {
   projectUrl: string;
   tags: string[];
   imageUrl?: string;
+  year?: string;
+  featured?: boolean;
 }
 
 export interface BlogPost {
@@ -14,6 +16,7 @@ export interface BlogPost {
   blogUrl: string;
   date: string;
   imageUrl?: string;
+  slug?: string;
 }
 
 export interface Skill {
@@ -52,6 +55,7 @@ export interface Profile {
     name: string;
     position: string;
     company: string;
+    companyUrl?: string;
     about: string;
     imageUrl: string;
     callsign?: string;

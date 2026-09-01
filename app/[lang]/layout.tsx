@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ContactMenuWrapper } from "@/components/shared/ContactMenuWrapper";
 import { defaultLanguage, getLanguageByCode } from "@/lib/i18n/config";
 import {
   buildMetadataWithAbsoluteUrls,
@@ -53,8 +52,13 @@ export default async function Layout({ children, params }: LayoutProps) {
   const { lang } = await params;
   return (
     <>
+      <script
+        // Safe: lang is from generateStaticParams(), not user input
+        dangerouslySetInnerHTML={{
+          __html: `document.documentElement.lang="${lang}"`,
+        }}
+      />
       {children}
-      <ContactMenuWrapper lang={lang} />
     </>
   );
 }
