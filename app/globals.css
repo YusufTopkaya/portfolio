@@ -504,3 +504,14 @@ html.crt-boot::after {
     opacity: 0;
   }
 }
+
+@layer utilities {
+  /* Tailwind 3.4 has break-words (overflow-wrap: break-word) but no
+     overflow-wrap:anywhere utility. Unlike break-word, `anywhere` also
+     shrinks a flex item's min-content, so long compounds (e.g. German
+     "Kostenoptimierungsstrategien") can never push sibling badges out
+     of their card. */
+  .wrap-anywhere {
+    overflow-wrap: anywhere;
+  }
+}

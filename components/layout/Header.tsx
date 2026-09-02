@@ -26,8 +26,8 @@ export function Header({
     profileData.personalInfo;
 
   return (
-    <header className="relative overflow-hidden bg-background">
-      {/* Subtle background accent */}
+    <header className="relative overflow-hidden">
+      {/* Subtle accent glow at the top of the hero */}
       <div className="absolute inset-0 bg-gradient-to-b from-accent/5 to-transparent dark:from-accent/10 dark:to-transparent" />
 
       {/* Content */}
@@ -43,7 +43,7 @@ export function Header({
 
         {/* Main content */}
         <div className="grid md:grid-cols-2 gap-8 items-center">
-          <div className="space-y-5">
+          <div className="space-y-5 min-w-0">
             <h1 className="text-4xl md:text-6xl font-bold text-foreground">
               <NoSSR fallback={name}>
                 <TypewriterText text={name} speed={90} />
@@ -55,10 +55,13 @@ export function Header({
                 {callsign}
               </div>
             )}
-            <h2 className="text-2xl md:text-3xl font-semibold text-foreground">
+            {/* text-lg on mobile: long localized titles (e.g. German
+                "Softwareentwickler") must fit without hyphenating —
+                names/titles only ever break at spaces */}
+            <h2 className="text-lg md:text-3xl font-semibold text-foreground">
               {position}
               {company && company.trim() !== "" && (
-                <span className="text-xl md:text-2xl text-muted-foreground">
+                <span className="text-sm md:text-2xl text-muted-foreground">
                   {" "}
                   @{company}
                 </span>

@@ -89,7 +89,7 @@ export function CookieBanner({ gtmId, gaId, clarityId }: CookieBannerProps) {
       )}
 
       {show && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 pb-6">
+        <div className="fixed bottom-[44px] left-0 right-0 z-50 p-4 pb-6 md:bottom-0">
           <div className="glass-bold border border-white/10 dark:border-white/5 rounded-none max-w-2xl mx-auto px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-4 shadow-lg">
             <p className="text-sm text-foreground/80 flex-1">
               This site uses cookies for analytics (Google Analytics, Microsoft

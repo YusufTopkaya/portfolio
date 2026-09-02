@@ -70,6 +70,7 @@ export function RetroStockComputer() {
     <>
       {/* ── Mobile: slim ticker bar pinned to the bottom edge ── */}
       <div
+        id="retro-ticker-bar"
         className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-3 md:hidden"
         aria-hidden="true"
         style={{
@@ -99,9 +100,13 @@ export function RetroStockComputer() {
           }}
         />
       </div>
+      {/* keep page bottom content (footer, privacy link) clear of the
+          fixed mobile ticker bar */}
+      <div className="md:hidden" style={{ height: 44 }} aria-hidden="true" />
 
       {/* ── Desktop: floating CRT PC at bottom-left ── */}
       <div
+        id="retro-crt-pc"
         className="fixed bottom-3 left-3 z-50 hidden flex-col items-center select-none md:flex"
         aria-hidden="true"
       >
@@ -155,7 +160,11 @@ export function RetroStockComputer() {
                     ) : quote ? (
                       <>
                         <span
-                          style={{ fontSize: 6, color: "#92cc41", opacity: 0.8 }}
+                          style={{
+                            fontSize: 6,
+                            color: "#92cc41",
+                            opacity: 0.8,
+                          }}
                         >
                           {quote.exchange}
                         </span>
@@ -175,7 +184,11 @@ export function RetroStockComputer() {
                           {Math.abs(quote.changePercent).toFixed(2)}%
                         </span>
                         <span
-                          style={{ fontSize: 5, color: "#92cc41", opacity: 0.6 }}
+                          style={{
+                            fontSize: 5,
+                            color: "#92cc41",
+                            opacity: 0.6,
+                          }}
                         >
                           15 MIN DELAY
                         </span>
