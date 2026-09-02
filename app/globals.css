@@ -626,37 +626,10 @@ html.crt-boot::after {
   left: 16px;
   right: 16px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   font-size: 10px;
   color: #d7ff9e;
   text-shadow: 0 0 6px rgba(146, 204, 65, 0.8);
-}
-
-.racer-plate {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #f4f4f4;
-  color: #111;
-  border: 2px solid #111;
-  border-radius: 3px;
-  padding: 2px 8px 2px 2px;
-  font-family: monospace;
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 1px;
-}
-
-.racer-plate-eu {
-  background: #14408a;
-  color: #fff;
-  font-size: 8px;
-  padding: 3px 3px;
-  border-radius: 2px 0 0 2px;
 }
 
 .racer-ready {

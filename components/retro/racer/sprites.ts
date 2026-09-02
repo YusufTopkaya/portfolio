@@ -72,8 +72,106 @@ function keyBlackToAlpha(img: HTMLImageElement): HTMLCanvasElement {
     if (y > 0) seed(p - w);
     if (y < h - 1) seed(p + w);
   }
+  fillInteriorHoles(px, w, h);
   ctx.putImageData(data, 0, 0);
   return c;
+}
+
+/**
+ * After keying, some transparent pixels remain INSIDE the car silhouette:
+ * thin gaps between the lightbar and the roof, wheel-arch slivers, panel
+ * seams. The road/grass shows through them and reads as a glitch. Fill any
+ * transparent pixel that is hemmed in by opaque pixels on 3+ of its 8
+ * sides with the average colour of those neighbours (frontier-based
+ * dilation, so genuine open background is never touched).
+ */
+function fillInteriorHoles(px: Uint8ClampedArray, w: number, h: number) {
+  const isOpaque = (p: number) => px[p * 4 + 3] !== 0;
+  // frontier queue: transparent pixels adjacent to opaque ones
+  let frontier: number[] = [];
+  for (let p = 0; p < w * h; p++) {
+    if (isOpaque(p)) continue;
+    const x = p % w;
+    const y = (p - x) / w;
+    if (
+      (x > 0 && isOpaque(p - 1)) ||
+      (x < w - 1 && isOpaque(p + 1)) ||
+      (y > 0 && isOpaque(p - w)) ||
+      (y < h - 1 && isOpaque(p + w))
+    ) {
+      frontier.push(p);
+    }
+  }
+  while (frontier.length > 0) {
+    const fill: number[] = [];
+    for (const p of frontier) {
+      if (isOpaque(p)) continue;
+      const x = p % w;
+      const y = (p - x) / w;
+      // 8-neighbour opacity map; a pixel is only a hole when it is hemmed
+      // in from OPPOSITE sides (a plain "3 neighbours" rule would grow the
+      // car outward along its own flat edges, ring by ring)
+      let n = 0;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let L = false;
+      let R = false;
+      let U = false;
+      let D = false;
+      let TL = false;
+      let BR = false;
+      let TR = false;
+      let BL = false;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+          const q = ny * w + nx;
+          if (!isOpaque(q)) continue;
+          n++;
+          r += px[q * 4];
+          g += px[q * 4 + 1];
+          b += px[q * 4 + 2];
+          if (dx === -1 && dy === 0) L = true;
+          else if (dx === 1 && dy === 0) R = true;
+          else if (dx === 0 && dy === -1) U = true;
+          else if (dx === 0 && dy === 1) D = true;
+          else if (dx === -1 && dy === -1) TL = true;
+          else if (dx === 1 && dy === 1) BR = true;
+          else if (dx === 1 && dy === -1) TR = true;
+          else BL = true;
+        }
+      }
+      const hemmed = (L && R) || (U && D) || (TL && BR) || (TR && BL);
+      if (n >= 3 && hemmed) {
+        px[p * 4] = Math.round(r / n);
+        px[p * 4 + 1] = Math.round(g / n);
+        px[p * 4 + 2] = Math.round(b / n);
+        px[p * 4 + 3] = 255;
+        fill.push(p);
+      }
+    }
+    if (fill.length === 0) break;
+    // next frontier: transparent neighbours of the pixels just filled
+    const next: number[] = [];
+    for (const p of fill) {
+      const x = p % w;
+      const y = (p - x) / w;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+          const q = ny * w + nx;
+          if (!isOpaque(q)) next.push(q);
+        }
+      }
+    }
+    frontier = next;
+  }
 }
 
 function crop(

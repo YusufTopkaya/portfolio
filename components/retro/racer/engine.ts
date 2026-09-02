@@ -125,6 +125,8 @@ export interface EngineState {
   playerX: number;
   speed: number;
   time: number;
+  /** total distance driven, in display km (same scale as the 180 km/h top speed) */
+  distanceKm: number;
   offRoad: boolean;
 }
 
@@ -340,6 +342,153 @@ function makeMountains(
   return c;
 }
 
+/* ── Twingo MK1 instrument cluster: a light-green LCD panel with dark
+   7-segment digits (the real car's central dash — big speed readout,
+   "km/h" legend, small trip counter; no rev counter, it never had one) ── */
+
+/* segment order: a(top) b(top-right) c(bottom-right) d(bottom)
+   e(bottom-left) f(top-left) g(middle) */
+const SEG_MAP: Record<string, readonly boolean[]> = {
+  "0": [true, true, true, true, true, true, false],
+  "1": [false, true, true, false, false, false, false],
+  "2": [true, true, false, true, true, false, true],
+  "3": [true, true, true, true, false, false, true],
+  "4": [false, true, true, false, false, true, true],
+  "5": [true, false, true, true, false, true, true],
+  "6": [true, false, true, true, true, true, true],
+  "7": [true, true, true, false, false, false, false],
+  "8": [true, true, true, true, true, true, true],
+  "9": [true, true, true, true, false, true, true],
+};
+
+function drawSevenSeg(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  ch: string,
+  color: string,
+) {
+  const seg = SEG_MAP[ch];
+  if (!seg) return;
+  const t = Math.max(1, Math.round(size * 0.18));
+  const w = size;
+  const h = size * 2;
+  ctx.fillStyle = color;
+  const rect = (rx: number, ry: number, rw: number, rh: number) =>
+    ctx.fillRect(
+      Math.round(rx),
+      Math.round(ry),
+      Math.round(rw),
+      Math.round(rh),
+    );
+  if (seg[0]) rect(x, y, w, t); // a
+  if (seg[1]) rect(x + w - t, y, t, h / 2); // b
+  if (seg[2]) rect(x + w - t, y + h / 2, t, h / 2); // c
+  if (seg[3]) rect(x, y + h - t, w, t); // d
+  if (seg[4]) rect(x, y + h / 2, t, h / 2); // e
+  if (seg[5]) rect(x, y, t, h / 2); // f
+  if (seg[6]) rect(x, y + h / 2 - t / 2, w, t); // g
+}
+
+function renderCluster(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  kmh: number,
+  tripKm: number,
+  topLeft = false,
+) {
+  const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+  const pw = Math.round(150 * ui);
+  const ph = Math.round(52 * ui);
+  // bottom-right on desktop; top-left on touch devices so the on-screen
+  // pedals (bottom corners) never cover the readout
+  const x0 = topLeft ? Math.round(8 * ui) : width - pw - Math.round(8 * ui);
+  const y0 = topLeft ? Math.round(8 * ui) : height - ph - Math.round(8 * ui);
+  const pad = Math.round(3 * ui);
+  const segColor = "#243320";
+  const ghostColor = "rgba(36,51,32,0.10)";
+
+  // bezel + LCD inset
+  ctx.fillStyle = "#141611";
+  ctx.beginPath();
+  ctx.roundRect(x0, y0, pw, ph, Math.round(6 * ui));
+  ctx.fill();
+  ctx.fillStyle = "#a7c57d";
+  ctx.beginPath();
+  ctx.roundRect(
+    x0 + pad,
+    y0 + pad,
+    pw - pad * 2,
+    ph - pad * 2,
+    Math.round(4 * ui),
+  );
+  ctx.fill();
+
+  // big speed readout: ghost 8s behind the active digits, like a real LCD
+  const size = 13 * ui;
+  const gap = 3 * ui;
+  const digitW = size + gap;
+  const digitsX = x0 + pad + Math.round(7 * ui);
+  const digitsY = y0 + pad + Math.round(12 * ui);
+  const text = String(Math.min(999, Math.round(kmh))).padStart(3, " ");
+  for (let i = 0; i < 3; i++) {
+    drawSevenSeg(ctx, digitsX + i * digitW, digitsY, size, "8", ghostColor);
+    if (text[i] !== " ") {
+      drawSevenSeg(ctx, digitsX + i * digitW, digitsY, size, text[i], segColor);
+    }
+  }
+
+  ctx.fillStyle = segColor;
+  ctx.font = `${Math.round(6 * ui)}px monospace`;
+  ctx.fillText(
+    "km/h",
+    digitsX + 3 * digitW + Math.round(2 * ui),
+    digitsY + size * 2,
+  );
+
+  // small trip counter, top right (the "658" on the real cluster)
+  const tSize = 5 * ui;
+  const tGap = 1.5 * ui;
+  const tW = tSize + tGap;
+  const trip = String(Math.min(9999, Math.floor(tripKm))).padStart(4, " ");
+  const tripX = x0 + pw - pad - Math.round(7 * ui) - 4 * tW;
+  const tripY = y0 + pad + Math.round(4 * ui);
+  for (let i = 0; i < 4; i++) {
+    drawSevenSeg(ctx, tripX + i * tW, tripY, tSize, "8", ghostColor);
+    if (trip[i] !== " ") {
+      drawSevenSeg(ctx, tripX + i * tW, tripY, tSize, trip[i], segColor);
+    }
+  }
+}
+
+/* anime-style speed lines streaming past the screen edges at high speed */
+function renderSpeedLines(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  speedPercent: number,
+  time: number,
+) {
+  if (speedPercent < 0.4) return;
+  const intensity = (speedPercent - 0.4) / 0.6;
+  const count = Math.round(5 + 11 * intensity);
+  const thick = Math.max(1, Math.round(height / 135));
+  ctx.fillStyle = `rgba(255,255,255,${0.12 + 0.16 * intensity})`;
+  for (let i = 0; i < count; i++) {
+    // deterministic per-line randomness, re-rolled a few times a second
+    const seed = i * 97 + Math.floor(time * 18);
+    const rand = Math.sin(seed * 127.1) * 43758.5453;
+    const r = rand - Math.floor(rand);
+    const y = r * height;
+    const len = width * (0.07 + 0.18 * intensity) * (0.4 + r);
+    const slide = ((r * 7 + time * (2 + 4 * intensity)) % 1) * width * 0.08;
+    if (i % 2 === 0) ctx.fillRect(slide, y, len, thick);
+    else ctx.fillRect(width - len - slide, y, len, thick);
+  }
+}
+
 export interface RacerEngine {
   update(dt: number, input: RacerInput): void;
   render(ctx: CanvasRenderingContext2D): void;
@@ -356,6 +505,8 @@ export function createEngine(opts: {
       fills the phone screen instead of letterboxing into a thin strip */
   width?: number;
   height?: number;
+  /** touch devices: LCD cluster goes top-left so the pedals don't cover it */
+  clusterTopLeft?: boolean;
 }): RacerEngine {
   const { segments, roadside, car, reduceMotion } = opts;
   const width = opts.width ?? RACER_WIDTH;
@@ -367,6 +518,7 @@ export function createEngine(opts: {
     playerX: 0,
     speed: 0,
     time: 0,
+    distanceKm: 0,
     offRoad: false,
   };
 
@@ -406,6 +558,8 @@ export function createEngine(opts: {
 
     state.time += dt;
     state.position += state.speed * dt;
+    // display km at the same scale as the 180 km/h top speed
+    state.distanceKm += speedPercent * 180 * (dt / 3600);
     while (state.position >= trackLength) state.position -= trackLength;
     while (state.position < 0) state.position += trackLength;
 
@@ -624,6 +778,19 @@ export function createEngine(opts: {
       );
       ctx.globalAlpha = 1;
     }
+
+    // speed lines stream past the edges, then the LCD cluster on top
+    if (!reduceMotion) {
+      renderSpeedLines(ctx, width, height, speedPercent, state.time);
+    }
+    renderCluster(
+      ctx,
+      width,
+      height,
+      speedPercent * 180,
+      state.distanceKm,
+      opts.clusterTopLeft,
+    );
   }
 
   return { update, render, state, trackLength };

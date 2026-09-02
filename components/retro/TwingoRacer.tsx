@@ -11,7 +11,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createEngine,
-  ENGINE_CONSTANTS,
   RACER_HEIGHT,
   RACER_WIDTH,
   type RacerEngine,
@@ -45,7 +44,6 @@ export function TwingoRacer() {
     gas: false,
     brake: false,
   });
-  const speedRef = useRef<HTMLSpanElement>(null);
   const timeRef = useRef<HTMLSpanElement>(null);
 
   pausedRef.current = paused;
@@ -101,11 +99,7 @@ export function TwingoRacer() {
         e.update(dt, keysRef.current);
         e.render(ctx);
         // HUD via direct DOM writes — no 60fps React re-renders
-        if (speedRef.current) {
-          speedRef.current.textContent = String(
-            Math.round((e.state.speed / ENGINE_CONSTANTS.MAX_SPEED) * 180),
-          );
-        }
+        // (speed lives on the in-canvas LCD cluster, not in the DOM)
         if (timeRef.current) {
           timeRef.current.textContent = formatTime(e.state.time);
         }
@@ -124,6 +118,7 @@ export function TwingoRacer() {
           car,
           width: buf.w,
           height: buf.h,
+          clusterTopLeft: window.matchMedia("(pointer: coarse)").matches,
           reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
         });
@@ -218,18 +213,11 @@ export function TwingoRacer() {
       />
       <div className="racer-scanlines" aria-hidden="true" />
 
-      {/* HUD */}
+      {/* HUD — speed is on the canvas LCD cluster; DOM only keeps time */}
       <div className="racer-hud font-pixel" aria-hidden="true">
-        <span>
-          SPEED <span ref={speedRef}>0</span> KM/H
-        </span>
         <span>
           TIME <span ref={timeRef}>0:00</span>
         </span>
-      </div>
-      <div className="racer-plate" aria-hidden="true">
-        <span className="racer-plate-eu">TR</span>
-        26 TL 427
       </div>
 
       {intro && (
