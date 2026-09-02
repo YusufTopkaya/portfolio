@@ -133,15 +133,16 @@ export function buildTrack(seed = 427): Built {
     segments[i].sprites.push({ sprite, offset });
   }
 
-  // ── hazards: potholes and oil slicks on the tarmac itself ──
-  // deliberately sparse — an occasional "oh!" moment, not a minefield.
-  // never on the opening straight, never two in a row
-  for (let i = 90; i < segments.length - 15; i += 18 + Math.floor(rng() * 20)) {
-    if (rng() < 0.45) continue;
-    segments[i].hazard = {
-      kind: rng() < 0.5 ? "pothole" : "oil",
-      x: rng() * 1.4 - 0.7,
-    };
+  // ── gas can pickups on the tarmac itself ──
+  // sparse enough that fuel management stays a real concern — the tank
+  // drains as you drive and each can lights exactly one gauge dot. never
+  // on the opening straight, never two close together
+  for (
+    let i = 60;
+    i < segments.length - 15;
+    i += 120 + Math.floor(rng() * 180)
+  ) {
+    segments[i].pickup = { x: rng() * 1.4 - 0.7, respawnAt: 0 };
   }
 
   return { segments, trackLength: segments.length * SEGMENT_LENGTH };

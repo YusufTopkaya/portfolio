@@ -18,7 +18,9 @@
  * (orange hatchback with the 26 TL 427 plate) keeps the game playable.
  *
  * Also generates the roadside objects (pine, sign, pole) as pixel art on
- * offscreen canvases — no external assets needed.
+ * offscreen canvases — no external assets needed. The gas can pickup uses
+ * the player's own art (/images/gas-can.png) when present, else a
+ * procedural pixel-art jerry can.
  */
 
 import type { CarFrame, CarFrames, RoadsideSprite } from "./engine";
@@ -418,4 +420,71 @@ export function makeRoadside(): RoadsideSprite[] {
     { image: makeSign(), w: 40, h: 56, offset: 0, scale: 1.8 },
     { image: makePole(), w: 20, h: 64, offset: 0, scale: 1.5 },
   ];
+}
+
+/* ── gas can pickup: the player's asset at /images/gas-can.png, with a
+   procedurally drawn pixel-art jerry can (24x28 art px) as fallback ── */
+
+const GAS_CAN_URL = "/images/gas-can.png";
+
+function makeGasCan(): HTMLCanvasElement {
+  const [c, ctx] = canvas24(24, 28);
+  if (!ctx) return c;
+  const px = (x: number, y: number, w: number, h: number, col: string) => {
+    ctx.fillStyle = col;
+    ctx.fillRect(x, y, w, h);
+  };
+  // handle + cap
+  px(8, 1, 8, 3, "#3a0d0d");
+  px(9, 2, 6, 1, "#e2543a");
+  px(16, 0, 3, 4, "#3a0d0d");
+  px(16, 1, 3, 2, "#e2543a");
+  // body: dark outline, red fill, edge shading
+  px(5, 4, 14, 23, "#3a0d0d");
+  px(6, 5, 12, 21, "#c22e1f");
+  px(6, 5, 12, 3, "#e2543a");
+  px(16, 5, 2, 21, "#8f1d12");
+  px(6, 24, 12, 2, "#8f1d12");
+  // label panel + cyan corner brackets (the pickup's neon frame)
+  px(6, 9, 12, 8, "#7a150c");
+  const bracket = (bx: number, by: number, dx: number, dy: number) => {
+    px(bx, by, 2, 1, "#59f7e8");
+    px(bx + (dx > 0 ? 0 : 1), by + (dy > 0 ? 0 : -1), 1, 2, "#59f7e8");
+  };
+  bracket(5, 8, 1, 1);
+  bracket(17, 8, -1, 1);
+  bracket(5, 17, 1, -1);
+  bracket(17, 17, -1, -1);
+  // pixel GAS letters (3x5 glyphs), yellow
+  const GLYPHS: Record<string, number[]> = {
+    G: [0b111, 0b100, 0b101, 0b101, 0b111],
+    A: [0b010, 0b101, 0b111, 0b101, 0b101],
+    S: [0b011, 0b100, 0b010, 0b001, 0b110],
+  };
+  let lx = 7;
+  for (const ch of "GAS") {
+    const rows = GLYPHS[ch];
+    for (let ry = 0; ry < 5; ry++) {
+      for (let rx = 0; rx < 3; rx++) {
+        if (rows[ry] & (1 << (2 - rx))) px(lx + rx, 11 + ry, 1, 1, "#ffd75e");
+      }
+    }
+    lx += 4;
+  }
+  return c;
+}
+
+export async function loadGasCan(): Promise<CarFrame> {
+  try {
+    const img = await loadImage(GAS_CAN_URL);
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    c.getContext("2d")?.drawImage(img, 0, 0);
+    return { image: c, w: c.width, h: c.height };
+  } catch {
+    // asset missing — fall through to the procedural pixel-art can
+  }
+  const image = makeGasCan();
+  return { image, w: image.width, h: image.height };
 }

@@ -695,6 +695,47 @@ html.crt-boot::after {
   transform: translateY(2px);
 }
 
+.racer-gameover {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 3px solid #b23c3c;
+  padding: 22px 34px;
+  text-align: center;
+}
+
+.racer-gameover-title {
+  font-size: 18px;
+  color: #e76e55;
+  text-shadow: 0 0 10px rgba(231, 110, 85, 0.8);
+  animation: racerBlink 0.6s steps(2, jump-none) infinite;
+}
+
+.racer-gameover-score {
+  font-size: 10px;
+  color: #d7ff9e;
+}
+
+.racer-playagain {
+  font-size: 11px;
+  color: #0d1f0a;
+  background: #92cc41;
+  border: 2px solid #d7ff9e;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.racer-playagain:hover {
+  background: #d7ff9e;
+  box-shadow: 0 0 10px rgba(146, 204, 65, 0.7);
+}
+
 @keyframes racerBlink {
   50% {
     opacity: 0.25;
@@ -702,7 +743,8 @@ html.crt-boot::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .racer-ready {
+  .racer-ready,
+  .racer-gameover-title {
     animation: none;
   }
 }

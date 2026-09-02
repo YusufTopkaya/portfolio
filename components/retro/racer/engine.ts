@@ -80,8 +80,9 @@ export interface Segment {
   p1: SegmentPoint;
   p2: SegmentPoint;
   sprites: SegmentSprite[];
-  /** road hazard: pothole or oil slick, x in road half-width units (±1 = edge) */
-  hazard?: { kind: "pothole" | "oil"; x: number };
+  /** collectible gas can on the tarmac, x in road half-width units
+      (±1 = edge). respawnAt: engine time when a taken can re-arms */
+  pickup?: { x: number; respawnAt: number };
   color: typeof COLORS.light | typeof COLORS.dark;
   clip: number;
   looped: boolean;
@@ -108,7 +109,18 @@ const DECEL = -MAX_SPEED / 5;
 const OFFROAD_DECEL = -MAX_SPEED * 0.75;
 const OFFROAD_LIMIT = MAX_SPEED / 4;
 const CENTRIFUGAL = 0.3;
-const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a crash
+const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
+const FUEL_MAX = 8; // dots on the cluster's fuel gauge
+// the tank drains quadratically with speed: full throttle burns a dot
+// in ~6 s, gentle cruising sips — miss a few cans in a row at speed
+// and the gauge visibly melts
+const FUEL_DRAIN_IDLE = 0.008; // gauge dots per second at a standstill
+// extra dots per second at full speed — applied quadratically
+// (speedPercent²), so burning up the road melts the gauge much faster
+// than cruising; one dot lasts ~6 s flat out
+const FUEL_DRAIN_SPEED = 0.16;
+const PICKUP_RESPAWN = 45; // seconds before a taken gas can re-arms
+const FAR_OFFROAD = 2.0; // |playerX| at/above this = stranded past the trees
 const LANES = 3;
 
 const COLORS = {
@@ -137,8 +149,12 @@ export interface EngineState {
   score: number;
   /** current score multiplier (1/2/3 by speed, 1 while off-road/respawning) */
   multiplier: number;
-  /** >0 while the car is respawning (breathing fade) after a hazard hit */
+  /** >0 while the car respawns (breathing fade) after going too far off-road */
   respawn: number;
+  /** fuel left, in gauge dots (0..8). 0 = engine dead, coasting to a stop */
+  fuel: number;
+  /** fuel ran dry and the car rolled to a standstill */
+  gameOver: boolean;
   offRoad: boolean;
 }
 
@@ -477,8 +493,12 @@ function drawFuelGauge(
     Math.max(1, Math.round(4 * ui)),
   );
 
-  // gauge dots: first one lit orange like the photo, the rest empty rings
-  const dots = 8;
+  // gauge dots fill left-to-right with the tank level; near empty, the
+  // last lit dot blinks orange — the rest stay as empty rings
+  const dots = FUEL_MAX;
+  const lit = Math.ceil(fuel);
+  const low = fuel <= 1.5;
+  const blinkOn = Math.floor(time * 2.5) % 2 === 0;
   const r = Math.max(1, 1.5 * ui);
   const step = 3.6 * ui;
   const dotsX = x + bw + 6 * ui;
@@ -487,8 +507,15 @@ function drawFuelGauge(
     const cx = dotsX + i * step;
     ctx.beginPath();
     ctx.arc(cx, dotsY, r, 0, Math.PI * 2);
-    if (i === 0) {
-      ctx.fillStyle = "#e2703a";
+    if (i < lit) {
+      if (low && i === lit - 1) {
+        ctx.fillStyle = blinkOn ? "#e2703a" : "rgba(226,112,58,0.3)";
+      } else if (flash) {
+        // pickup feedback: the whole gauge pops orange for a beat
+        ctx.fillStyle = "#e2703a";
+      } else {
+        ctx.fillStyle = segColor;
+      }
       ctx.fill();
     } else {
       ctx.strokeStyle = segColor;
@@ -502,6 +529,9 @@ function drawFuelGauge(
   ctx.font = `${Math.round(4.5 * ui)}px monospace`;
   ctx.fillText("1/2", dotsX + 3 * step - 3 * ui, dotsY - 3.2 * ui);
   ctx.fillText("1", dotsX + 7 * step, dotsY - 3.2 * ui);
+
+  // where the dots row sits — the "+1" pickup popup floats up from here
+  return { x: dotsX, y: dotsY - 3.2 * ui };
 }
 
 function renderCluster(
@@ -510,8 +540,11 @@ function renderCluster(
   height: number,
   kmh: number,
   score: number,
+  fuel: number,
+  time: number,
+  flash: boolean,
   topLeft = false,
-) {
+): { x: number; y: number } {
   const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
   const pw = Math.round(150 * ui);
   const ph = Math.round(52 * ui);
@@ -575,20 +608,26 @@ function renderCluster(
     }
   }
 
-  // static fuel gauge, bottom row (below the km/h legend)
-  drawFuelGauge(
+  // live fuel gauge, bottom row (below the km/h legend)
+  return drawFuelGauge(
     ctx,
     digitsX + 3 * digitW + 2 * ui,
     y0 + ph - pad - 3 * ui,
     ui,
     segColor,
+    fuel,
+    time,
+    flash,
   );
 }
 
 /* anime-style speed streaks hugging the road edges: each streak lies on a
    line from the vanishing point through a spot just off the rumble strip,
    so they stream past PARALLEL to the road edges (t² easing compresses
-   them near the horizon, like the road itself) */
+   them near the horizon, like the road itself). The vanishing point
+   follows the car's own turning only — while the car runs straight the
+   streaks stream straight, even mid-curve; they swing when the player
+   actually steers */
 function renderSpeedLines(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -637,6 +676,7 @@ export function createEngine(opts: {
   segments: Segment[];
   roadside: RoadsideSprite[];
   car: CarFrames;
+  gasCan: CarFrame;
   reduceMotion?: boolean;
   /** buffer size — portrait viewports get a taller buffer so the game
       fills the phone screen instead of letterboxing into a thin strip */
@@ -645,7 +685,7 @@ export function createEngine(opts: {
   /** touch devices: LCD cluster goes top-left so the pedals don't cover it */
   clusterTopLeft?: boolean;
 }): RacerEngine {
-  const { segments, roadside, car, reduceMotion } = opts;
+  const { segments, roadside, car, gasCan, reduceMotion } = opts;
   const width = opts.width ?? RACER_WIDTH;
   const height = opts.height ?? RACER_HEIGHT;
   const trackLength = segments.length * SEGMENT_LENGTH;
@@ -659,12 +699,35 @@ export function createEngine(opts: {
     score: 0,
     multiplier: 1,
     respawn: 0,
+    fuel: FUEL_MAX,
+    gameOver: false,
     offRoad: false,
   };
 
   // horizon parallax offsets (Lou: horizon slides opposite the curve)
   let skyOffset = 0;
   let hillOffset = 0;
+  // engine time of the last gas-can pickup — drives the collect feedback
+  // (sparkle burst at the car, gauge flash, rising "+1")
+  let lastPickupAt = -10;
+  // scarcity ramps with score: every 1000 points hides another 1% of the
+  // track's cans (capped at 70% so the track never fully dries out).
+  // Cans are hidden in golden-ratio order over their ordinal on the
+  // track, so the hidden ones stay evenly spread instead of clumping
+  // and the hidden count matches the percentage even with few cans —
+  // update() and render() must agree on this
+  const canOrdinal = new Map<number, number>();
+  let ordinal = 0;
+  for (const seg of segments) {
+    if (seg.pickup) canOrdinal.set(seg.index, ordinal++);
+  }
+  const pickupActive = (seg: Segment): boolean => {
+    const hidden = Math.min(0.7, Math.floor(state.score / 1000) * 0.01);
+    if (hidden <= 0) return true;
+    const ord = canOrdinal.get(seg.index);
+    if (ord === undefined) return true;
+    return (ord * 0.6180339887498949) % 1 >= hidden;
+  };
   // steering intent captured in update(), consumed by render() to pick
   // the car frame (left/right lean)
   let pendingSteer = 0;
@@ -690,6 +753,7 @@ export function createEngine(opts: {
   }
 
   function update(dt: number, input: RacerInput) {
+    if (state.gameOver) return;
     pendingSteer = input.left ? -1 : input.right ? 1 : 0;
     const playerSegment = findSegment(state.position + PLAYER_Z);
     const speedPercent = state.speed / MAX_SPEED;
@@ -708,7 +772,7 @@ export function createEngine(opts: {
     // centrifugal push on curves (Jake Gordon)
     state.playerX -= dx * speedPercent * playerSegment.curve * CENTRIFUGAL;
 
-    if (input.gas) {
+    if (input.gas && state.fuel > 0) {
       // throttle follows the measured km/h curve of the real car
       const kmh = (state.speed / MAX_SPEED) * 180;
       state.speed += (ACCEL_KMH(kmh) / 180) * MAX_SPEED * dt;
@@ -723,17 +787,34 @@ export function createEngine(opts: {
     state.playerX = Math.max(-2.2, Math.min(2.2, state.playerX));
     state.speed = Math.max(0, Math.min(MAX_SPEED, state.speed));
 
-    // hazards: potholes and oil slicks swallow the car — it respawns on
-    // the centre line at a standstill with a breathing fade-in
+    // the tank drains quadratically with speed — cruising fast burns
+    // noticeably more fuel; at zero the engine dies and the car coasts
+    state.fuel = Math.max(
+      0,
+      state.fuel -
+        dt * (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent),
+    );
+    if (state.fuel <= 0 && state.speed <= 0) state.gameOver = true;
+
     if (state.respawn > 0) {
       state.respawn = Math.max(0, state.respawn - dt);
     } else {
-      const hz = playerSegment.hazard;
+      // gas cans: drive through one to light another gauge dot
+      const pk = playerSegment.pickup;
       if (
-        hz &&
-        Math.abs(state.playerX - hz.x) < 0.24 &&
-        state.speed > MAX_SPEED * 0.05
+        pk &&
+        pickupActive(playerSegment) &&
+        pk.respawnAt <= state.time &&
+        Math.abs(state.playerX - pk.x) < 0.24 &&
+        state.speed > MAX_SPEED * 0.02
       ) {
+        state.fuel = Math.min(FUEL_MAX, state.fuel + 1);
+        pk.respawnAt = state.time + PICKUP_RESPAWN;
+        lastPickupAt = state.time;
+      }
+      // stranded way off the road, past the roadside trees: respawn on
+      // the centre line at a standstill with a breathing fade-in
+      if (Math.abs(state.playerX) >= FAR_OFFROAD) {
         state.respawn = RESPAWN_TIME;
         state.speed = 0;
         state.playerX = 0;
@@ -840,62 +921,83 @@ export function createEngine(opts: {
         roadNearX = segment.p2.screen.x;
         roadNearW = segment.p2.screen.w;
       }
-
-      // potholes & oil slicks lie flat on the tarmac of their segment.
-      // rounded to whole pixels and floored to a readable minimum size —
-      // sub-pixel heights are what made them shimmer at speed
-      if (segment.hazard) {
-        const hs = segment.p1.screen;
-        const hx = Math.round(
-          hs.x + hs.scale * segment.hazard.x * ROAD_WIDTH * (width / 2),
-        );
-        const hw = Math.max(
-          3,
-          Math.round(hs.scale * 0.3 * ROAD_WIDTH * (width / 2)),
-        );
-        const hh = Math.max(2, Math.round(hw * 0.3));
-        const hy = Math.round(hs.y) - hh;
-        // pale warning ring so the hazard reads against grey tarmac
-        ctx.beginPath();
-        ctx.ellipse(hx, hy, hw + 1, hh + 1, 0, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(232,232,232,0.5)";
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(hx, hy, hw, hh, 0, 0, Math.PI * 2);
-        if (segment.hazard.kind === "pothole") {
-          ctx.fillStyle = "#101014";
-          ctx.fill();
-          // crumbled lighter rim on the near edge
-          ctx.beginPath();
-          ctx.ellipse(hx, hy + hh * 0.55, hw * 0.9, hh * 0.35, 0, 0, Math.PI);
-          ctx.strokeStyle = "#4a4a52";
-          ctx.lineWidth = Math.max(1, hh * 0.4);
-          ctx.stroke();
-        } else {
-          // oil slick: blue-black with a glossy streak
-          ctx.fillStyle = "#0c0c14";
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(
-            hx - hw * 0.2,
-            hy - hh * 0.25,
-            hw * 0.45,
-            hh * 0.3,
-            0,
-            0,
-            Math.PI * 2,
-          );
-          ctx.fillStyle = "rgba(120,120,180,0.7)";
-          ctx.fill();
-        }
-      }
     }
 
     // ── roadside sprites, far to near (painter's algorithm; Lou: keep
     //    them sorted by z and scale by the line's projection factor) ──
     for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
       const segment = segments[(baseSegment.index + n) % segments.length];
-      if (segment.sprites.length === 0) continue;
+      const pk = segment.pickup;
+      if (!pk && segment.sprites.length === 0) continue;
+
+      // gas cans hover above the tarmac of their segment, bobbing gently
+      // so they catch the eye; taken cans stay gone until they re-arm
+      if (pk && pickupActive(segment) && pk.respawnAt <= state.time) {
+        const scale = segment.p1.screen.scale;
+        // much bigger than the roadside-sprite factor (4.2): pickups must
+        // read from far away and feel worth steering for
+        const destW = gasCan.w * scale * (width / 2) * 8;
+        const destH = gasCan.h * scale * (width / 2) * 8;
+        if (destW >= 2) {
+          // floats above the road: fixed hover height + slow bob
+          const bob =
+            Math.sin(state.time * 4 + segment.index * 0.7) * destH * 0.08;
+          const hover = destH * 0.3;
+          const destX =
+            segment.p1.screen.x +
+            scale * pk.x * ROAD_WIDTH * (width / 2) -
+            destW / 2;
+          const destY = segment.p1.screen.y - destH - hover + bob;
+          let visibleH = destH;
+          // clip against the hill line this segment was drawn under
+          if (segment.clip && destY + destH > segment.clip) {
+            visibleH = segment.clip - destY;
+          }
+          if (visibleH > 0) {
+            // shadow stays on the tarmac below the hovering can
+            ctx.fillStyle = "rgba(0,0,0,0.3)";
+            ctx.beginPath();
+            ctx.ellipse(
+              Math.round(destX + destW / 2),
+              Math.round(segment.p1.screen.y - 1),
+              destW * 0.34,
+              Math.max(1, destH * 0.07),
+              0,
+              0,
+              Math.PI * 2,
+            );
+            ctx.fill();
+            // pulsing halo ring — at distance the can itself is a few
+            // pixels, so this is what reads as "pickup here!" from afar
+            const pulse = 0.5 + 0.5 * Math.sin(state.time * 5 + segment.index);
+            ctx.strokeStyle = `rgba(255,215,94,${0.35 + 0.35 * pulse})`;
+            ctx.lineWidth = Math.max(1, destW * 0.07);
+            ctx.beginPath();
+            ctx.ellipse(
+              Math.round(destX + destW / 2),
+              Math.round(destY + (visibleH / destH) * destH * 0.5),
+              destW * 0.68,
+              (visibleH / destH) * destH * 0.62,
+              0,
+              0,
+              Math.PI * 2,
+            );
+            ctx.stroke();
+            ctx.drawImage(
+              gasCan.image,
+              0,
+              0,
+              gasCan.w,
+              (visibleH / destH) * gasCan.h,
+              Math.round(destX),
+              Math.round(destY),
+              Math.round(destW),
+              Math.round((visibleH / destH) * destH),
+            );
+          }
+        }
+      }
+
       for (const s of segment.sprites) {
         const sprite = roadside[s.sprite];
         const scale = segment.p1.screen.scale;
@@ -1029,14 +1131,87 @@ export function createEngine(opts: {
         horizonY,
       );
     }
-    renderCluster(
+    // pickup feedback window — sparkle burst + gauge flash + rising "+1"
+    const fxAge = state.time - lastPickupAt;
+    const gaugePos = renderCluster(
       ctx,
       width,
       height,
       speedPercent * 180,
       state.score,
+      state.fuel,
+      state.time,
+      fxAge < 0.5,
       opts.clusterTopLeft,
     );
+
+    if (fxAge < 0.8) {
+      const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      // sparkle burst where the can was collected (right at the car)
+      if (fxAge < 0.5) {
+        const p = fxAge / 0.5;
+        const burstX = width / 2 + shakeX;
+        const burstY = carY + destH * 0.3;
+        const rr = (4 + p * 26) * ui;
+        const s = Math.max(1, Math.round((3 - p * 2) * ui));
+        ctx.globalAlpha = 1 - p;
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          ctx.fillStyle = k % 2 ? "#ffd75e" : "#d7ff9e";
+          ctx.fillRect(
+            Math.round(burstX + Math.cos(a) * rr - s / 2),
+            Math.round(burstY + Math.sin(a) * rr * 0.6 - s / 2),
+            s,
+            s,
+          );
+        }
+      }
+      // "+1" floats up off the fuel gauge — dark outline so it reads
+      // against both the light LCD panel and the dark road behind it
+      const p = fxAge / 0.8;
+      const tx = Math.round(gaugePos.x);
+      const ty = Math.round(gaugePos.y - 4 * ui - p * 14 * ui);
+      ctx.globalAlpha = 1 - p;
+      ctx.font = `bold ${Math.round(9 * ui)}px monospace`;
+      ctx.fillStyle = "#141611";
+      ctx.fillText("+1", tx + 1, ty + 1);
+      ctx.fillStyle = "#d7ff9e";
+      ctx.fillText("+1", tx, ty);
+      ctx.globalAlpha = 1;
+    }
+
+    // fuel warnings — an empty tank kills the engine and the car coasts
+    // to a stop, so make the cause unmistakable before it happens
+    if (!state.gameOver && state.fuel <= 2) {
+      const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      const blinkOn = Math.floor(state.time * 2.5) % 2 === 0;
+      if (state.fuel <= 0) {
+        // coasting dead: big centre-screen warning until game over pops
+        if (blinkOn) {
+          const msg = "OUT OF FUEL";
+          ctx.font = `bold ${Math.round(10 * ui)}px monospace`;
+          const tw = ctx.measureText(msg).width;
+          const tx = Math.round(width / 2 - tw / 2);
+          const ty = Math.round(height * 0.35);
+          ctx.fillStyle = "#141611";
+          ctx.fillText(msg, tx + 1, ty + 1);
+          ctx.fillStyle = "#e2703a";
+          ctx.fillText(msg, tx, ty);
+        }
+      } else if (blinkOn) {
+        // nearly dry: big blinking LOW FUEL on the flat sky band at the
+        // top — the mountains and the orange paintwork both swallowed it
+        const msg = "LOW FUEL";
+        ctx.font = `bold ${Math.round(9 * ui)}px monospace`;
+        const tw = ctx.measureText(msg).width;
+        const tx = Math.round(width / 2 - tw / 2);
+        const ty = Math.round(height * 0.28);
+        ctx.fillStyle = "#141611";
+        ctx.fillText(msg, tx + 2, ty + 2);
+        ctx.fillStyle = "#e2703a";
+        ctx.fillText(msg, tx, ty);
+      }
+    }
   }
 
   return { update, render, state, trackLength };

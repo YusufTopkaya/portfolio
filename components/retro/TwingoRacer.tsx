@@ -16,7 +16,7 @@ import {
   type RacerEngine,
   type RacerInput,
 } from "./racer/engine";
-import { loadCarFrames, makeRoadside } from "./racer/sprites";
+import { loadCarFrames, loadGasCan, makeRoadside } from "./racer/sprites";
 import { buildTrack } from "./racer/track";
 
 export function TwingoRacer() {
@@ -24,6 +24,11 @@ export function TwingoRacer() {
   const [intro, setIntro] = useState(false);
   const [paused, setPaused] = useState(false);
   const [coarse, setCoarse] = useState(false);
+  /* fuel ran dry: engine froze, overlay shows the score + PLAY AGAIN */
+  const [gameOver, setGameOver] = useState(false);
+  const [finalScore, setFinalScore] = useState(0);
+  /* bumped by PLAY AGAIN — re-runs the boot effect with a fresh engine */
+  const [runId, setRunId] = useState(0);
   /* render buffer size — portrait phones get a taller buffer so the game
      fills the screen instead of letterboxing into a thin strip */
   const [buf, setBuf] = useState({ w: RACER_WIDTH, h: RACER_HEIGHT });
@@ -32,6 +37,7 @@ export function TwingoRacer() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<RacerEngine | null>(null);
   const pausedRef = useRef(false);
+  const gameOverRef = useRef(false);
   const keysRef = useRef<RacerInput>({
     left: false,
     right: false,
@@ -40,6 +46,15 @@ export function TwingoRacer() {
   });
 
   pausedRef.current = paused;
+
+  /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly */
+  const playAgain = useCallback(() => {
+    engineRef.current = null;
+    gameOverRef.current = false;
+    keysRef.current = { left: false, right: false, gas: false, brake: false };
+    setGameOver(false);
+    setRunId((r) => r + 1);
+  }, []);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -70,6 +85,7 @@ export function TwingoRacer() {
   }, []);
 
   /* engine boot + game loop, alive only while the overlay is open */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runId intentionally re-boots the engine when PLAY AGAIN is pressed
   useEffect(() => {
     if (!open) return;
     const canvas = canvasRef.current;
@@ -91,19 +107,28 @@ export function TwingoRacer() {
       if (e && !pausedRef.current) {
         e.update(dt, keysRef.current);
         e.render(ctx);
+        if (e.state.gameOver && !gameOverRef.current) {
+          gameOverRef.current = true;
+          setFinalScore(Math.floor(e.state.score));
+          setGameOver(true);
+        }
       }
       raf = requestAnimationFrame(frame);
     };
 
     (async () => {
       if (!engineRef.current) {
-        const car = await loadCarFrames();
+        const [car, gasCan] = await Promise.all([
+          loadCarFrames(),
+          loadGasCan(),
+        ]);
         if (cancelled) return;
         const { segments } = buildTrack(427);
         engineRef.current = createEngine({
           segments,
           roadside: makeRoadside(),
           car,
+          gasCan,
           width: buf.w,
           height: buf.h,
           clusterTopLeft: window.matchMedia("(pointer: coarse)").matches,
@@ -159,7 +184,7 @@ export function TwingoRacer() {
       // release any held keys so the car doesn't drive off on its own
       keysRef.current = { left: false, right: false, gas: false, brake: false };
     };
-  }, [open, close, buf.w, buf.h]);
+  }, [open, close, buf.w, buf.h, runId]);
 
   const bindTouch = (key: keyof RacerInput) => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -211,6 +236,20 @@ export function TwingoRacer() {
       {paused && (
         <div className="racer-paused font-pixel" role="status">
           PAUSED — CLICK TO RESUME
+        </div>
+      )}
+      {gameOver && (
+        <div className="racer-gameover font-pixel" role="alert">
+          <div className="racer-gameover-title">GAME OVER</div>
+          <div className="racer-gameover-score">SCORE {finalScore}</div>
+          <button
+            type="button"
+            className="racer-playagain font-pixel"
+            onClick={playAgain}
+            ref={(el) => el?.focus()}
+          >
+            PLAY AGAIN
+          </button>
         </div>
       )}
 
