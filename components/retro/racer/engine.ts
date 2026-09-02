@@ -53,6 +53,8 @@ export interface RoadsideSprite {
   h: number;
   /** -1 = left side, +1 = right side (roughly) */
   offset: number;
+  /** per-sprite size multiplier (trees read bigger than poles etc.) */
+  scale?: number;
 }
 
 export interface SegmentSprite {
@@ -513,8 +515,9 @@ export function createEngine(opts: {
       for (const s of segment.sprites) {
         const sprite = roadside[s.sprite];
         const scale = segment.p1.screen.scale;
-        const destW = sprite.w * scale * (width / 2) * 4.2;
-        const destH = sprite.h * scale * (width / 2) * 4.2;
+        const spriteMul = sprite.scale ?? 1;
+        const destW = sprite.w * scale * (width / 2) * 4.2 * spriteMul;
+        const destH = sprite.h * scale * (width / 2) * 4.2 * spriteMul;
         if (destW < 2) continue;
         const destX =
           segment.p1.screen.x +
@@ -556,10 +559,15 @@ export function createEngine(opts: {
     }
 
     const scale = CAMERA_DEPTH / PLAYER_Z;
-    // player car spans ~40% of the buffer width (OutRun proportions)
-    const CAR_SCALE = 2.0;
-    const destW = frame.w * scale * (width / 2) * CAR_SCALE;
-    const destH = frame.h * scale * (width / 2) * CAR_SCALE;
+    // the car "pulls away" as speed builds: near scale at standstill,
+    // far scale at top speed — a smooth zoom-out instead of switching
+    // between discrete sprite sizes (the sheet's smaller sizes stay unused)
+    const speedPercent = state.speed / MAX_SPEED;
+    const CAR_SCALE_NEAR = 1.45; // ~29% of buffer width at standstill
+    const CAR_SCALE_FAR = 1.1; // ~22% at top speed
+    const carScale = interpolate(CAR_SCALE_NEAR, CAR_SCALE_FAR, speedPercent);
+    const destW = frame.w * scale * (width / 2) * carScale;
+    const destH = frame.h * scale * (width / 2) * carScale;
     // speed-dependent bounce, stronger off-road; killed for reduced motion
     const bounce = reduceMotion
       ? 0

@@ -119,13 +119,17 @@ export function buildTrack(seed = 427): Built {
   addRoad(60, 60, 60, 0, 0);
 
   // ── roadside objects: deterministic placement, alternating sides ──
-  // every few segments, 40% chance of a tree/sign/pole at |offset| ~2-4
+  // every few segments, 40% chance of a tree/sign/pole just off the road
+  // edge (offset 1.15-1.9 half-widths). OutRun keeps them close: in this
+  // projection, objects farther than ~2 half-widths only enter the screen
+  // at distances where they are already tiny — close offsets are what let
+  // sprites whiz past the camera at arcade size.
   const SPRITE_KINDS = 3; // tree, sign, pole (index into the roadside set)
-  for (let i = 20; i < segments.length - 5; i += 2 + Math.floor(rng() * 6)) {
-    if (rng() < 0.35) continue;
+  for (let i = 16; i < segments.length - 5; i += 2 + Math.floor(rng() * 4)) {
+    if (rng() < 0.25) continue;
     const sprite = Math.floor(rng() * SPRITE_KINDS);
     const sideSign = rng() > 0.5 ? 1 : -1;
-    const offset = sideSign * (1.9 + rng() * 1.8);
+    const offset = sideSign * (1.15 + rng() * 0.75);
     segments[i].sprites.push({ sprite, offset });
   }
 

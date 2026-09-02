@@ -2,8 +2,11 @@
  * Sprite loading for the Twingo racer.
  *
  * The Twingo MK1 sheet (public/images/twingo-sprite.png) has a black
- * background, so it is keyed to transparency at load time (r+g+b <= 60 →
- * alpha 0), then frames are cropped by a rect table measured with a
+ * background, so it is keyed to transparency at load time by flood-filling
+ * the near-black pixels INWARD FROM THE SHEET EDGES: only black connected
+ * to the border becomes transparent, so dark interior areas (windows,
+ * shadows between body panels) stay opaque and the road never shows
+ * through the car. Frames are then cropped by a rect table measured with a
  * projection-profile scan of the sheet. Layout: band 0 = straight rear
  * view in 4 sizes, band 1 = slight-left 3/4 view, band 2 = slight-right
  * 3/4 view. No slope frames exist on the sheet, so up/down reuse the
@@ -38,8 +41,36 @@ function keyBlackToAlpha(img: HTMLImageElement): HTMLCanvasElement {
   ctx.drawImage(img, 0, 0);
   const data = ctx.getImageData(0, 0, c.width, c.height);
   const px = data.data;
-  for (let i = 0; i < px.length; i += 4) {
-    if (px[i] + px[i + 1] + px[i + 2] <= 60) px[i + 3] = 0;
+  const w = c.width;
+  const h = c.height;
+  const isBlack = (p: number) =>
+    px[p * 4] + px[p * 4 + 1] + px[p * 4 + 2] <= 60;
+  // flood fill from the borders: only exterior-connected black is keyed out
+  const seen = new Uint8Array(w * h);
+  const stack: number[] = [];
+  const seed = (p: number) => {
+    if (!seen[p] && isBlack(p)) {
+      seen[p] = 1;
+      stack.push(p);
+    }
+  };
+  for (let x = 0; x < w; x++) {
+    seed(x);
+    seed((h - 1) * w + x);
+  }
+  for (let y = 0; y < h; y++) {
+    seed(y * w);
+    seed(y * w + w - 1);
+  }
+  while (stack.length > 0) {
+    const p = stack.pop() as number;
+    px[p * 4 + 3] = 0;
+    const x = p % w;
+    const y = (p - x) / w;
+    if (x > 0) seed(p - 1);
+    if (x < w - 1) seed(p + 1);
+    if (y > 0) seed(p - w);
+    if (y < h - 1) seed(p + w);
   }
   ctx.putImageData(data, 0, 0);
   return c;
@@ -237,8 +268,8 @@ function makePole(): HTMLCanvasElement {
 
 export function makeRoadside(): RoadsideSprite[] {
   return [
-    { image: makePine(), w: 48, h: 72, offset: 0 },
-    { image: makeSign(), w: 40, h: 56, offset: 0 },
-    { image: makePole(), w: 20, h: 64, offset: 0 },
+    { image: makePine(), w: 48, h: 72, offset: 0, scale: 3.2 },
+    { image: makeSign(), w: 40, h: 56, offset: 0, scale: 1.8 },
+    { image: makePole(), w: 20, h: 64, offset: 0, scale: 1.5 },
   ];
 }
