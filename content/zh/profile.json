@@ -154,6 +154,13 @@
   ],
   "projects": [
     {
+      "title": "dokunduur",
+      "description": "面向咖啡馆和餐厅的多租户 SaaS 平台：顾客扫描二维码或轻触 NFC 标签，即可立即打开快速、品牌化的数字菜单。商家可通过专属管理后台管理菜单、品牌设置和功能。",
+      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
+      "imageUrl": "/images/dokunduur-logo.png"
+    },
+    {
       "title": "Türk Eximbank Internet Banking",
       "description": "Türk Eximbank Internet Banking 是一款 Web 应用，让企业客户能够在线管理其账户和交易。",
       "projectUrl": "https://esube.eximbank.gov.tr/",

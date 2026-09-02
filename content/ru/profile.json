@@ -154,6 +154,13 @@
   ],
   "projects": [
     {
+      "title": "dokunduur",
+      "description": "Мультитенантная SaaS-платформа для кафе и ресторанов: гости сканируют QR-код или касаются NFC-метки, чтобы мгновенно открыть быстрое фирменное цифровое меню. Заведения управляют меню, брендингом и функциями через отдельную панель управления.",
+      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
+      "imageUrl": "/images/dokunduur-logo.png"
+    },
+    {
       "title": "Türk Eximbank Internet Banking",
       "description": "Türk Eximbank Internet Banking — это веб-приложение, которое позволяет корпоративным клиентам управлять своими счетами и транзакциями онлайн.",
       "projectUrl": "https://esube.eximbank.gov.tr/",

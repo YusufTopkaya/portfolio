@@ -148,6 +148,13 @@
   ],
   "projects": [
     {
+      "title": "dokunduur",
+      "description": "Kafe ve restoranlar için çok kiracılı bir SaaS platformu: müşteriler QR kodu okutarak veya NFC etiketine dokunarak hızlı, markaya özel dijital menüyü anında açıyor. İşletmeler menülerini, marka ayarlarını ve özellikleri kendi panellerinden yönetiyor.",
+      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
+      "imageUrl": "/images/dokunduur-logo.png"
+    },
+    {
       "title": "Türk Eximbank İnternet Bankacılığı",
       "description": "Türk Eximbank İnternet Bankacılığı, kurumsal müşterilerin hesaplarını ve işlemlerini çevrimiçi olarak yönetmelerini sağlayan bir web uygulamasıdır.",
       "projectUrl": "https://esube.eximbank.gov.tr/",
