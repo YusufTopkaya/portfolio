@@ -133,5 +133,16 @@ export function buildTrack(seed = 427): Built {
     segments[i].sprites.push({ sprite, offset });
   }
 
+  // ── hazards: potholes and oil slicks on the tarmac itself ──
+  // sparse enough to be dodgeable, never on the opening straight, never
+  // two in a row — hitting one costs a respawn, not the run
+  for (let i = 60; i < segments.length - 15; i += 10 + Math.floor(rng() * 14)) {
+    if (rng() < 0.3) continue;
+    segments[i].hazard = {
+      kind: rng() < 0.5 ? "pothole" : "oil",
+      x: rng() * 1.4 - 0.7,
+    };
+  }
+
   return { segments, trackLength: segments.length * SEGMENT_LENGTH };
 }

@@ -44,6 +44,7 @@ export function TwingoRacer() {
     gas: false,
     brake: false,
   });
+  const scoreRef = useRef<HTMLSpanElement>(null);
   const timeRef = useRef<HTMLSpanElement>(null);
 
   pausedRef.current = paused;
@@ -100,6 +101,11 @@ export function TwingoRacer() {
         e.render(ctx);
         // HUD via direct DOM writes — no 60fps React re-renders
         // (speed lives on the in-canvas LCD cluster, not in the DOM)
+        if (scoreRef.current) {
+          const s = Math.round(e.state.score);
+          scoreRef.current.textContent =
+            e.state.multiplier > 1 ? `${s} ×${e.state.multiplier}` : String(s);
+        }
         if (timeRef.current) {
           timeRef.current.textContent = formatTime(e.state.time);
         }
@@ -213,8 +219,11 @@ export function TwingoRacer() {
       />
       <div className="racer-scanlines" aria-hidden="true" />
 
-      {/* HUD — speed is on the canvas LCD cluster; DOM only keeps time */}
+      {/* HUD — speed is on the canvas LCD cluster; DOM keeps score + time */}
       <div className="racer-hud font-pixel" aria-hidden="true">
+        <span>
+          SCORE <span ref={scoreRef}>0</span>
+        </span>
         <span>
           TIME <span ref={timeRef}>0:00</span>
         </span>

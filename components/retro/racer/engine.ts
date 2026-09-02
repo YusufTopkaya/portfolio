@@ -80,6 +80,8 @@ export interface Segment {
   p1: SegmentPoint;
   p2: SegmentPoint;
   sprites: SegmentSprite[];
+  /** road hazard: pothole or oil slick, x in road half-width units (±1 = edge) */
+  hazard?: { kind: "pothole" | "oil"; x: number };
   color: typeof COLORS.light | typeof COLORS.dark;
   clip: number;
   looped: boolean;
@@ -97,12 +99,16 @@ const FIELD_OF_VIEW = 100; // degrees
 const CAMERA_DEPTH = 1 / Math.tan(((FIELD_OF_VIEW / 2) * Math.PI) / 180);
 const PLAYER_Z = CAMERA_HEIGHT * CAMERA_DEPTH;
 const MAX_SPEED = SEGMENT_LENGTH * 60; // a segment per frame at 60fps
-const ACCEL = MAX_SPEED / 5;
+// semi-realistic pull: dv/dt = rate * (1 - v/vmax), i.e. strong off the
+// line, tapering out near top speed. rate 0.135 → 0-100 km/h in ~6 s
+// against the 180 km/h top speed (v(t) = vmax * (1 - e^(-0.135t)))
+const ACCEL_RATE = 0.135;
 const BRAKING = -MAX_SPEED;
 const DECEL = -MAX_SPEED / 5;
 const OFFROAD_DECEL = -MAX_SPEED * 0.75;
 const OFFROAD_LIMIT = MAX_SPEED / 4;
 const CENTRIFUGAL = 0.3;
+const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a crash
 const LANES = 3;
 
 const COLORS = {
@@ -127,6 +133,12 @@ export interface EngineState {
   time: number;
   /** total distance driven, in display km (same scale as the 180 km/h top speed) */
   distanceKm: number;
+  /** metres driven × speed multiplier — the arcade score */
+  score: number;
+  /** current score multiplier (1/2/3 by speed, 1 while off-road/respawning) */
+  multiplier: number;
+  /** >0 while the car is respawning (breathing fade) after a hazard hit */
+  respawn: number;
   offRoad: boolean;
 }
 
@@ -463,29 +475,44 @@ function renderCluster(
   }
 }
 
-/* anime-style speed lines streaming past the screen edges at high speed */
+/* anime-style speed streaks hugging the road edges: each streak lies on a
+   line from the vanishing point through a spot just off the rumble strip,
+   so they stream past PARALLEL to the road edges (t² easing compresses
+   them near the horizon, like the road itself) */
 function renderSpeedLines(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   speedPercent: number,
   time: number,
+  roadNearX: number,
+  roadNearW: number,
+  horizonY: number,
 ) {
   if (speedPercent < 0.4) return;
   const intensity = (speedPercent - 0.4) / 0.6;
-  const count = Math.round(5 + 11 * intensity);
-  const thick = Math.max(1, Math.round(height / 135));
-  ctx.fillStyle = `rgba(255,255,255,${0.12 + 0.16 * intensity})`;
+  const count = Math.round(4 + 8 * intensity);
+  ctx.lineCap = "round";
   for (let i = 0; i < count; i++) {
     // deterministic per-line randomness, re-rolled a few times a second
-    const seed = i * 97 + Math.floor(time * 18);
+    const seed = i * 61 + Math.floor(time * 16);
     const rand = Math.sin(seed * 127.1) * 43758.5453;
     const r = rand - Math.floor(rand);
-    const y = r * height;
-    const len = width * (0.07 + 0.18 * intensity) * (0.4 + r);
-    const slide = ((r * 7 + time * (2 + 4 * intensity)) % 1) * width * 0.08;
-    if (i % 2 === 0) ctx.fillRect(slide, y, len, thick);
-    else ctx.fillRect(width - len - slide, y, len, thick);
+    const side = i % 2 === 0 ? -1 : 1;
+    const t0 = (r + time * (1.2 + 2.5 * intensity)) % 1;
+    const t1 = Math.min(1, t0 + 0.05 + 0.12 * intensity);
+    const bx = roadNearX + side * roadNearW * (1.06 + r * 0.25);
+    const by = height + 4;
+    const vx = width / 2 + side * width * 0.015;
+    const vy = horizonY;
+    const e0 = t0 * t0;
+    const e1 = t1 * t1;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.1 + 0.18 * intensity) * (0.35 + 0.65 * t0)})`;
+    ctx.lineWidth = Math.max(1, (1 + 3 * t0) * (height / 270));
+    ctx.beginPath();
+    ctx.moveTo(vx + (bx - vx) * e0, vy + (by - vy) * e0);
+    ctx.lineTo(vx + (bx - vx) * e1, vy + (by - vy) * e1);
+    ctx.stroke();
   }
 }
 
@@ -519,6 +546,9 @@ export function createEngine(opts: {
     speed: 0,
     time: 0,
     distanceKm: 0,
+    score: 0,
+    multiplier: 1,
+    respawn: 0,
     offRoad: false,
   };
 
@@ -568,8 +598,10 @@ export function createEngine(opts: {
     // centrifugal push on curves (Jake Gordon)
     state.playerX -= dx * speedPercent * playerSegment.curve * CENTRIFUGAL;
 
-    if (input.gas) state.speed += ACCEL * dt;
-    else if (input.brake) state.speed += BRAKING * dt;
+    if (input.gas) {
+      state.speed +=
+        MAX_SPEED * ACCEL_RATE * (1 - state.speed / MAX_SPEED) * dt;
+    } else if (input.brake) state.speed += BRAKING * dt;
     else state.speed += DECEL * dt;
 
     state.offRoad = state.playerX < -1.1 || state.playerX > 1.1;
@@ -579,6 +611,36 @@ export function createEngine(opts: {
 
     state.playerX = Math.max(-2.2, Math.min(2.2, state.playerX));
     state.speed = Math.max(0, Math.min(MAX_SPEED, state.speed));
+
+    // hazards: potholes and oil slicks swallow the car — it respawns on
+    // the centre line at a standstill with a breathing fade-in
+    if (state.respawn > 0) {
+      state.respawn = Math.max(0, state.respawn - dt);
+    } else {
+      const hz = playerSegment.hazard;
+      if (
+        hz &&
+        Math.abs(state.playerX - hz.x) < 0.24 &&
+        state.speed > MAX_SPEED * 0.05
+      ) {
+        state.respawn = RESPAWN_TIME;
+        state.speed = 0;
+        state.playerX = 0;
+      }
+    }
+
+    // score: metres driven, multiplied when cruising fast AND clean —
+    // off-road or respawning drops the multiplier back to x1
+    const kmh = (state.speed / MAX_SPEED) * 180;
+    state.multiplier =
+      state.offRoad || state.respawn > 0
+        ? 1
+        : kmh > 150
+          ? 3
+          : kmh > 110
+            ? 2
+            : 1;
+    state.score += ((kmh * dt) / 3.6) * state.multiplier;
 
     // horizon drifts opposite the current curve, faster with speed
     skyOffset += playerSegment.curve * speedPercent * dt * 2.5;
@@ -623,6 +685,9 @@ export function createEngine(opts: {
     let x = 0;
     let dx = -(baseSegment.curve * basePercent);
     const cameraZBase = state.position;
+    // near-edge road geometry, captured for the road-parallel wind streaks
+    let roadNearX = width / 2;
+    let roadNearW = width * 0.45;
 
     for (let n = 0; n < DRAW_DISTANCE; n++) {
       const segment = segments[(baseSegment.index + n) % segments.length];
@@ -659,6 +724,49 @@ export function createEngine(opts: {
         segment.color,
       );
       maxY = segment.p2.screen.y;
+
+      if (n === 0) {
+        roadNearX = segment.p2.screen.x;
+        roadNearW = segment.p2.screen.w;
+      }
+
+      // potholes & oil slicks lie flat on the tarmac of their segment
+      if (segment.hazard) {
+        const hs = segment.p1.screen;
+        const hx =
+          hs.x + hs.scale * segment.hazard.x * ROAD_WIDTH * (width / 2);
+        const hw = hs.scale * 0.26 * ROAD_WIDTH * (width / 2);
+        const hh = Math.max(1, hw * 0.26);
+        const hy = hs.y - hh;
+        ctx.beginPath();
+        ctx.ellipse(hx, hy, hw, hh, 0, 0, Math.PI * 2);
+        if (segment.hazard.kind === "pothole") {
+          ctx.fillStyle = "#17171b";
+          ctx.fill();
+          // crumbled lighter rim on the near edge
+          ctx.beginPath();
+          ctx.ellipse(hx, hy + hh * 0.55, hw * 0.9, hh * 0.35, 0, 0, Math.PI);
+          ctx.strokeStyle = "#3d3d44";
+          ctx.lineWidth = Math.max(1, hh * 0.3);
+          ctx.stroke();
+        } else {
+          // oil slick: dark blue-black with a glossy streak
+          ctx.fillStyle = "#101018";
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(
+            hx - hw * 0.2,
+            hy - hh * 0.25,
+            hw * 0.45,
+            hh * 0.3,
+            0,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fillStyle = "rgba(90,90,140,0.55)";
+          ctx.fill();
+        }
+      }
     }
 
     // ── roadside sprites, far to near (painter's algorithm; Lou: keep
@@ -735,7 +843,12 @@ export function createEngine(opts: {
     const carX = width / 2 - destW / 2 + shakeX;
     const carY = height - destH - Math.round(height * 0.04) + bounce;
 
+    // respawn: the car breathes in and out of existence for a moment
+    const carAlpha =
+      state.respawn > 0 ? 0.5 + 0.5 * Math.sin(state.time * 9) : 1;
+
     // soft shadow
+    ctx.globalAlpha = carAlpha * 0.9;
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.beginPath();
     ctx.ellipse(
@@ -749,6 +862,7 @@ export function createEngine(opts: {
     );
     ctx.fill();
 
+    ctx.globalAlpha = carAlpha;
     ctx.drawImage(
       frame.image,
       Math.round(carX),
@@ -756,6 +870,7 @@ export function createEngine(opts: {
       Math.round(destW),
       Math.round(destH),
     );
+    ctx.globalAlpha = 1;
 
     // off-road dust puffs
     if (
@@ -779,9 +894,18 @@ export function createEngine(opts: {
       ctx.globalAlpha = 1;
     }
 
-    // speed lines stream past the edges, then the LCD cluster on top
+    // speed streaks hug the road edges, then the LCD cluster on top
     if (!reduceMotion) {
-      renderSpeedLines(ctx, width, height, speedPercent, state.time);
+      renderSpeedLines(
+        ctx,
+        width,
+        height,
+        speedPercent,
+        state.time,
+        roadNearX,
+        roadNearW,
+        horizonY,
+      );
     }
     renderCluster(
       ctx,
