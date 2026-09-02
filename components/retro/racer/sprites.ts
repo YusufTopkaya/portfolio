@@ -28,11 +28,11 @@ const SHEET_URL = "/images/twingo-sheet-white.png";
 /* frame rects in sheet pixels, measured via a connected-component scan
    (largest component of each row; the sheet's text labels stay outside) */
 const FRAMES = {
-  straight: { x: 115, y: 98, w: 352, h: 288 },
+  straight: { x: 115, y: 98, w: 352, h: 270 },
   left: { x: 60, y: 458, w: 453, h: 268 },
   right: { x: 89, y: 790, w: 401, h: 247 },
-  up: { x: 115, y: 98, w: 352, h: 288 },
-  down: { x: 115, y: 98, w: 352, h: 288 },
+  up: { x: 115, y: 98, w: 352, h: 270 },
+  down: { x: 115, y: 98, w: 352, h: 270 },
 };
 
 function keyWhiteToAlpha(img: HTMLImageElement): HTMLCanvasElement {
@@ -188,6 +188,42 @@ function crop(
   return { image: c, w: r.w, h: r.h };
 }
 
+/* the sheet's two lean views are drawn at slightly different scales, so
+   the car visibly shrank on one steering direction. Measure each keyed
+   crop's opaque silhouette height and scale the smaller frame up until
+   both steer views match. */
+function opaqueHeight(frame: CarFrame): number {
+  const probe = document.createElement("canvas");
+  probe.width = frame.w;
+  probe.height = frame.h;
+  const ctx = probe.getContext("2d");
+  if (!ctx) return frame.h;
+  ctx.drawImage(frame.image, 0, 0);
+  const data = ctx.getImageData(0, 0, probe.width, probe.height).data;
+  let top = -1;
+  let bottom = -1;
+  for (let y = 0; y < probe.height; y++) {
+    for (let x = 0; x < probe.width; x++) {
+      if (data[(y * probe.width + x) * 4 + 3] !== 0) {
+        if (top < 0) top = y;
+        bottom = y;
+      }
+    }
+  }
+  return top < 0 ? frame.h : bottom - top + 1;
+}
+
+function scaleFrame(frame: CarFrame, f: number): CarFrame {
+  const c = document.createElement("canvas");
+  c.width = Math.round(frame.w * f);
+  c.height = Math.round(frame.h * f);
+  const ctx = c.getContext("2d");
+  if (!ctx) return frame;
+  ctx.imageSmoothingEnabled = false; // keep the pixel edges hard
+  ctx.drawImage(frame.image, 0, 0, c.width, c.height);
+  return { image: c, w: c.width, h: c.height };
+}
+
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -277,10 +313,19 @@ export async function loadCarFrames(): Promise<CarFrames> {
       const image = drawSmoke(i);
       return { image, w: image.width, h: image.height };
     });
+    const left = crop(sheet, FRAMES.left);
+    const right = crop(sheet, FRAMES.right);
+    // same car, same on-screen size whichever way it leans
+    const lh = opaqueHeight(left);
+    const rh = opaqueHeight(right);
+    const matched =
+      rh < lh
+        ? { left, right: scaleFrame(right, lh / rh) }
+        : { left: scaleFrame(left, rh / lh), right };
     return {
       straight: crop(sheet, FRAMES.straight),
-      left: crop(sheet, FRAMES.left),
-      right: crop(sheet, FRAMES.right),
+      left: matched.left,
+      right: matched.right,
       up: crop(sheet, FRAMES.up),
       down: crop(sheet, FRAMES.down),
       smoke,
