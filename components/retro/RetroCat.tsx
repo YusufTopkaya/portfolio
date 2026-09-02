@@ -24,8 +24,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * sprite's painted area (no invisible hover zones), and each frame's
  * cell is offset so the paws always plant on the box bottom edge.
  * The sprite layers are pointer-events:none, so only the hitbox
- * itself is interactive. On resize the cat cancels whatever it is
- * doing and snaps back to its perch.
+ * itself is interactive. Position is bottom-anchored so the cat
+ * tracks the viewport's bottom edge when the mobile URL bar
+ * collapses on scroll; a real resolution change (width) cancels
+ * whatever it is doing and snaps it back to its perch.
  */
 
 const CELL = 32; // art px per frame cell
@@ -148,7 +150,7 @@ export function RetroCat() {
   const [mode, setMode] = useState<Mode>("perch");
   const [frameIdx, setFrameIdx] = useState(0);
   const [petted, setPetted] = useState(false);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; b: number } | null>(null);
   const [facingLeft, setFacingLeft] = useState(true);
   const [smooth, setSmooth] = useState(false);
   const [grooming, setGrooming] = useState(false);
@@ -159,8 +161,9 @@ export function RetroCat() {
   const returningRef = useRef(false);
   const groomingRef = useRef(false);
   const coarseRef = useRef(false);
-  const perchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const posRef = useRef<{ x: number; y: number } | null>(null);
+  const widthRef = useRef(0);
+  const perchRef = useRef<{ x: number; b: number }>({ x: 0, b: 0 });
+  const posRef = useRef<{ x: number; b: number } | null>(null);
   posRef.current = pos;
 
   /* touch devices have no hover; taps must not trigger petting */
@@ -199,6 +202,11 @@ export function RetroCat() {
     };
   }, []);
 
+  /* Position is stored bottom-anchored: b = distance in px from the
+     viewport's bottom edge to the cat's bottom edge. All surfaces the
+     cat touches (CRT, ticker bar, page bottom) are bottom-anchored too,
+     so when the mobile URL bar collapses on scroll and innerHeight
+     changes, the cat tracks its surface with no re-measure at all. */
   const measurePerch = useCallback(() => {
     // desktop: asleep on the floating CRT monitor
     const crt = document.getElementById("retro-crt-pc");
@@ -209,7 +217,7 @@ export function RetroCat() {
       return {
         x: rect.left + rect.width / 2 - BOX_W / 2,
         // body mass lands flush on the monitor's top edge
-        y: rect.top - BOX_H,
+        b: window.innerHeight - rect.top,
       };
     }
     // mobile: asleep on the slim stock ticker bar at the bottom edge
@@ -218,7 +226,7 @@ export function RetroCat() {
       const rect = bar.getBoundingClientRect();
       return {
         x: rect.left + rect.width / 2 - BOX_W / 2,
-        y: rect.top - BOX_H,
+        b: window.innerHeight - rect.top,
       };
     }
     return null;
@@ -241,9 +249,14 @@ export function RetroCat() {
     };
     update();
     const poll = window.setInterval(update, 1000);
-    // resolution change: cancel whatever the cat is doing and snap it
-    // back to its initial perch position
+    // real resolution change (width): cancel whatever the cat is doing
+    // and snap it back to its initial perch position. Height-only
+    // changes are just the mobile URL bar collapsing on scroll — the
+    // bottom anchoring handles those, no reset needed.
+    widthRef.current = window.innerWidth;
     const reset = () => {
+      if (window.innerWidth === widthRef.current) return;
+      widthRef.current = window.innerWidth;
       const perch = measurePerch();
       if (!perch) return;
       perchRef.current = perch;
@@ -340,7 +353,7 @@ export function RetroCat() {
           }
         }
         setFacingLeft(dirRef.current < 0);
-        setPos({ x: nx, y: p.y });
+        setPos({ x: nx, b: p.b });
       }
       raf = requestAnimationFrame(step);
     };
@@ -375,22 +388,23 @@ export function RetroCat() {
     setSmooth(true);
     setMode("jumpDown");
     // small forward drift makes the hop read like a real jump arc
-    setPos((p) => (p ? { x: p.x + 20, y: measureGround() } : p));
+    setPos((p) => (p ? { x: p.x + 20, b: measureGround() } : p));
     window.setTimeout(() => {
       setSmooth(false);
       setMode("walk");
     }, 550);
   };
 
-  /* ground line for the stroll: on mobile the cat walks on top of the
-     ticker bar, on desktop along the viewport's bottom edge */
+  /* ground line for the stroll (bottom-anchored): on mobile the cat
+     walks on top of the ticker bar, on desktop along the viewport's
+     bottom edge */
   function measureGround() {
     const bar = document.getElementById("retro-ticker-bar");
     const base =
       bar && bar.getClientRects().length > 0
-        ? bar.getBoundingClientRect().top
-        : window.innerHeight;
-    return base - BOX_H - GROUND_MARGIN;
+        ? window.innerHeight - bar.getBoundingClientRect().top
+        : 0;
+    return base + GROUND_MARGIN;
   }
 
   if (!pos) return null;
@@ -425,15 +439,18 @@ export function RetroCat() {
       className="fixed z-[55] select-none appearance-none border-0 bg-transparent p-0"
       style={{
         left: pos.x,
-        top: pos.y,
+        // bottom-anchored: follows the viewport's bottom edge when the
+        // mobile URL bar collapses/expands, just like the surfaces the
+        // cat sits on (CRT, ticker bar, page bottom)
+        bottom: pos.b,
         width: BOX_W,
         height: BOX_H,
         pointerEvents: ready ? "auto" : "none",
         cursor: ready ? "pointer" : "default",
         transition: smooth
           ? mode === "jumpDown"
-            ? "top 0.5s cubic-bezier(0.55, 0, 0.9, 0.6), left 0.5s ease-out"
-            : "top 0.55s cubic-bezier(0.2, 0.8, 0.3, 1.05), left 0.35s ease-out"
+            ? "bottom 0.5s cubic-bezier(0.55, 0, 0.9, 0.6), left 0.5s ease-out"
+            : "bottom 0.55s cubic-bezier(0.2, 0.8, 0.3, 1.05), left 0.35s ease-out"
           : "none",
       }}
     >
