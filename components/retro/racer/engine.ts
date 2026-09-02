@@ -370,6 +370,52 @@ function makeMountains(
   return c;
 }
 
+/* chunky sunset clouds: a mauve belly, a warm mid body and sun-lit top
+   humps, all snapped to fat pixel blocks so they sit in the same art
+   direction as the mountains. Double-wide canvas for a seamless wrap. */
+function makeClouds(width: number, height: number, seed: number) {
+  const c = document.createElement("canvas");
+  c.width = width * 2;
+  c.height = height;
+  const ctx = c.getContext("2d");
+  if (!ctx) return c;
+  let s = seed;
+  const rnd = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+  const px = Math.max(2, Math.round(width / 160)); // pixel chunk size
+  const count = 8;
+  for (let i = 0; i < count; i++) {
+    const cx = Math.round((rnd() * width * 2) / px) * px;
+    const cy = Math.round(height * (0.08 + rnd() * 0.55));
+    const w = Math.round((width * (0.09 + rnd() * 0.11)) / px) * px;
+    const h = Math.max(px * 3, Math.round(w * (0.24 + rnd() * 0.1)));
+    // shadow belly
+    ctx.fillStyle = "#9d5470";
+    ctx.fillRect(cx + px, cy + h - px * 2, w - px * 2, px * 2);
+    // warm mid body
+    ctx.fillStyle = "#e88a72";
+    ctx.fillRect(
+      cx,
+      cy + Math.round(h * 0.4),
+      w,
+      h - Math.round(h * 0.4) - px * 2,
+    );
+    // sun-lit top humps, staggered like a cauliflower top
+    ctx.fillStyle = "#ffd9a3";
+    let hx = cx;
+    while (hx < cx + w - px) {
+      const hw = px * (2 + Math.floor(rnd() * 3));
+      const hh =
+        px * (1 + Math.floor(rnd() * Math.max(1, Math.round((h * 0.4) / px))));
+      ctx.fillRect(hx, cy + Math.round(h * 0.4) - hh, hw, hh + px);
+      hx += hw;
+    }
+  }
+  return c;
+}
+
 /* ── Twingo MK1 instrument cluster: a light-green LCD panel with dark
    7-segment digits (the real car's central dash — big speed readout,
    "km/h" legend, small trip counter; no rev counter, it never had one) ── */
@@ -637,6 +683,7 @@ function renderSpeedLines(
   roadNearX: number,
   roadNearW: number,
   horizonY: number,
+  vanishX: number,
 ) {
   if (speedPercent < 0.4) return;
   const intensity = (speedPercent - 0.4) / 0.6;
@@ -652,7 +699,7 @@ function renderSpeedLines(
     const t1 = Math.min(1, t0 + 0.05 + 0.12 * intensity);
     const bx = roadNearX + side * roadNearW * (1.06 + r * 0.25);
     const by = height + 4;
-    const vx = width / 2 + side * width * 0.015;
+    const vx = vanishX + side * width * 0.015;
     const vy = horizonY;
     const e0 = t0 * t0;
     const e1 = t1 * t1;
@@ -707,6 +754,11 @@ export function createEngine(opts: {
   // horizon parallax offsets (Lou: horizon slides opposite the curve)
   let skyOffset = 0;
   let hillOffset = 0;
+  // smoothed vanishing point for the speed streaks — follows only the
+  // car's OWN turning (steering input), never the road's curves: while
+  // the car runs straight the lines stream straight, they swing only
+  // when the car actually turns
+  let vanishX = width / 2;
   // engine time of the last gas-can pickup — drives the collect feedback
   // (sparkle burst at the car, gauge flash, rising "+1")
   let lastPickupAt = -10;
@@ -733,6 +785,7 @@ export function createEngine(opts: {
   let pendingSteer = 0;
 
   const sky = makeSky(width, Math.round(height * 0.62));
+  const clouds = makeClouds(width, Math.round(height * 0.34), 21);
   const hillsFar = makeMountains(
     width,
     Math.round(height * 0.18),
@@ -869,6 +922,13 @@ export function createEngine(opts: {
       ctx.drawImage(img, x + width, yBase - horizonShift);
     };
     const horizonY = Math.round(height / 2 - horizonShift);
+    // clouds: the farthest layer — slowest curve parallax of all, plus a
+    // gentle autonomous drift so the sunset sky is never static
+    const cloudDrift = skyOffset * width * 0.05 + state.time * width * 0.006;
+    const cloudX = -(((cloudDrift % width) + width) % width);
+    const cloudY = Math.round(height * 0.05 - horizonShift * 0.3);
+    ctx.drawImage(clouds, cloudX, cloudY);
+    ctx.drawImage(clouds, cloudX + width, cloudY);
     drawBand(hillsFar, skyOffset * width * 0.12, horizonY - hillsFar.height);
     drawBand(hillsNear, hillOffset * width * 0.08, horizonY - hillsNear.height);
 
@@ -1118,8 +1178,43 @@ export function createEngine(opts: {
       ctx.globalAlpha = 1;
     }
 
+    // drift smoke: in a hard curve at speed the car slides sideways
+    // (centrifugal push) and the rear tires scrub — puffs at both rear
+    // wheels, trailing outward from the bend
+    const curveSlide = Math.abs(playerSegment.curve) * speedPercent ** 2;
+    if (!state.offRoad && curveSlide > 1 && car.smoke.length > 0) {
+      const outward = playerSegment.curve > 0 ? -1 : 1;
+      for (const wheelSide of [-1, 1]) {
+        const puff =
+          car.smoke[
+            Math.floor(state.time * 14 + (wheelSide > 0 ? 1 : 0)) %
+              car.smoke.length
+          ];
+        const puffW = destW * 0.26;
+        const puffH = (puff.h / puff.w) * puffW;
+        ctx.globalAlpha = Math.min(0.85, curveSlide * 0.45);
+        ctx.drawImage(
+          puff.image,
+          Math.round(
+            width / 2 +
+              wheelSide * destW * 0.34 +
+              outward * destW * 0.05 -
+              puffW / 2 +
+              shakeX,
+          ),
+          Math.round(carY + destH - puffH * 0.7),
+          Math.round(puffW),
+          Math.round(puffH),
+        );
+      }
+      ctx.globalAlpha = 1;
+    }
+
     // speed streaks hug the road edges, then the LCD cluster on top
     if (!reduceMotion) {
+      // swing only with the car's own turning — straight car, straight
+      // streaks, no matter how the road bends ahead
+      vanishX += (width / 2 + pendingSteer * width * 0.06 - vanishX) * 0.12;
       renderSpeedLines(
         ctx,
         width,
@@ -1129,6 +1224,7 @@ export function createEngine(opts: {
         roadNearX,
         roadNearW,
         horizonY,
+        vanishX,
       );
     }
     // pickup feedback window — sparkle burst + gauge flash + rising "+1"
