@@ -33,10 +33,6 @@ Live: **[www.yusuftopkaya.com](https://www.yusuftopkaya.com)**
   boot, purrs when hovered, wakes on click and strolls along the page
   bottom (random 15-45s walks with grooming pauses); on mobile it sleeps
   on the ticker bar instead
-- Twingo Racer: press START on the CRT (or the mobile ticker bar) to play
-  an OutRun-style pseudo-3D driving game — segmented road engine with
-  true projected endpoints, curves, hills, parallax sunset, and an orange
-  Renault Twingo MK1 (26 TL 427); keyboard or touch controls
 - Typewriter hero name (layout-stable, no content shift while typing)
 - Profile photo glitch hover: slice-based "magnet near a CRT" wave,
   seam-free across browsers
@@ -135,8 +131,7 @@ portfolio/
 │   └── globals.css        # Retro palette, pixel panels, CRT overlays
 ├── components/
 │   ├── retro/             # TypewriterText, GlitchImage, RetroBootEffect,
-│   │                      # RetroStockComputer, RetroBackground, RetroCat,
-│   │                      # TwingoRacer + racer/ (pseudo-3D engine)
+│   │                      # RetroStockComputer, RetroBackground, RetroCat
 │   ├── layout/            # Header, Footer
 │   ├── sections/          # Projects, Skills, Certificates, Blog
 │   └── ui/                # Square pixel primitives

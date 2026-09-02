@@ -366,8 +366,7 @@ html.crt-boot::after {
   /* "smacked TV" glitch shake with chromatic aberration */
   46% {
     transform: translate(-8px, 3px) skewX(1.5deg);
-    filter: brightness(2.6) contrast(1.5)
-      drop-shadow(3px 0 rgba(255, 71, 87, 0.6))
+    filter: brightness(2.6) contrast(1.5) drop-shadow(3px 0 rgba(255, 71, 87, 0.6))
       drop-shadow(-3px 0 rgba(0, 217, 255, 0.6));
   }
   50% {
@@ -376,8 +375,7 @@ html.crt-boot::after {
   }
   54% {
     transform: translate(-4px, 2px);
-    filter: brightness(2.1) saturate(1.8)
-      drop-shadow(-2px 0 rgba(255, 71, 87, 0.5))
+    filter: brightness(2.1) saturate(1.8) drop-shadow(-2px 0 rgba(255, 71, 87, 0.5))
       drop-shadow(2px 0 rgba(0, 217, 255, 0.5));
   }
   59% {
@@ -584,164 +582,5 @@ html.crt-boot::after {
   .cat-heart {
     animation: none;
     opacity: 0;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   TWINGO RACER — full-screen pseudo-3d driving game overlay
-   ═══════════════════════════════════════════════════════════════ */
-
-.racer-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #000;
-  outline: none;
-  touch-action: none;
-}
-
-/* internal buffer upscaled (width set inline per aspect) — crisp pixels */
-.racer-canvas {
-  height: auto;
-  image-rendering: pixelated;
-}
-
-.racer-scanlines {
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0.18) 0 2px,
-    transparent 2px 5px
-  );
-}
-
-.racer-hud {
-  position: absolute;
-  top: 12px;
-  left: 16px;
-  right: 16px;
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: #d7ff9e;
-  text-shadow: 0 0 6px rgba(146, 204, 65, 0.8);
-}
-
-.racer-plate {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #f4f4f4;
-  color: #111;
-  border: 2px solid #111;
-  border-radius: 3px;
-  padding: 2px 8px 2px 2px;
-  font-family: monospace;
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 1px;
-}
-
-.racer-plate-eu {
-  background: #14408a;
-  color: #fff;
-  font-size: 8px;
-  padding: 3px 3px;
-  border-radius: 2px 0 0 2px;
-}
-
-.racer-ready {
-  position: absolute;
-  top: 42%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 16px;
-  color: #ffd75e;
-  text-shadow: 0 0 10px rgba(247, 179, 43, 0.9);
-  animation: racerBlink 0.4s steps(2, jump-none) infinite;
-}
-
-.racer-paused {
-  position: absolute;
-  top: 42%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 12px;
-  color: #d7ff9e;
-  background: rgba(0, 0, 0, 0.7);
-  border: 2px solid #6e8f50;
-  padding: 12px 18px;
-}
-
-.racer-close {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  font-size: 12px;
-  color: #e76e55;
-  background: #1c1a16;
-  border: 2px solid #6e6650;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-
-.racer-close:hover {
-  background: #2a2419;
-  box-shadow: 0 0 8px rgba(231, 110, 85, 0.5);
-}
-
-.racer-touch {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 52px;
-  display: flex;
-  justify-content: space-between;
-  padding: 0 14px;
-  pointer-events: none;
-}
-
-.racer-touch-group {
-  display: flex;
-  gap: 12px;
-  pointer-events: auto;
-}
-
-.racer-touch-btn {
-  width: 64px;
-  height: 56px;
-  font-size: 14px;
-  color: #d7ff9e;
-  background: rgba(13, 31, 10, 0.75);
-  border: 3px solid #6e8f50;
-  cursor: pointer;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.racer-touch-btn:active {
-  background: rgba(146, 204, 65, 0.45);
-  transform: translateY(2px);
-}
-
-@keyframes racerBlink {
-  50% {
-    opacity: 0.25;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .racer-ready {
-    animation: none;
   }
 }
