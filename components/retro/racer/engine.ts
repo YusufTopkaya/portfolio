@@ -715,6 +715,9 @@ function renderSpeedLines(
 export interface RacerEngine {
   update(dt: number, input: RacerInput): void;
   render(ctx: CanvasRenderingContext2D): void;
+  /** re-fit the renderer to a new buffer size (device rotated mid-run):
+      game state is kept, only the prebuilt backdrop layers are rebuilt */
+  resize(width: number, height: number): void;
   state: EngineState;
   trackLength: number;
 }
@@ -733,8 +736,9 @@ export function createEngine(opts: {
   clusterTopLeft?: boolean;
 }): RacerEngine {
   const { segments, roadside, car, gasCan, reduceMotion } = opts;
-  const width = opts.width ?? RACER_WIDTH;
-  const height = opts.height ?? RACER_HEIGHT;
+  // mutable so resize() can re-fit the renderer when the device rotates
+  let width = opts.width ?? RACER_WIDTH;
+  let height = opts.height ?? RACER_HEIGHT;
   const trackLength = segments.length * SEGMENT_LENGTH;
 
   const state: EngineState = {
@@ -784,22 +788,39 @@ export function createEngine(opts: {
   // the car frame (left/right lean)
   let pendingSteer = 0;
 
-  const sky = makeSky(width, Math.round(height * 0.62));
-  const clouds = makeClouds(width, Math.round(height * 0.34), 21);
-  const hillsFar = makeMountains(
-    width,
-    Math.round(height * 0.18),
-    9,
-    "#4a2c50",
-    7,
-  );
-  const hillsNear = makeMountains(
-    width,
-    Math.round(height * 0.13),
-    14,
-    "#33203c",
-    13,
-  );
+  // prebuilt backdrop layers — rebuilt by resize() after a rotation
+  let sky: HTMLCanvasElement;
+  let clouds: HTMLCanvasElement;
+  let hillsFar: HTMLCanvasElement;
+  let hillsNear: HTMLCanvasElement;
+  const buildBackdrop = () => {
+    sky = makeSky(width, Math.round(height * 0.62));
+    clouds = makeClouds(width, Math.round(height * 0.34), 21);
+    hillsFar = makeMountains(
+      width,
+      Math.round(height * 0.18),
+      9,
+      "#4a2c50",
+      7,
+    );
+    hillsNear = makeMountains(
+      width,
+      Math.round(height * 0.13),
+      14,
+      "#33203c",
+      13,
+    );
+  };
+  buildBackdrop();
+
+  function resize(w: number, h: number) {
+    if (w === width && h === height) return;
+    width = w;
+    height = h;
+    // streak vanishing point re-centres; it re-smooths within a few frames
+    vanishX = width / 2;
+    buildBackdrop();
+  }
 
   function findSegment(z: number): Segment {
     return segments[Math.floor(z / SEGMENT_LENGTH) % segments.length];
@@ -1310,7 +1331,7 @@ export function createEngine(opts: {
     }
   }
 
-  return { update, render, state, trackLength };
+  return { update, render, resize, state, trackLength };
 }
 
 export const ENGINE_CONSTANTS = {

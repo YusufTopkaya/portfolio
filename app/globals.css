@@ -612,6 +612,36 @@ html.crt-boot::after {
   }
 }
 
+/* phones held sideways: the viewport is short, so the monitor frame and
+   the touch pedals slim down and leave the glass as much room as possible */
+@media (orientation: landscape) and (max-height: 540px) {
+  .racer-overlay {
+    --racer-bezel-x: 96px;
+    --racer-bezel-y: 48px;
+  }
+
+  .racer-crt {
+    padding: 8px 10px 0;
+    border-radius: 20px;
+  }
+
+  .racer-crt-chin {
+    height: 24px;
+  }
+
+  .racer-touch {
+    bottom: 8px;
+    padding: 0 10px;
+  }
+
+  .racer-touch-btn {
+    width: 48px;
+    height: 40px;
+    font-size: 12px;
+    border-width: 2px;
+  }
+}
+
 /* the CRT monitor itself: chunky plastic shell with rounded corners,
    a shadowed bezel around the glass and a chin with brand + power LED */
 .racer-crt {

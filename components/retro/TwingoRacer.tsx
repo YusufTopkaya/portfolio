@@ -19,6 +19,16 @@ import {
 import { loadCarFrames, loadGasCan, makeRoadside } from "./racer/sprites";
 import { buildTrack } from "./racer/track";
 
+/** render buffer: landscape keeps the native 480×270, portrait phones get
+    a taller buffer so the game fills the screen instead of letterboxing
+    into a thin strip (pixel budget stays ~130k px for performance) */
+function computeBuf(): { w: number; h: number } {
+  const aspect = window.innerWidth / window.innerHeight;
+  return aspect >= 1
+    ? { w: RACER_WIDTH, h: RACER_HEIGHT }
+    : { w: 300, h: Math.min(560, Math.round(300 / aspect)) };
+}
+
 export function TwingoRacer() {
   const [open, setOpen] = useState(false);
   const [intro, setIntro] = useState(false);
@@ -69,13 +79,7 @@ export function TwingoRacer() {
   /* the START buttons dispatch this event */
   useEffect(() => {
     const onStart = () => {
-      const aspect = window.innerWidth / window.innerHeight;
-      setBuf(
-        aspect >= 1
-          ? { w: RACER_WIDTH, h: RACER_HEIGHT }
-          : // keep the pixel budget (~130k px) constant for performance
-            { w: 300, h: Math.min(560, Math.round(300 / aspect)) },
-      );
+      setBuf(computeBuf());
       setOpen(true);
       setIntro(true);
       setCoarse(window.matchMedia("(pointer: coarse)").matches);
@@ -83,6 +87,16 @@ export function TwingoRacer() {
     window.addEventListener("twingo:start", onStart);
     return () => window.removeEventListener("twingo:start", onStart);
   }, []);
+
+  /* rotating the phone mid-run flips the buffer between the landscape and
+     portrait shapes; the engine keeps its state and just re-fits (resize) */
+  useEffect(() => {
+    if (!open) return;
+    const mq = window.matchMedia("(orientation: landscape)");
+    const onFlip = () => setBuf(computeBuf());
+    mq.addEventListener("change", onFlip);
+    return () => mq.removeEventListener("change", onFlip);
+  }, [open]);
 
   /* engine boot + game loop, alive only while the overlay is open */
   // biome-ignore lint/correctness/useExhaustiveDependencies: runId intentionally re-boots the engine when PLAY AGAIN is pressed
@@ -135,6 +149,9 @@ export function TwingoRacer() {
           reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
         });
+      } else {
+        // orientation flipped mid-run: keep the run, re-fit the renderer
+        engineRef.current.resize(buf.w, buf.h);
       }
       raf = requestAnimationFrame(frame);
     })();
