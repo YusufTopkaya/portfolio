@@ -105,7 +105,18 @@ const MAX_SPEED = SEGMENT_LENGTH * 60; // a segment per frame at 60fps
 const ACCEL_KMH = (kmh: number): number =>
   kmh < 100 ? 100 / 16 : kmh < 170 ? 70 / 15 : Math.max(0, (180 - kmh) * 0.2);
 const BRAKING = -MAX_SPEED;
-const DECEL = -MAX_SPEED / 5;
+// hill physics: gravity along the grade under the car, in km/h per second
+// per unit of grade (grade = dy per segment / SEGMENT_LENGTH). The grade
+// is capped at 0.6 so a standstill start on the steepest eased crest can
+// never stall the car outright (max pull 4.8 < 6.25 low-speed throttle)
+const GRAVITY_KMH = 8;
+const GRAVITY_MAX_GRADE = 0.6;
+// coasting drag, proportional to speed (1/s) — a constant coast decel
+// would always overpower gravity; proportional drag is what lets the car
+// gather speed rolling downhill on its own and stall faster facing up.
+// 0.3 matches the old constant decel (-36 km/h/s) at 120 km/h, tapering
+// off at low speed; downhill terminal stays ~9 km/h on a typical grade
+const ROLL_DRAG = 0.3;
 const OFFROAD_DECEL = -MAX_SPEED * 0.75;
 const OFFROAD_LIMIT = MAX_SPEED / 4;
 const CENTRIFUGAL = 0.3;
@@ -846,12 +857,25 @@ export function createEngine(opts: {
     // centrifugal push on curves (Jake Gordon)
     state.playerX -= dx * speedPercent * playerSegment.curve * CENTRIFUGAL;
 
+    // gravity along the grade: negative when the road falls away ahead
+    // (pulls the car forward), positive on a climb (bleeds speed)
+    const grade = Math.max(
+      -GRAVITY_MAX_GRADE,
+      Math.min(
+        GRAVITY_MAX_GRADE,
+        (playerSegment.p2.world.y - playerSegment.p1.world.y) /
+          SEGMENT_LENGTH,
+      ),
+    );
+    const hillForce = ((-GRAVITY_KMH * grade) / 180) * MAX_SPEED;
+
     if (input.gas && state.fuel > 0) {
       // throttle follows the measured km/h curve of the real car
       const kmh = (state.speed / MAX_SPEED) * 180;
       state.speed += (ACCEL_KMH(kmh) / 180) * MAX_SPEED * dt;
     } else if (input.brake) state.speed += BRAKING * dt;
-    else state.speed += DECEL * dt;
+    else state.speed += -state.speed * ROLL_DRAG * dt;
+    state.speed += hillForce * dt;
 
     state.offRoad = state.playerX < -1.1 || state.playerX > 1.1;
     if (state.offRoad && state.speed > OFFROAD_LIMIT) {
@@ -860,6 +884,16 @@ export function createEngine(opts: {
 
     state.playerX = Math.max(-2.2, Math.min(2.2, state.playerX));
     state.speed = Math.max(0, Math.min(MAX_SPEED, state.speed));
+    // rolling drag decays exponentially and would creep forever — snap a
+    // coasting crawl (<2 km/h) to a full stop, but never against a
+    // downhill pull (a parked car on a descent must start rolling)
+    if (
+      (!input.gas || state.fuel <= 0) &&
+      hillForce <= 0 &&
+      state.speed < MAX_SPEED * 0.01
+    ) {
+      state.speed = 0;
+    }
 
     // the tank drains quadratically with speed — cruising fast burns
     // noticeably more fuel; at zero the engine dies and the car coasts
