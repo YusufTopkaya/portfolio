@@ -373,6 +373,9 @@ const SEG_MAP: Record<string, readonly boolean[]> = {
   "9": [true, true, true, true, false, true, true],
 };
 
+/* each segment is drawn as a hexagon with angled ends and a slight italic
+   lean — the way real LCD glass etches its electrodes. Everything snaps
+   to whole buffer pixels so the digits stay crisp when upscaled. */
 function drawSevenSeg(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -383,35 +386,70 @@ function drawSevenSeg(
 ) {
   const seg = SEG_MAP[ch];
   if (!seg) return;
+  // snap the origin first: fractional starts (odd score digits sit at
+  // half-pixels) make the 1px segments round differently per position
+  // and garble the glyph
+  x = Math.round(x);
+  y = Math.round(y);
   const t = Math.max(1, Math.round(size * 0.18));
-  const w = size;
-  const h = size * 2;
+  const w = Math.round(size);
+  const h = Math.round(size * 2);
+  const slant = Math.max(1, Math.round(h * 0.06)); // italic lean, top → right
+  const plot = (pts: [number, number][]) => {
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const [px, py] = pts[i];
+      const lx = Math.round(px + ((y + h - py) / h) * slant);
+      const ry = Math.round(py);
+      if (i === 0) ctx.moveTo(lx, ry);
+      else ctx.lineTo(lx, ry);
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+  // horizontal segment: rows cy-t/2..cy+t/2, columns x..x+w
+  const hseg = (cy: number) =>
+    plot([
+      [x, cy],
+      [x + t / 2, cy - t / 2],
+      [x + w - t / 2, cy - t / 2],
+      [x + w, cy],
+      [x + w - t / 2, cy + t / 2],
+      [x + t / 2, cy + t / 2],
+    ]);
+  // vertical segment: columns cx-t/2..cx+t/2, rows y0..y0+len
+  const vseg = (cx: number, y0: number, len: number) =>
+    plot([
+      [cx, y0],
+      [cx + t / 2, y0 + t / 2],
+      [cx + t / 2, y0 + len - t / 2],
+      [cx, y0 + len],
+      [cx - t / 2, y0 + len - t / 2],
+      [cx - t / 2, y0 + t / 2],
+    ]);
   ctx.fillStyle = color;
-  const rect = (rx: number, ry: number, rw: number, rh: number) =>
-    ctx.fillRect(
-      Math.round(rx),
-      Math.round(ry),
-      Math.round(rw),
-      Math.round(rh),
-    );
-  if (seg[0]) rect(x, y, w, t); // a
-  if (seg[1]) rect(x + w - t, y, t, h / 2); // b
-  if (seg[2]) rect(x + w - t, y + h / 2, t, h / 2); // c
-  if (seg[3]) rect(x, y + h - t, w, t); // d
-  if (seg[4]) rect(x, y + h / 2, t, h / 2); // e
-  if (seg[5]) rect(x, y, t, h / 2); // f
-  if (seg[6]) rect(x, y + h / 2 - t / 2, w, t); // g
+  if (seg[0]) hseg(y + t / 2); // a
+  if (seg[1]) vseg(x + w - t / 2, y, h / 2); // b
+  if (seg[2]) vseg(x + w - t / 2, y + h / 2, h / 2); // c
+  if (seg[3]) hseg(y + h - t / 2); // d
+  if (seg[4]) vseg(x + t / 2, y + h / 2, h / 2); // e
+  if (seg[5]) vseg(x + t / 2, y, h / 2); // f
+  if (seg[6]) hseg(y + h / 2); // g
 }
 
-/* tiny fuel-pump icon + dot gauge, bottom row of the real MK1 cluster.
-   Static by design — the photo shows the first dot lit orange (low fuel) */
+/* tiny fuel-pump icon + live dot gauge, bottom row of the real MK1
+   cluster. One dot lights per gas can collected; when the tank is nearly
+   dry the last lit dot blinks orange, like the photo's low-fuel warning */
 function drawFuelGauge(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   ui: number,
   segColor: string,
-) {
+  fuel: number,
+  time: number,
+  flash: boolean,
+): { x: number; y: number } {
   // pump body
   const bw = 6 * ui;
   const bh = 8 * ui;
