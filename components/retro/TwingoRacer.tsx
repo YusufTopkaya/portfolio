@@ -141,21 +141,33 @@ export function TwingoRacer() {
 
     const onKey = (down: boolean) => (ev: KeyboardEvent) => {
       const k = ev.key.toLowerCase();
+      // map on both ev.key and the layout-independent physical ev.code —
+      // some keyboards drop ev.key repeats under multi-key ghosting while
+      // the physical code still comes through
       const map: Record<string, keyof RacerInput> = {
         arrowleft: "left",
         a: "left",
+        keya: "left",
         arrowright: "right",
         d: "right",
+        keyd: "right",
         arrowup: "gas",
         w: "gas",
+        keyw: "gas",
         arrowdown: "brake",
         s: "brake",
+        keys: "brake",
       };
       if (down && ev.key === "Escape") {
         close();
         return;
       }
-      const input = map[k];
+      // R restarts the run instantly: zero score, zero speed, full tank
+      if (down && (k === "r" || ev.code === "KeyR")) {
+        playAgain();
+        return;
+      }
+      const input = map[k] ?? map[ev.code.toLowerCase()];
       if (!input) return;
       ev.preventDefault();
       keysRef.current[input] = down;
@@ -165,9 +177,19 @@ export function TwingoRacer() {
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
 
-    // auto-pause when the tab loses focus/visibility
+    // auto-pause when the tab loses focus/visibility — and drop every
+    // held key, so a keyup lost while unfocused can't leave the
+    // throttle stuck on (or silently off) when the tab returns
     const autoPause = () => {
-      if (document.hidden || !document.hasFocus()) setPaused(true);
+      if (document.hidden || !document.hasFocus()) {
+        keysRef.current = {
+          left: false,
+          right: false,
+          gas: false,
+          brake: false,
+        };
+        setPaused(true);
+      }
     };
     document.addEventListener("visibilitychange", autoPause);
     window.addEventListener("blur", autoPause);
