@@ -72,7 +72,6 @@ export function RetroStockComputer() {
       <div
         id="retro-ticker-bar"
         className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-3 md:hidden"
-        aria-hidden="true"
         style={{
           height: 44,
           background: "linear-gradient(180deg, #0d1f0a 0%, #050d04 100%)",
@@ -80,7 +79,28 @@ export function RetroStockComputer() {
           fontFamily: "var(--font-press-start), monospace",
         }}
       >
-        <span style={{ fontSize: 7, color: "#6e8f50" }}>YT-88</span>
+        <div className="flex items-center gap-2">
+          <span style={{ fontSize: 7, color: "#6e8f50" }}>YT-88</span>
+          <button
+            type="button"
+            id="ticker-start-btn"
+            onClick={() =>
+              window.dispatchEvent(new CustomEvent("twingo:start"))
+            }
+            aria-label="Start the Twingo racer game"
+            className="cursor-pointer"
+            style={{
+              fontSize: 7,
+              color: "#92cc41",
+              background: "transparent",
+              border: "1px solid #6e8f50",
+              padding: "2px 6px",
+              fontFamily: "inherit",
+            }}
+          >
+            START
+          </button>
+        </div>
         <span
           style={{
             fontSize: 9,
@@ -108,7 +128,6 @@ export function RetroStockComputer() {
       <div
         id="retro-crt-pc"
         className="fixed bottom-3 left-3 z-50 hidden flex-col items-center select-none md:flex"
-        aria-hidden="true"
       >
         {/* CRT monitor */}
         <div
@@ -224,12 +243,37 @@ export function RetroStockComputer() {
               )}
             </div>
           </div>
-          {/* monitor branding strip + real power button */}
+          {/* monitor branding strip + real power button; PLAY sits dead
+              centre regardless of the corner items' widths */}
           <div
-            className="mt-1 flex items-center justify-between px-1"
-            style={{ fontFamily: "var(--font-press-start), monospace" }}
+            className="relative mt-1 flex items-center justify-between px-1"
+            style={{
+              fontFamily: "var(--font-press-start), monospace",
+              // the centred PLAY button is out of flow; keep the strip's height
+              minHeight: 14,
+            }}
           >
             <span style={{ fontSize: 6, color: "#6e6650" }}>YT-88</span>
+            <button
+              type="button"
+              id="crt-start-btn"
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("twingo:start"))
+              }
+              aria-label="Play the Twingo racer game"
+              className="absolute left-1/2 -translate-x-1/2 cursor-pointer"
+              style={{
+                fontSize: 6,
+                color: "#92cc41",
+                background: "#1c1a16",
+                border: "1px solid #6e6650",
+                padding: "2px 7px",
+                fontFamily: "inherit",
+                textShadow: "0 0 4px rgba(146,204,65,0.8)",
+              }}
+            >
+              ▶ PLAY
+            </button>
             <button
               type="button"
               onClick={toggleScreen}
