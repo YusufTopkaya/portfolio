@@ -239,14 +239,30 @@ export function TwingoRacer() {
       onClick={() => paused && setPaused(false)}
       onKeyDown={() => paused && setPaused(false)}
     >
-      <canvas
-        ref={canvasRef}
-        width={buf.w}
-        height={buf.h}
-        className="racer-canvas"
-        style={{ width: `min(100vw, calc(100vh * ${buf.w / buf.h}))` }}
-      />
-      <div className="racer-scanlines" aria-hidden="true" />
+      <div className="racer-crt">
+        <div className="racer-screen">
+          <canvas
+            ref={canvasRef}
+            width={buf.w}
+            height={buf.h}
+            className="racer-canvas"
+            style={{
+              width: `min(calc(100vw - var(--racer-bezel-x)), calc((100vh - var(--racer-bezel-y)) * ${buf.w / buf.h}))`,
+            }}
+          />
+          {/* glass effects live ON the screen: scanlines, corner vignette,
+              hazy CRT grain creeping in from the bezel edges, and a faint
+              diagonal glare */}
+          <div className="racer-scanlines" aria-hidden="true" />
+          <div className="racer-vignette" aria-hidden="true" />
+          <div className="racer-grain" aria-hidden="true" />
+          <div className="racer-glare" aria-hidden="true" />
+        </div>
+        <div className="racer-crt-chin" aria-hidden="true">
+          <span className="racer-crt-brand font-pixel">TWINGO-427</span>
+          <span className="racer-crt-led" />
+        </div>
+      </div>
 
       {/* no DOM HUD — speed and score live on the in-canvas LCD cluster */}
 
