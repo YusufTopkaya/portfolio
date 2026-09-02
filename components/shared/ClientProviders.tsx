@@ -1,6 +1,7 @@
 "use client";
 
 import { ThemeProvider as NextThemesProvider } from "next-themes";
+import { RetroBackground } from "@/components/retro/RetroBackground";
 import { RetroBootEffect } from "@/components/retro/RetroBootEffect";
 import { RetroStockComputer } from "@/components/retro/RetroStockComputer";
 import { ContentProtection } from "@/components/shared/ContentProtection";
@@ -22,6 +23,7 @@ export function ClientProviders({ children }: ClientProvidersProps) {
       >
         {children}
         <ContentProtection />
+        <RetroBackground />
         <RetroBootEffect />
         <RetroStockComputer />
       </NextThemesProvider>
