@@ -85,6 +85,20 @@ export default function RootLayout({
           as="image"
           type="image/webp"
         />
+        {/* Preload the cat sprite sheet so the CRT cat renders instantly */}
+        <link
+          rel="preload"
+          href="/images/cat-sprite.png"
+          as="image"
+          type="image/png"
+        />
+        {/* Preload the portal sprite sheet for the cat teleport entrance */}
+        <link
+          rel="preload"
+          href="/images/portal-sprite.png"
+          as="image"
+          type="image/png"
+        />
         {/* Preconnect to external domains for faster resource loading */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link

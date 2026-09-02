@@ -3,6 +3,7 @@
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { RetroBackground } from "@/components/retro/RetroBackground";
 import { RetroBootEffect } from "@/components/retro/RetroBootEffect";
+import { RetroCat } from "@/components/retro/RetroCat";
 import { RetroStockComputer } from "@/components/retro/RetroStockComputer";
 import { ContentProtection } from "@/components/shared/ContentProtection";
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
@@ -24,6 +25,7 @@ export function ClientProviders({ children }: ClientProvidersProps) {
         {children}
         <ContentProtection />
         <RetroBackground />
+        <RetroCat />
         <RetroBootEffect />
         <RetroStockComputer />
       </NextThemesProvider>
