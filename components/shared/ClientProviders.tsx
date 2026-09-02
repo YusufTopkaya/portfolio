@@ -5,6 +5,7 @@ import { RetroBackground } from "@/components/retro/RetroBackground";
 import { RetroBootEffect } from "@/components/retro/RetroBootEffect";
 import { RetroCat } from "@/components/retro/RetroCat";
 import { RetroStockComputer } from "@/components/retro/RetroStockComputer";
+import { TwingoRacer } from "@/components/retro/TwingoRacer";
 import { ContentProtection } from "@/components/shared/ContentProtection";
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
 
@@ -28,6 +29,7 @@ export function ClientProviders({ children }: ClientProvidersProps) {
         <RetroCat />
         <RetroBootEffect />
         <RetroStockComputer />
+        <TwingoRacer />
       </NextThemesProvider>
     </ErrorBoundary>
   );
