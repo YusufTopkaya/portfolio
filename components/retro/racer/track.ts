@@ -32,7 +32,7 @@ function mulberry32(seed: number): () => number {
 }
 
 const CURVES = { easy: 2, medium: 4, hard: 6 } as const;
-const HILLS = { low: 20, medium: 40, high: 60 } as const; // world y units
+const HILLS = { low: 20, medium: 40, high: 60 } as const; // × SEGMENT_LENGTH (Jake Gordon's ROAD.HILL)
 
 interface Built {
   segments: Segment[];
@@ -51,7 +51,9 @@ export function buildTrack(seed = 427): Built {
     prevY = y;
   };
 
-  /** Jake Gordon's addRoad: height eases in over `enter`, holds, eases out */
+  /** Jake Gordon's addRoad: height eases in over `enter`, holds, eases out.
+      dy is in segmentLength units, exactly like the reference:
+      endY = startY + y * segmentLength (LOW/MEDIUM/HIGH = 20/40/60) */
   const addRoad = (
     enter: number,
     hold: number,
@@ -60,7 +62,7 @@ export function buildTrack(seed = 427): Built {
     dy: number,
   ) => {
     const startY = lastY;
-    const endY = startY + dy;
+    const endY = startY + dy * SEGMENT_LENGTH;
     const total = enter + hold + leave;
     for (let n = 0; n < enter; n++) {
       addSegment(
@@ -78,6 +80,16 @@ export function buildTrack(seed = 427): Built {
       );
     }
     lastY = endY;
+  };
+
+  /** Jake Gordon's addLowRollingHills, verbatim from the v3-hills article */
+  const addLowRollingHills = (num: number, height: number) => {
+    addRoad(num, num, num, 0, height / 2);
+    addRoad(num, num, num, 0, -height);
+    addRoad(num, num, num, 0, height);
+    addRoad(num, num, num, 0, 0);
+    addRoad(num, num, num, 0, height / 2);
+    addRoad(num, num, num, 0, 0);
   };
 
   const curveVals = [CURVES.easy, CURVES.medium, CURVES.hard];
@@ -105,17 +117,23 @@ export function buildTrack(seed = 427): Built {
       addRoad(25, 30 + Math.floor(rng() * 40), 25, curve, dy);
       side = -side;
     } else if (kind < 0.75) {
-      // hill section (gentle curve or none)
-      const dy = hillVals[1 + Math.floor(rng() * (hillVals.length - 1))];
-      addRoad(25, 20 + Math.floor(rng() * 30), 25, 0, dy);
+      // hill section: some are single eased climbs, some are the article's
+      // low rolling hills (gentle curve or none either way)
+      if (rng() < 0.4) {
+        addLowRollingHills(25, rng() > 0.5 ? HILLS.low : -HILLS.low);
+      } else {
+        const dy = hillVals[1 + Math.floor(rng() * (hillVals.length - 1))];
+        addRoad(25, 20 + Math.floor(rng() * 30), 25, 0, dy);
+      }
     } else {
       // breather straight
       addRoad(20, 30 + Math.floor(rng() * 40), 20, 0, 0);
     }
   }
 
-  // return home: flatten the road for a seamless loop
-  if (lastY !== 0) addRoad(30, 20, 30, 0, -lastY);
+  // return home: flatten the road for a seamless loop (lastY is in world
+  // units, addRoad's dy is in segmentLength units — convert back)
+  if (lastY !== 0) addRoad(30, 20, 30, 0, -lastY / SEGMENT_LENGTH);
   addRoad(60, 60, 60, 0, 0);
 
   // ── roadside objects: deterministic placement, alternating sides ──

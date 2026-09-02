@@ -909,8 +909,9 @@ export function createEngine(opts: {
     state.score += ((kmh * dt) / 3.6) * state.multiplier;
 
     // horizon drifts opposite the current curve, faster with speed
-    skyOffset += playerSegment.curve * speedPercent * dt * 2.5;
-    hillOffset += playerSegment.curve * speedPercent * dt * 5;
+    // (rates eased 30% down from Jake's 2.5/5 — gentler mountain parallax)
+    skyOffset += playerSegment.curve * speedPercent * dt * 1.75;
+    hillOffset += playerSegment.curve * speedPercent * dt * 3.5;
   }
 
   function render(ctx: CanvasRenderingContext2D) {
@@ -926,12 +927,21 @@ export function createEngine(opts: {
     );
 
     // ── background ──
-    // horizon bobs with the hill under the camera (Lou's hill trick)
-    const horizonShift = Math.max(
-      -height * 0.12,
-      Math.min(height * 0.12, playerY * 0.02),
-    );
-    ctx.drawImage(sky, 0, -horizonShift * 0.3);
+    // each layer rides the hills vertically at its own parallax speed
+    // (Jake Gordon v3/final: resolution * layerSpeed * playerY, with
+    // resolution = height/480 — sky slowest, near hills fastest)
+    const resolution = height / 480;
+    const skyShiftY = resolution * 0.001 * playerY;
+    const cloudShiftY = resolution * 0.0015 * playerY;
+    const farShiftY = resolution * 0.002 * playerY;
+    const nearShiftY = resolution * 0.003 * playerY;
+    // downhill peeks a strip of void above the sky image — fill it with
+    // the sky's own top colour
+    if (skyShiftY > 0) {
+      ctx.fillStyle = "#1a1c3f";
+      ctx.fillRect(0, 0, width, Math.ceil(skyShiftY));
+    }
+    ctx.drawImage(sky, 0, -skyShiftY);
 
     const drawBand = (
       img: HTMLCanvasElement,
@@ -939,22 +949,29 @@ export function createEngine(opts: {
       yBase: number,
     ) => {
       const x = -(((offset % width) + width) % width);
-      ctx.drawImage(img, x, yBase - horizonShift);
-      ctx.drawImage(img, x + width, yBase - horizonShift);
+      ctx.drawImage(img, x, yBase);
+      ctx.drawImage(img, x + width, yBase);
     };
-    const horizonY = Math.round(height / 2 - horizonShift);
+    const horizonY = Math.round(height / 2 - farShiftY);
     // clouds: the farthest layer — slowest curve parallax of all, plus a
     // gentle autonomous drift so the sunset sky is never static
     const cloudDrift = skyOffset * width * 0.05 + state.time * width * 0.006;
     const cloudX = -(((cloudDrift % width) + width) % width);
-    const cloudY = Math.round(height * 0.05 - horizonShift * 0.3);
+    const cloudY = Math.round(height * 0.05 - cloudShiftY);
     ctx.drawImage(clouds, cloudX, cloudY);
     ctx.drawImage(clouds, cloudX + width, cloudY);
     drawBand(hillsFar, skyOffset * width * 0.12, horizonY - hillsFar.height);
-    drawBand(hillsNear, hillOffset * width * 0.08, horizonY - hillsNear.height);
+    drawBand(
+      hillsNear,
+      hillOffset * width * 0.08,
+      Math.round(height / 2 - nearShiftY) - hillsNear.height,
+    );
 
     // ── road ──
     let maxY = height;
+    // grass colour of the farthest line drawn — the crest gap-fill must
+    // continue exactly the shade the ground ended with
+    let farGrass = COLORS.dark.grass;
     let x = 0;
     let dx = -(baseSegment.curve * basePercent);
     const cameraZBase = state.position;
@@ -997,11 +1014,22 @@ export function createEngine(opts: {
         segment.color,
       );
       maxY = segment.p2.screen.y;
+      farGrass = segment.color.grass;
 
       if (n === 0) {
         roadNearX = segment.p2.screen.x;
         roadNearW = segment.p2.screen.w;
       }
+    }
+
+    // crest gap-fill: when the road drops away behind a hill its farthest
+    // line (maxY) can hang well below the mountain bases, leaving a raw
+    // sky strip between the hills and the ground — bridge it with grass.
+    // Sky only shows below BOTH band bases, so start at the lower one.
+    const groundTop = Math.round(height / 2 - Math.min(farShiftY, nearShiftY));
+    if (maxY > groundTop) {
+      ctx.fillStyle = farGrass;
+      ctx.fillRect(0, groundTop, width, maxY - groundTop);
     }
 
     // ── roadside sprites, far to near (painter's algorithm; Lou: keep
@@ -1115,10 +1143,12 @@ export function createEngine(opts: {
     // ── player car ──
     const steer = state.speed > MAX_SPEED * 0.02;
     let frame = car.straight;
-    // slope frames on hills (dy under the car), steer frames when turning
+    // slope frames on hills (dy under the car), steer frames when turning;
+    // the threshold only engages on pronounced slopes now that hills are
+    // full Jake Gordon height (a LOW rolling hill peaks ~80 world/segment)
     const dy = playerSegment.p2.world.y - playerSegment.p1.world.y;
-    if (dy > SEGMENT_LENGTH * 0.12) frame = car.up;
-    else if (dy < -SEGMENT_LENGTH * 0.12) frame = car.down;
+    if (dy > SEGMENT_LENGTH * 0.35) frame = car.up;
+    else if (dy < -SEGMENT_LENGTH * 0.35) frame = car.down;
     if (steer) {
       // actual steering intent wins over slope
       if (pendingSteer < -0.1) frame = car.left;
