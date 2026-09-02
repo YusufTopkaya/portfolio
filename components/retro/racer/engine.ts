@@ -99,10 +99,10 @@ const FIELD_OF_VIEW = 100; // degrees
 const CAMERA_DEPTH = 1 / Math.tan(((FIELD_OF_VIEW / 2) * Math.PI) / 180);
 const PLAYER_Z = CAMERA_HEIGHT * CAMERA_DEPTH;
 const MAX_SPEED = SEGMENT_LENGTH * 60; // a segment per frame at 60fps
-// semi-realistic pull: dv/dt = rate * (1 - v/vmax), i.e. strong off the
-// line, tapering out near top speed. rate 0.135 → 0-100 km/h in ~6 s
-// against the 180 km/h top speed (v(t) = vmax * (1 - e^(-0.135t)))
-const ACCEL_RATE = 0.135;
+// real Twingo pace, in km/h per second of throttle: 0-100 km/h in ~16 s,
+// 100-170 in another ~15 s, then it wheezes toward the 180 km/h ceiling
+const ACCEL_KMH = (kmh: number): number =>
+  kmh < 100 ? 100 / 16 : kmh < 170 ? 70 / 15 : Math.max(0, (180 - kmh) * 0.2);
 const BRAKING = -MAX_SPEED;
 const DECEL = -MAX_SPEED / 5;
 const OFFROAD_DECEL = -MAX_SPEED * 0.75;
@@ -709,8 +709,9 @@ export function createEngine(opts: {
     state.playerX -= dx * speedPercent * playerSegment.curve * CENTRIFUGAL;
 
     if (input.gas) {
-      state.speed +=
-        MAX_SPEED * ACCEL_RATE * (1 - state.speed / MAX_SPEED) * dt;
+      // throttle follows the measured km/h curve of the real car
+      const kmh = (state.speed / MAX_SPEED) * 180;
+      state.speed += (ACCEL_KMH(kmh) / 180) * MAX_SPEED * dt;
     } else if (input.brake) state.speed += BRAKING * dt;
     else state.speed += DECEL * dt;
 
