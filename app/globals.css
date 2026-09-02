@@ -620,18 +620,6 @@ html.crt-boot::after {
   );
 }
 
-.racer-hud {
-  position: absolute;
-  top: 12px;
-  left: 16px;
-  right: 16px;
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: #d7ff9e;
-  text-shadow: 0 0 6px rgba(146, 204, 65, 0.8);
-}
-
 .racer-ready {
   position: absolute;
   top: 42%;

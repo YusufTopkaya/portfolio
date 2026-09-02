@@ -1,14 +1,16 @@
 /**
  * Sprite loading for the Twingo racer.
  *
- * The Twingo MK1 sheet (public/images/twingo-sprite.png) has a black
- * background, so it is keyed to transparency at load time by flood-filling
- * the near-black pixels INWARD FROM THE SHEET EDGES: only black connected
- * to the border becomes transparent, so dark interior areas (windows,
- * shadows between body panels) stay opaque and the road never shows
- * through the car. Frames are then cropped by a rect table measured with a
- * projection-profile scan of the sheet. Layout: band 0 = straight rear
- * view in 4 sizes, band 1 = slight-left 3/4 view, band 2 = slight-right
+ * The Twingo MK1 sheet (public/images/twingo-sheet-white.png, the civilian
+ * rear-view sheet) has a WHITE background, so it is keyed to transparency
+ * at load time by flood-filling the near-white pixels INWARD FROM THE
+ * SHEET EDGES. White keying is what keeps the car whole: the black body
+ * outlines, door seams and window trim are all darker than the key
+ * threshold and survive, so no panel gaps show the road through. Any
+ * remaining interior speckle is inpainted with averaged neighbour colours
+ * (fillInteriorHoles). Frames are cropped by a rect table measured with a
+ * connected-component scan of the sheet. Layout: row 0 = straight rear
+ * view in 4 sizes, row 1 = slight-left 3/4 view, row 2 = slight-right
  * 3/4 view. No slope frames exist on the sheet, so up/down reuse the
  * straight rear view. Smoke puffs stay procedural (not on the sheet).
  *
@@ -21,18 +23,19 @@
 
 import type { CarFrame, CarFrames, RoadsideSprite } from "./engine";
 
-const SHEET_URL = "/images/twingo-sprite.png";
+const SHEET_URL = "/images/twingo-sheet-white.png";
 
-/* frame rects in sheet pixels, measured via projection profiles */
+/* frame rects in sheet pixels, measured via a connected-component scan
+   (largest component of each row; the sheet's text labels stay outside) */
 const FRAMES = {
-  straight: { x: 105, y: 0, w: 392, h: 306 },
-  left: { x: 43, y: 334, w: 499, h: 285 },
-  right: { x: 60, y: 656, w: 468, h: 293 },
-  up: { x: 105, y: 0, w: 392, h: 306 },
-  down: { x: 105, y: 0, w: 392, h: 306 },
+  straight: { x: 115, y: 98, w: 352, h: 288 },
+  left: { x: 60, y: 458, w: 453, h: 268 },
+  right: { x: 89, y: 790, w: 401, h: 247 },
+  up: { x: 115, y: 98, w: 352, h: 288 },
+  down: { x: 115, y: 98, w: 352, h: 288 },
 };
 
-function keyBlackToAlpha(img: HTMLImageElement): HTMLCanvasElement {
+function keyWhiteToAlpha(img: HTMLImageElement): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = img.naturalWidth;
   c.height = img.naturalHeight;
@@ -43,13 +46,13 @@ function keyBlackToAlpha(img: HTMLImageElement): HTMLCanvasElement {
   const px = data.data;
   const w = c.width;
   const h = c.height;
-  const isBlack = (p: number) =>
-    px[p * 4] + px[p * 4 + 1] + px[p * 4 + 2] <= 60;
-  // flood fill from the borders: only exterior-connected black is keyed out
+  const isWhite = (p: number) =>
+    px[p * 4] + px[p * 4 + 1] + px[p * 4 + 2] >= 700;
+  // flood fill from the borders: only exterior-connected white is keyed out
   const seen = new Uint8Array(w * h);
   const stack: number[] = [];
   const seed = (p: number) => {
-    if (!seen[p] && isBlack(p)) {
+    if (!seen[p] && isWhite(p)) {
       seen[p] = 1;
       stack.push(p);
     }
@@ -269,7 +272,7 @@ function drawSmoke(seedOffset: number): HTMLCanvasElement {
 export async function loadCarFrames(): Promise<CarFrames> {
   try {
     const img = await loadImage(SHEET_URL);
-    const sheet = keyBlackToAlpha(img);
+    const sheet = keyWhiteToAlpha(img);
     const smoke = [0, 1, 2].map((i) => {
       const image = drawSmoke(i);
       return { image, w: image.width, h: image.height };

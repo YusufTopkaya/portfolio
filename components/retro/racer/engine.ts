@@ -403,12 +403,75 @@ function drawSevenSeg(
   if (seg[6]) rect(x, y + h / 2 - t / 2, w, t); // g
 }
 
+/* tiny fuel-pump icon + dot gauge, bottom row of the real MK1 cluster.
+   Static by design — the photo shows the first dot lit orange (low fuel) */
+function drawFuelGauge(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  ui: number,
+  segColor: string,
+) {
+  // pump body
+  const bw = 6 * ui;
+  const bh = 8 * ui;
+  ctx.fillStyle = segColor;
+  ctx.fillRect(
+    Math.round(x),
+    Math.round(y - bh),
+    Math.round(bw),
+    Math.round(bh),
+  );
+  // pump screen (LCD-coloured cutout)
+  ctx.fillStyle = "#a7c57d";
+  ctx.fillRect(
+    Math.round(x + 1.2 * ui),
+    Math.round(y - bh + 1.2 * ui),
+    Math.max(1, Math.round(bw - 2.4 * ui)),
+    Math.max(1, Math.round(2.2 * ui)),
+  );
+  // hose out the right side
+  ctx.fillStyle = segColor;
+  ctx.fillRect(
+    Math.round(x + bw),
+    Math.round(y - bh + 1 * ui),
+    Math.max(1, Math.round(1.4 * ui)),
+    Math.max(1, Math.round(4 * ui)),
+  );
+
+  // gauge dots: first one lit orange like the photo, the rest empty rings
+  const dots = 8;
+  const r = Math.max(1, 1.5 * ui);
+  const step = 3.6 * ui;
+  const dotsX = x + bw + 6 * ui;
+  const dotsY = y - r;
+  for (let i = 0; i < dots; i++) {
+    const cx = dotsX + i * step;
+    ctx.beginPath();
+    ctx.arc(cx, dotsY, r, 0, Math.PI * 2);
+    if (i === 0) {
+      ctx.fillStyle = "#e2703a";
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = segColor;
+      ctx.lineWidth = Math.max(1, 0.7 * ui);
+      ctx.stroke();
+    }
+  }
+
+  // "1/2" above the middle dot, "1" above the last — like the real panel
+  ctx.fillStyle = segColor;
+  ctx.font = `${Math.round(4.5 * ui)}px monospace`;
+  ctx.fillText("1/2", dotsX + 3 * step - 3 * ui, dotsY - 3.2 * ui);
+  ctx.fillText("1", dotsX + 7 * step, dotsY - 3.2 * ui);
+}
+
 function renderCluster(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   kmh: number,
-  tripKm: number,
+  score: number,
   topLeft = false,
 ) {
   const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
@@ -460,19 +523,28 @@ function renderCluster(
     digitsY + size * 2,
   );
 
-  // small trip counter, top right (the "658" on the real cluster)
+  // top-right readout counts the SCORE (where the real cluster shows trip)
   const tSize = 5 * ui;
   const tGap = 1.5 * ui;
   const tW = tSize + tGap;
-  const trip = String(Math.min(9999, Math.floor(tripKm))).padStart(4, " ");
-  const tripX = x0 + pw - pad - Math.round(7 * ui) - 4 * tW;
-  const tripY = y0 + pad + Math.round(4 * ui);
-  for (let i = 0; i < 4; i++) {
-    drawSevenSeg(ctx, tripX + i * tW, tripY, tSize, "8", ghostColor);
-    if (trip[i] !== " ") {
-      drawSevenSeg(ctx, tripX + i * tW, tripY, tSize, trip[i], segColor);
+  const scoreText = String(Math.min(99999, Math.floor(score))).padStart(5, " ");
+  const scoreX = x0 + pw - pad - Math.round(7 * ui) - 5 * tW;
+  const scoreY = y0 + pad + Math.round(4 * ui);
+  for (let i = 0; i < 5; i++) {
+    drawSevenSeg(ctx, scoreX + i * tW, scoreY, tSize, "8", ghostColor);
+    if (scoreText[i] !== " ") {
+      drawSevenSeg(ctx, scoreX + i * tW, scoreY, tSize, scoreText[i], segColor);
     }
   }
+
+  // static fuel gauge, bottom row (below the km/h legend)
+  drawFuelGauge(
+    ctx,
+    digitsX + 3 * digitW + 2 * ui,
+    y0 + ph - pad - 3 * ui,
+    ui,
+    segColor,
+  );
 }
 
 /* anime-style speed streaks hugging the road edges: each streak lies on a
@@ -730,28 +802,39 @@ export function createEngine(opts: {
         roadNearW = segment.p2.screen.w;
       }
 
-      // potholes & oil slicks lie flat on the tarmac of their segment
+      // potholes & oil slicks lie flat on the tarmac of their segment.
+      // rounded to whole pixels and floored to a readable minimum size —
+      // sub-pixel heights are what made them shimmer at speed
       if (segment.hazard) {
         const hs = segment.p1.screen;
-        const hx =
-          hs.x + hs.scale * segment.hazard.x * ROAD_WIDTH * (width / 2);
-        const hw = hs.scale * 0.26 * ROAD_WIDTH * (width / 2);
-        const hh = Math.max(1, hw * 0.26);
-        const hy = hs.y - hh;
+        const hx = Math.round(
+          hs.x + hs.scale * segment.hazard.x * ROAD_WIDTH * (width / 2),
+        );
+        const hw = Math.max(
+          3,
+          Math.round(hs.scale * 0.3 * ROAD_WIDTH * (width / 2)),
+        );
+        const hh = Math.max(2, Math.round(hw * 0.3));
+        const hy = Math.round(hs.y) - hh;
+        // pale warning ring so the hazard reads against grey tarmac
+        ctx.beginPath();
+        ctx.ellipse(hx, hy, hw + 1, hh + 1, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(232,232,232,0.5)";
+        ctx.fill();
         ctx.beginPath();
         ctx.ellipse(hx, hy, hw, hh, 0, 0, Math.PI * 2);
         if (segment.hazard.kind === "pothole") {
-          ctx.fillStyle = "#17171b";
+          ctx.fillStyle = "#101014";
           ctx.fill();
           // crumbled lighter rim on the near edge
           ctx.beginPath();
           ctx.ellipse(hx, hy + hh * 0.55, hw * 0.9, hh * 0.35, 0, 0, Math.PI);
-          ctx.strokeStyle = "#3d3d44";
-          ctx.lineWidth = Math.max(1, hh * 0.3);
+          ctx.strokeStyle = "#4a4a52";
+          ctx.lineWidth = Math.max(1, hh * 0.4);
           ctx.stroke();
         } else {
-          // oil slick: dark blue-black with a glossy streak
-          ctx.fillStyle = "#101018";
+          // oil slick: blue-black with a glossy streak
+          ctx.fillStyle = "#0c0c14";
           ctx.fill();
           ctx.beginPath();
           ctx.ellipse(
@@ -763,7 +846,7 @@ export function createEngine(opts: {
             0,
             Math.PI * 2,
           );
-          ctx.fillStyle = "rgba(90,90,140,0.55)";
+          ctx.fillStyle = "rgba(120,120,180,0.7)";
           ctx.fill();
         }
       }
@@ -912,7 +995,7 @@ export function createEngine(opts: {
       width,
       height,
       speedPercent * 180,
-      state.distanceKm,
+      state.score,
       opts.clusterTopLeft,
     );
   }

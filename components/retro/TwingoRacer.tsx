@@ -19,12 +19,6 @@ import {
 import { loadCarFrames, makeRoadside } from "./racer/sprites";
 import { buildTrack } from "./racer/track";
 
-function formatTime(t: number): string {
-  const m = Math.floor(t / 60);
-  const s = Math.floor(t % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export function TwingoRacer() {
   const [open, setOpen] = useState(false);
   const [intro, setIntro] = useState(false);
@@ -44,8 +38,6 @@ export function TwingoRacer() {
     gas: false,
     brake: false,
   });
-  const scoreRef = useRef<HTMLSpanElement>(null);
-  const timeRef = useRef<HTMLSpanElement>(null);
 
   pausedRef.current = paused;
 
@@ -99,16 +91,6 @@ export function TwingoRacer() {
       if (e && !pausedRef.current) {
         e.update(dt, keysRef.current);
         e.render(ctx);
-        // HUD via direct DOM writes — no 60fps React re-renders
-        // (speed lives on the in-canvas LCD cluster, not in the DOM)
-        if (scoreRef.current) {
-          const s = Math.round(e.state.score);
-          scoreRef.current.textContent =
-            e.state.multiplier > 1 ? `${s} ×${e.state.multiplier}` : String(s);
-        }
-        if (timeRef.current) {
-          timeRef.current.textContent = formatTime(e.state.time);
-        }
       }
       raf = requestAnimationFrame(frame);
     };
@@ -219,15 +201,7 @@ export function TwingoRacer() {
       />
       <div className="racer-scanlines" aria-hidden="true" />
 
-      {/* HUD — speed is on the canvas LCD cluster; DOM keeps score + time */}
-      <div className="racer-hud font-pixel" aria-hidden="true">
-        <span>
-          SCORE <span ref={scoreRef}>0</span>
-        </span>
-        <span>
-          TIME <span ref={timeRef}>0:00</span>
-        </span>
-      </div>
+      {/* no DOM HUD — speed and score live on the in-canvas LCD cluster */}
 
       {intro && (
         <div className="racer-ready font-pixel" aria-hidden="true">
