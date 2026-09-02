@@ -15,10 +15,7 @@ export function RetroBootEffect() {
   useEffect(() => {
     const html = document.documentElement;
     html.classList.add("crt-boot");
-    const timer = setTimeout(
-      () => html.classList.remove("crt-boot"),
-      BOOT_DURATION_MS,
-    );
+    const timer = setTimeout(() => html.classList.remove("crt-boot"), BOOT_DURATION_MS);
     return () => {
       clearTimeout(timer);
       html.classList.remove("crt-boot");

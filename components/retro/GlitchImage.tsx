@@ -107,12 +107,7 @@ export function GlitchImage({ src, alt }: GlitchImageProps) {
     >
       {height === 0 ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={src}
-          alt=""
-          aria-hidden="true"
-          className="h-full w-full object-cover"
-        />
+        <img src={src} alt="" aria-hidden="true" className="h-full w-full object-cover" />
       ) : (
         Array.from({ length: SLICE_COUNT }, (_, i) => {
           const center = (i + 0.5) / SLICE_COUNT;
