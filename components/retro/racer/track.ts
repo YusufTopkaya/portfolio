@@ -84,11 +84,12 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
       }
     }
 
-    // gas cans on the tarmac: sparse enough that fuel management stays a
-    // real concern. Every 10th can is BIG — worth 2 gauge dots, drawn
+    // gas cans on the tarmac: spaced ~8-15 s of driving apart, so a tank
+    // (the run's death clock) only stretches when the driver goes and
+    // gets them. Every 10th can is BIG — worth 2 gauge dots, drawn
     // larger, and it resists scarcity hiding at half rate (see engine)
     if (i >= nextCanAt) {
-      nextCanAt = i + 120 + Math.floor(rng() * 180);
+      nextCanAt = i + 240 + Math.floor(rng() * 210);
       seg.pickup = {
         x: rng() * 1.4 - 0.7,
         big: canOrdinal % 10 === 9,

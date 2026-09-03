@@ -137,14 +137,18 @@ const SHIFT_TIME = 0.28;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank drains quadratically with speed: full throttle burns a dot
-// in ~6.7 s, gentle cruising sips. Idle burn is non-trivial on purpose —
-// standing still must never be a viable fuel-saving strategy
-const FUEL_DRAIN_IDLE = 0.04; // gauge dots per second at a standstill
+// in ~5 s, gentle cruising in ~14 s. Idle burn is non-trivial on purpose —
+// standing still must never be a viable fuel-saving strategy; the tank is
+// the run's death clock (~70-115 s depending on pace, cans buy more time)
+const FUEL_DRAIN_IDLE = 0.06; // gauge dots per second at a standstill
 // extra dots per second at full speed — applied quadratically
 // (speedPercent²). Kept shallow so the fuel-economy optimum sits near
-// ~110 km/h instead of a crawl: (IDLE+SPEED·p²)/p is minimized at
+// ~118 km/h instead of a crawl: (IDLE+SPEED·p²)/p is minimized at
 // p = sqrt(IDLE/SPEED)
-const FUEL_DRAIN_SPEED = 0.11;
+const FUEL_DRAIN_SPEED = 0.14;
+// km driven per difficulty level — every step sharpens curves, steepens
+// hills and pushes the gas cans wider (see curveGain/hillGain/canSpread)
+const LEVEL_EVERY_KM = 2;
 const FAR_OFFROAD = 2.0; // |playerX| at/above this = stranded past the trees
 const LANES = 3;
 
@@ -208,6 +212,8 @@ export interface EngineState {
   braking: boolean;
   /** camera: behind the car or through the windshield */
   view: RacerView;
+  /** distance-based difficulty level — 1 at the start, +1 per LEVEL_EVERY_KM */
+  level: number;
 }
 
 function point(z: number): SegmentPoint {
@@ -257,9 +263,13 @@ function project(
   width: number,
   height: number,
   yShift = 0,
+  /** lap difficulty: scales the terrain's stored heights (steeper hills) —
+      the camera height passed in is scaled by the same factor, so slopes
+      grow but the geometry stays consistent */
+  yGain = 1,
 ) {
   p.camera.x = p.world.x - cameraX;
-  p.camera.y = p.world.y - cameraY;
+  p.camera.y = p.world.y * yGain - cameraY;
   p.camera.z = p.world.z - cameraZ;
   p.screen.scale = CAMERA_DEPTH / Math.max(p.camera.z, 0.0001);
   p.screen.x = Math.round(
@@ -887,6 +897,9 @@ function renderMirror(
   segments: Segment[],
   /** smoothed -curve×speed — the cornering sway that swings the glass */
   sway: number,
+  /** lap difficulty multipliers — the mirrored world must match the real one */
+  curveGain: number,
+  hillGain: number,
 ) {
   ctx.save();
   // keep the scene inside the rounded mirror glass
@@ -936,9 +949,9 @@ function renderMirror(
       continue;
     }
     const seg = segments[i];
-    hdx -= seg.curve;
+    hdx -= seg.curve * curveGain;
     ringX.push(ringX[k - 1] - hdx);
-    ringY.push(seg.p1.world.y - carY);
+    ringY.push(seg.p1.world.y * hillGain - carY);
   }
 
   // the honest curve offsets (x/RW of the road width) are invisible at
@@ -1233,6 +1246,7 @@ export function createEngine(opts: {
     rpm01: 0,
     braking: false,
     view: opts.view === "cockpit" && cockpit ? "cockpit" : "chase",
+    level: 1,
   };
 
   // horizon parallax offsets (Lou: horizon slides opposite the curve)
@@ -1246,6 +1260,16 @@ export function createEngine(opts: {
   // cornering sway of the rearview mirror scene (smoothed -curve×speed) —
   // eases in and out so a hard bend swings the glass instead of snapping it
   let mirrorSway = 0;
+  // distance difficulty: every LEVEL_EVERY_KM raises state.level and
+  // sharpens curves / steepens hills through pure multipliers on the
+  // generated track's stored values — the data never changes. The gains
+  // are capped so high levels stay drivable; the level counter is not.
+  // Gas cans keep their count (no extra scarcity) but drift toward the
+  // road edges, so refuelling costs a wider line
+  let curveGain = 1;
+  let hillGain = 1;
+  let canSpread = 1;
+  let levelUpAt = -10; // engine time of the last level-up (banner)
   // engine time of the last gas-can pickup — drives the collect feedback
   // (sparkle burst at the car, gauge flash, rising "+1")
   let lastPickupAt = -10;
@@ -1339,6 +1363,17 @@ export function createEngine(opts: {
       baseIndex += drop;
     }
 
+    // distance difficulty: every LEVEL_EVERY_KM bumps the level — turn
+    // the heat up (gains capped, level is not)
+    const newLevel = Math.floor(state.distanceKm / LEVEL_EVERY_KM) + 1;
+    if (newLevel > state.level) {
+      state.level = newLevel;
+      curveGain = Math.min(1.6, 1 + 0.08 * (state.level - 1));
+      hillGain = Math.min(1.5, 1 + 0.07 * (state.level - 1));
+      canSpread = Math.min(1.35, 1 + 0.05 * (state.level - 1));
+      levelUpAt = state.time;
+    }
+
     if (input.left) state.playerX -= dx;
     if (input.right) state.playerX += dx;
     // centrifugal push on curves (Jake Gordon), tuned so every bend has a
@@ -1346,7 +1381,7 @@ export function createEngine(opts: {
     // gives easy ≈ flat-out, medium ≈ 125 km/h, hard ≈ 85 km/h. Above the
     // limit the tires scrub: speed bleeds even while you stay on the
     // tarmac, so 180 km/h through a bend is never free
-    const lateral = speedPercent * playerSegment.curve * CENTRIFUGAL;
+    const lateral = speedPercent * playerSegment.curve * curveGain * CENTRIFUGAL;
     state.playerX -= dx * lateral;
     const scrub = Math.max(0, Math.abs(lateral) - 1);
     if (scrub > 0 && state.speed > 0) {
@@ -1359,7 +1394,7 @@ export function createEngine(opts: {
       -GRAVITY_MAX_GRADE,
       Math.min(
         GRAVITY_MAX_GRADE,
-        (playerSegment.p2.world.y - playerSegment.p1.world.y) /
+        ((playerSegment.p2.world.y - playerSegment.p1.world.y) * hillGain) /
           SEGMENT_LENGTH,
       ),
     );
@@ -1415,7 +1450,8 @@ export function createEngine(opts: {
     // hop, then a suspension squash when it sets back down. (At the crest
     // itself the per-segment slope is ~0 by construction, so the trigger
     // is the descent ramping up, armed by a steep climb <1s earlier)
-    const slope = playerSegment.p2.world.y - playerSegment.p1.world.y;
+    const slope =
+      (playerSegment.p2.world.y - playerSegment.p1.world.y) * hillGain;
     if (slope > SEGMENT_LENGTH * 0.4) lastSteepClimbAt = state.time;
     if (
       airT <= 0 &&
@@ -1470,7 +1506,7 @@ export function createEngine(opts: {
       if (
         pk &&
         pickupActive(playerSegment) &&
-        Math.abs(state.playerX - pk.x) < 0.24 &&
+        Math.abs(state.playerX - pk.x * canSpread) < 0.24 &&
         state.speed > MAX_SPEED * 0.02
       ) {
         state.fuel = Math.min(FUEL_MAX, state.fuel + (pk.big ? 2 : 1));
@@ -1479,11 +1515,13 @@ export function createEngine(opts: {
         opts.onPickup?.(pk.big ?? false);
       }
       // stranded way off the road, past the roadside trees: respawn on
-      // the centre line at a standstill with a breathing fade-in
+      // the centre line at a standstill with a breathing fade-in — and a
+      // 1-dot fuel penalty, so crashing directly shortens the run
       if (Math.abs(state.playerX) >= FAR_OFFROAD) {
         state.respawn = RESPAWN_TIME;
         state.speed = 0;
         state.playerX = 0;
+        state.fuel = Math.max(0, state.fuel - 1);
       }
     }
 
@@ -1506,8 +1544,8 @@ export function createEngine(opts: {
 
     // horizon drifts opposite the current curve, faster with speed
     // (rates eased 30% down from Jake's 2.5/5 — gentler mountain parallax)
-    skyOffset += playerSegment.curve * speedPercent * dt * 1.75;
-    hillOffset += playerSegment.curve * speedPercent * dt * 3.5;
+    skyOffset += playerSegment.curve * curveGain * speedPercent * dt * 1.75;
+    hillOffset += playerSegment.curve * curveGain * speedPercent * dt * 3.5;
   }
 
   function render(ctx: CanvasRenderingContext2D) {
@@ -1516,11 +1554,12 @@ export function createEngine(opts: {
     const playerSegment = findSegment(state.position + PLAYER_Z);
     const playerPercent =
       ((state.position + PLAYER_Z) % SEGMENT_LENGTH) / SEGMENT_LENGTH;
-    const playerY = interpolate(
-      playerSegment.p1.world.y,
-      playerSegment.p2.world.y,
-      playerPercent,
-    );
+    const playerY =
+      interpolate(
+        playerSegment.p1.world.y,
+        playerSegment.p2.world.y,
+        playerPercent,
+      ) * hillGain;
     // first-person: the dash hides the bottom of the frame, so the whole
     // world is pitched up into the windshield — a plain screen-space y
     // shift on the projection (camera tilt). Horizon, hills, sprites and
@@ -1588,7 +1627,7 @@ export function createEngine(opts: {
     // continue exactly the shade the ground ended with
     let farGrass = COLORS.dark.grass;
     let x = 0;
-    let dx = -(baseSegment.curve * basePercent);
+    let dx = -(baseSegment.curve * curveGain * basePercent);
     const cameraZBase = state.position;
     // near-edge road geometry, captured for the road-parallel wind streaks
     let roadNearX = width / 2;
@@ -1601,11 +1640,11 @@ export function createEngine(opts: {
       const camZ = cameraZBase;
       const camX = state.playerX * ROAD_WIDTH - x;
       const camY = playerY + CAMERA_HEIGHT;
-      project(segment.p1, camX, camY, camZ, width, height, yShift);
-      project(segment.p2, camX + dx, camY, camZ, width, height, yShift);
+      project(segment.p1, camX, camY, camZ, width, height, yShift, hillGain);
+      project(segment.p2, camX + dx, camY, camZ, width, height, yShift, hillGain);
 
       x += dx;
-      dx += segment.curve;
+      dx += segment.curve * curveGain;
 
       // behind the camera, climbing past the previous line, or hidden by a hill
       if (
@@ -1670,7 +1709,7 @@ export function createEngine(opts: {
           const hover = destH * 0.3;
           const destX =
             segment.p1.screen.x +
-            scale * pk.x * ROAD_WIDTH * (width / 2) -
+            scale * pk.x * canSpread * ROAD_WIDTH * (width / 2) -
             destW / 2;
           const destY = segment.p1.screen.y - destH - hover + bob;
           let visibleH = destH;
@@ -1815,7 +1854,8 @@ export function createEngine(opts: {
     };
     // cornering feel: the mirrored world swings against the current bend
     // (the mirror yaws with the car), smoothed so it eases in and out
-    mirrorSway += (-playerSegment.curve * speedPercent - mirrorSway) * 0.08;
+    mirrorSway +=
+      (-playerSegment.curve * curveGain * speedPercent - mirrorSway) * 0.08;
 
     if (!cockpitMode) {
       const steer = state.speed > MAX_SPEED * 0.02;
@@ -1823,7 +1863,8 @@ export function createEngine(opts: {
       // slope frames on hills (dy under the car), steer frames when turning;
       // the threshold only engages on pronounced slopes now that hills are
       // full Jake Gordon height (a LOW rolling hill peaks ~80 world/segment)
-      const dy = playerSegment.p2.world.y - playerSegment.p1.world.y;
+      const dy =
+        (playerSegment.p2.world.y - playerSegment.p1.world.y) * hillGain;
       if (dy > SEGMENT_LENGTH * 0.35) frame = car.up;
       else if (dy < -SEGMENT_LENGTH * 0.35) frame = car.down;
       if (steer) {
@@ -1931,7 +1972,8 @@ export function createEngine(opts: {
       // drift smoke: in a hard curve at speed the car slides sideways
       // (centrifugal push) and the rear tires scrub — puffs at both rear
       // wheels, trailing outward from the bend
-      const curveSlide = Math.abs(playerSegment.curve) * speedPercent ** 2;
+      const curveSlide =
+        Math.abs(playerSegment.curve * curveGain) * speedPercent ** 2;
       if (!state.offRoad && curveSlide > 1 && car.smoke.length > 0) {
         const outward = playerSegment.curve > 0 ? -1 : 1;
         for (const wheelSide of [-1, 1]) {
@@ -2039,6 +2081,8 @@ export function createEngine(opts: {
         playerY,
         segments,
         mirrorSway,
+        curveGain,
+        hillGain,
       );
 
       dashGeom = { x: dashX, y: dashY, w: dashW, h: dashH };
@@ -2140,6 +2184,27 @@ export function createEngine(opts: {
         ctx.fillStyle = "#e2703a";
         ctx.fillText(msg, tx, ty);
       }
+    }
+
+    // level banner: a brief LEVEL X flash when a new distance level turns
+    // the heat up — quick fade in, hold, fade out
+    const lvlAge = state.time - levelUpAt;
+    if (state.level > 1 && lvlAge < 2.2 && !state.gameOver) {
+      const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      const msg = `LEVEL ${state.level}`;
+      ctx.font = `bold ${Math.round(11 * ui)}px monospace`;
+      const tw = ctx.measureText(msg).width;
+      const tx = Math.round(width / 2 - tw / 2);
+      const ty = Math.round(height * 0.3);
+      ctx.globalAlpha = Math.max(
+        0,
+        Math.min(1, Math.min(lvlAge / 0.2, (2.2 - lvlAge) / 0.5)),
+      );
+      ctx.fillStyle = "#141611";
+      ctx.fillText(msg, tx + 2, ty + 2);
+      ctx.fillStyle = "#d7ff9e";
+      ctx.fillText(msg, tx, ty);
+      ctx.globalAlpha = 1;
     }
   }
 
