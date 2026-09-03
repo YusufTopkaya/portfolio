@@ -910,6 +910,111 @@ html.crt-boot::after {
   box-shadow: 0 0 10px rgba(146, 204, 65, 0.7);
 }
 
+/* leaderboard on the game-over overlay */
+.racer-leaderboard {
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px;
+  min-width: 220px;
+  background: #a4c768;
+  border: 3px solid #0d1f0a;
+  box-shadow: inset 0 0 12px rgba(13, 31, 10, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.racer-leaderboard li {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  font-size: 7px;
+  color: #2a3d1f;
+}
+
+.racer-leaderboard li.racer-lb-me {
+  color: #0d1f0a;
+  text-shadow: 0 0 4px rgba(215, 255, 158, 0.9);
+}
+
+.racer-leaderboard-rank {
+  font-size: 9px;
+  color: #ffd866;
+  text-shadow: 0 0 8px rgba(255, 216, 102, 0.7);
+}
+
+.racer-initials {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.racer-initials-label {
+  font-size: 7px;
+  color: #92cc41;
+}
+
+.racer-initials-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.racer-initials-input {
+  width: 72px;
+  font-size: 12px;
+  text-align: center;
+  letter-spacing: 4px;
+  color: #0d1f0a;
+  background: #a4c768;
+  border: 3px solid #0d1f0a;
+  padding: 6px 4px;
+  outline: none;
+  text-transform: uppercase;
+}
+
+.racer-initials-input::placeholder {
+  color: rgba(13, 31, 10, 0.35);
+}
+
+.racer-initials-submit {
+  font-size: 9px;
+  color: #0d1f0a;
+  background: #92cc41;
+  border: 2px solid #d7ff9e;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.racer-initials-submit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.racer-initials-submit:not(:disabled):hover {
+  background: #d7ff9e;
+}
+
+.racer-initials-error {
+  font-size: 8px;
+  color: #e76e55;
+}
+
+/* the overlay grows with the board — keep it inside the screen on phones */
+@media (max-height: 640px) {
+  .racer-gameover {
+    gap: 8px;
+    padding: 12px 20px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .racer-leaderboard li {
+    font-size: 6px;
+  }
+}
+
 @keyframes racerBlink {
   50% {
     opacity: 0.25;

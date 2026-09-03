@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ScoreEntry } from "@/lib/highscore";
 import {
   createEngine,
   RACER_HEIGHT,
@@ -37,6 +38,16 @@ export function TwingoRacer() {
   /* fuel ran dry: engine froze, overlay shows the score + PLAY AGAIN */
   const [gameOver, setGameOver] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
+  /* elapsed engine time of the finished run — sent as the score's
+     plausibility proof */
+  const [finalTime, setFinalTime] = useState(0);
+  /* leaderboard: top-10 list, initials form state, rank after submit */
+  const [board, setBoard] = useState<ScoreEntry[] | null>(null);
+  const [initials, setInitials] = useState("");
+  const [submitState, setSubmitState] = useState<
+    "idle" | "sending" | "done" | "error"
+  >("idle");
+  const [myRank, setMyRank] = useState<number | null>(null);
   /* bumped by PLAY AGAIN — re-runs the boot effect with a fresh engine */
   const [runId, setRunId] = useState(0);
   /* render buffer size — portrait phones get a taller buffer so the game
@@ -48,6 +59,10 @@ export function TwingoRacer() {
   const engineRef = useRef<RacerEngine | null>(null);
   const pausedRef = useRef(false);
   const gameOverRef = useRef(false);
+  /* single-use HMAC token for the current run's score submission;
+     null when the highscore service is unavailable — the game then
+     silently plays without the leaderboard */
+  const tokenRef = useRef<string | null>(null);
   const keysRef = useRef<RacerInput>({
     left: false,
     right: false,
@@ -56,6 +71,62 @@ export function TwingoRacer() {
   });
 
   pausedRef.current = paused;
+
+  /* each run gets a fresh single-use submit token; PLAY AGAIN re-issues.
+     On failure the leaderboard UI stays hidden and the game just plays. */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runId intentionally re-issues a token when PLAY AGAIN starts a new run
+  useEffect(() => {
+    if (!open) return;
+    tokenRef.current = null;
+    setBoard(null);
+    setInitials("");
+    setSubmitState("idle");
+    setMyRank(null);
+    let cancelled = false;
+    fetch("/api/highscore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "start" }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: { token: string }) => {
+        if (!cancelled) tokenRef.current = d.token;
+      })
+      .catch(() => {
+        if (!cancelled) tokenRef.current = null;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, runId]);
+
+  /* submit the run to the leaderboard with this run's single-use token */
+  const submitScore = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token || initials.length !== 3 || submitState === "sending") return;
+    setSubmitState("sending");
+    try {
+      const r = await fetch("/api/highscore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "submit",
+          token,
+          name: initials,
+          score: finalScore,
+          durationSec: finalTime,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error ?? String(r.status));
+      tokenRef.current = null; // consumed — no resubmits
+      setMyRank(d.rank);
+      setBoard(d.scores);
+      setSubmitState("done");
+    } catch {
+      setSubmitState("error");
+    }
+  }, [initials, submitState, finalScore, finalTime]);
 
   /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly */
   const playAgain = useCallback(() => {
@@ -124,7 +195,15 @@ export function TwingoRacer() {
         if (e.state.gameOver && !gameOverRef.current) {
           gameOverRef.current = true;
           setFinalScore(Math.floor(e.state.score));
+          setFinalTime(e.state.time);
           setGameOver(true);
+          // fetch the current top-10 alongside the overlay
+          fetch("/api/highscore")
+            .then((r) =>
+              r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
+            )
+            .then((d: { scores: ScoreEntry[] }) => setBoard(d.scores))
+            .catch(() => setBoard(null));
         }
       }
       raf = requestAnimationFrame(frame);
@@ -246,6 +325,15 @@ export function TwingoRacer() {
 
   if (!open) return null;
 
+  /* a fresh run token exists and the score would crack the top-10
+     (or the board isn't full / hasn't loaded yet) → offer the form */
+  const qualifies =
+    tokenRef.current !== null &&
+    finalScore > 0 &&
+    (board == null ||
+      board.length < 10 ||
+      finalScore > (board[board.length - 1]?.score ?? 0));
+
   return (
     <div
       ref={overlayRef}
@@ -297,11 +385,76 @@ export function TwingoRacer() {
         <div className="racer-gameover font-pixel" role="alert">
           <div className="racer-gameover-title">GAME OVER</div>
           <div className="racer-gameover-score">SCORE {finalScore}</div>
+
+          {myRank !== null && (
+            <div className="racer-leaderboard-rank">RANK #{myRank}</div>
+          )}
+
+          {board && board.length > 0 && (
+            <ol className="racer-leaderboard">
+              {board.map((s, i) => (
+                <li
+                  key={`${s.name}-${s.at}-${i}`}
+                  className={
+                    myRank !== null && i === myRank - 1 ? "racer-lb-me" : ""
+                  }
+                >
+                  <span className="racer-lb-name">
+                    {String(i + 1).padStart(2, "0")}. {s.name}
+                  </span>
+                  <span className="racer-lb-score">{s.score}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {qualifies && submitState !== "done" && (
+            <div className="racer-initials">
+              <label className="racer-initials-label" htmlFor="racer-initials">
+                NEW HIGHSCORE — ENTER INITIALS
+              </label>
+              <div className="racer-initials-row">
+                <input
+                  id="racer-initials"
+                  className="racer-initials-input font-pixel"
+                  value={initials}
+                  maxLength={3}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="AAA"
+                  onChange={(e) =>
+                    setInitials(
+                      e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+                    )
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitScore();
+                    e.stopPropagation();
+                  }}
+                  ref={(el) => el?.focus()}
+                />
+                <button
+                  type="button"
+                  className="racer-initials-submit font-pixel"
+                  disabled={initials.length !== 3 || submitState === "sending"}
+                  onClick={submitScore}
+                >
+                  {submitState === "sending" ? "..." : "SUBMIT"}
+                </button>
+              </div>
+            </div>
+          )}
+          {submitState === "error" && (
+            <div className="racer-initials-error">SAVE FAILED</div>
+          )}
+
           <button
             type="button"
             className="racer-playagain font-pixel"
             onClick={playAgain}
-            ref={(el) => el?.focus()}
+            ref={(el) => {
+              if (!qualifies || submitState === "done") el?.focus();
+            }}
           >
             PLAY AGAIN
           </button>
