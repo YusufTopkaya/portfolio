@@ -23,7 +23,9 @@
  * procedural pixel-art jerry can.
  */
 
-import type { CarFrame, CarFrames, RoadsideSprite } from "./engine";
+import type { CarFrame, CarFrames, CockpitSprites, RoadsideSprite } from "./engine";
+
+export type { CockpitSprites };
 
 const SHEET_URL = "/images/twingo-sheet-white.png";
 
@@ -487,4 +489,37 @@ export async function loadGasCan(): Promise<CarFrame> {
   }
   const image = makeGasCan();
   return { image, w: image.width, h: image.height };
+}
+
+/* ── cockpit (first-person) view ───────────────────────────────────────
+   Two preprocessed PNGs (scripts/build-cockpit.mjs): the dash/pillar
+   overlay with the glass keyed to alpha, and a 3-frame wheel sheet
+   (left / center / right). No procedural fallback — when the files are
+   missing the view toggle stays hidden and the game runs chase-only. */
+
+const COCKPIT_URL = "/images/twingo-cockpit.png";
+const COCKPIT_WHEEL_URL = "/images/twingo-cockpit-wheel.png";
+
+export async function loadCockpit(): Promise<CockpitSprites | null> {
+  try {
+    const [dashImg, wheelImg] = await Promise.all([
+      loadImage(COCKPIT_URL),
+      loadImage(COCKPIT_WHEEL_URL),
+    ]);
+    const dash = document.createElement("canvas");
+    dash.width = dashImg.naturalWidth;
+    dash.height = dashImg.naturalHeight;
+    dash.getContext("2d")?.drawImage(dashImg, 0, 0);
+    const wheel = document.createElement("canvas");
+    wheel.width = wheelImg.naturalWidth;
+    wheel.height = wheelImg.naturalHeight;
+    wheel.getContext("2d")?.drawImage(wheelImg, 0, 0);
+    return {
+      dash: { image: dash, w: dash.width, h: dash.height },
+      wheel,
+      wheelFrame: wheel.height,
+    };
+  } catch {
+    return null;
+  }
 }

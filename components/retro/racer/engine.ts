@@ -149,6 +149,15 @@ const COLORS = {
   },
 };
 
+export interface CockpitSprites {
+  dash: CarFrame;
+  /** wheel sheet: 3 square frames side by side (left, center, right) */
+  wheel: HTMLCanvasElement;
+  wheelFrame: number; // frame width = sheet height
+}
+
+export type RacerView = "chase" | "cockpit";
+
 export interface EngineState {
   position: number;
   playerX: number;
@@ -167,6 +176,8 @@ export interface EngineState {
   /** fuel ran dry and the car rolled to a standstill */
   gameOver: boolean;
   offRoad: boolean;
+  /** camera: behind the car or through the windshield */
+  view: RacerView;
 }
 
 function point(z: number): SegmentPoint {
@@ -738,6 +749,10 @@ export function createEngine(opts: {
   roadside: RoadsideSprite[];
   car: CarFrames;
   gasCan: CarFrame;
+  /** cockpit overlay sprites — null when the assets are missing (chase-only) */
+  cockpit?: CockpitSprites | null;
+  /** initial camera; forced to "chase" when no cockpit sprites are loaded */
+  view?: RacerView;
   reduceMotion?: boolean;
   /** buffer size — portrait viewports get a taller buffer so the game
       fills the phone screen instead of letterboxing into a thin strip */
@@ -747,6 +762,7 @@ export function createEngine(opts: {
   clusterTopLeft?: boolean;
 }): RacerEngine {
   const { segments, roadside, car, gasCan, reduceMotion } = opts;
+  const cockpit = opts.cockpit ?? null;
   // mutable so resize() can re-fit the renderer when the device rotates
   let width = opts.width ?? RACER_WIDTH;
   let height = opts.height ?? RACER_HEIGHT;
@@ -764,6 +780,7 @@ export function createEngine(opts: {
     fuel: FUEL_MAX,
     gameOver: false,
     offRoad: false,
+    view: opts.view === "cockpit" && cockpit ? "cockpit" : "chase",
   };
 
   // horizon parallax offsets (Lou: horizon slides opposite the curve)
@@ -1174,129 +1191,24 @@ export function createEngine(opts: {
       }
     }
 
-    // ── player car ──
-    const steer = state.speed > MAX_SPEED * 0.02;
-    let frame = car.straight;
-    // slope frames on hills (dy under the car), steer frames when turning;
-    // the threshold only engages on pronounced slopes now that hills are
-    // full Jake Gordon height (a LOW rolling hill peaks ~80 world/segment)
-    const dy = playerSegment.p2.world.y - playerSegment.p1.world.y;
-    if (dy > SEGMENT_LENGTH * 0.35) frame = car.up;
-    else if (dy < -SEGMENT_LENGTH * 0.35) frame = car.down;
-    if (steer) {
-      // actual steering intent wins over slope
-      if (pendingSteer < -0.1) frame = car.left;
-      else if (pendingSteer > 0.1) frame = car.right;
-    }
-
-    const scale = CAMERA_DEPTH / PLAYER_Z;
-    // the car "pulls away" as speed builds: near scale at standstill,
-    // far scale at top speed — a smooth zoom-out instead of switching
-    // between discrete sprite sizes (the sheet's smaller sizes stay unused)
+    // ── player: chase sprite behind the car, or first-person cockpit ──
+    const cockpitMode = state.view === "cockpit" && cockpit !== null;
     const speedPercent = state.speed / MAX_SPEED;
-    const CAR_SCALE_NEAR = 1.45; // ~29% of buffer width at standstill
-    const CAR_SCALE_FAR = 1.1; // ~22% at top speed
-    const carScale = interpolate(CAR_SCALE_NEAR, CAR_SCALE_FAR, speedPercent);
-    const destW = frame.w * scale * (width / 2) * carScale;
-    const destH = frame.h * scale * (width / 2) * carScale;
     // speed-dependent bounce, stronger off-road; killed for reduced motion
     const bounce = reduceMotion
       ? 0
-      : Math.sin(state.time * 18) *
-        (state.offRoad ? 2.2 : 0.8) *
-        (state.speed / MAX_SPEED);
+      : Math.sin(state.time * 18) * (state.offRoad ? 2.2 : 0.8) * speedPercent;
     const shakeX =
       !reduceMotion && state.offRoad && state.speed > MAX_SPEED * 0.1
         ? Math.sin(state.time * 47) * 1.5
         : 0;
-    const carX = width / 2 - destW / 2 + shakeX;
-    const carY = height - destH - Math.round(height * 0.04) + bounce;
-
-    // respawn: the car breathes in and out of existence for a moment
-    const carAlpha =
-      state.respawn > 0 ? 0.5 + 0.5 * Math.sin(state.time * 9) : 1;
-
-    // soft shadow
-    ctx.globalAlpha = carAlpha * 0.9;
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.beginPath();
-    ctx.ellipse(
-      width / 2 + shakeX,
-      height - Math.round(height * 0.03),
-      destW * 0.42,
-      destH * 0.08,
-      0,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-
-    ctx.globalAlpha = carAlpha;
-    ctx.drawImage(
-      frame.image,
-      Math.round(carX),
-      Math.round(carY),
-      Math.round(destW),
-      Math.round(destH),
-    );
-    ctx.globalAlpha = 1;
-
-    // off-road dust puffs
-    if (
-      state.offRoad &&
-      state.speed > MAX_SPEED * 0.08 &&
-      car.smoke.length > 0
-    ) {
-      const puff = car.smoke[Math.floor(state.time * 12) % car.smoke.length];
-      const puffW = destW * 0.22;
-      const puffH = (puff.h / puff.w) * puffW;
-      const side = Math.floor(state.time * 12) % 2 ? -1 : 1;
-      ctx.globalAlpha = 0.75;
-      ctx.drawImage(
-        puff.image,
-        // kicked up behind the rear wheels, at the car's own baseline
-        Math.round(width / 2 + side * destW * 0.34 - puffW / 2 + shakeX),
-        Math.round(carY + destH - puffH * 0.8),
-        Math.round(puffW),
-        Math.round(puffH),
-      );
-      ctx.globalAlpha = 1;
-    }
-
-    // drift smoke: in a hard curve at speed the car slides sideways
-    // (centrifugal push) and the rear tires scrub — puffs at both rear
-    // wheels, trailing outward from the bend
-    const curveSlide = Math.abs(playerSegment.curve) * speedPercent ** 2;
-    if (!state.offRoad && curveSlide > 1 && car.smoke.length > 0) {
-      const outward = playerSegment.curve > 0 ? -1 : 1;
-      for (const wheelSide of [-1, 1]) {
-        const puff =
-          car.smoke[
-            Math.floor(state.time * 14 + (wheelSide > 0 ? 1 : 0)) %
-              car.smoke.length
-          ];
-        const puffW = destW * 0.26;
-        const puffH = (puff.h / puff.w) * puffW;
-        ctx.globalAlpha = Math.min(0.85, curveSlide * 0.45);
-        ctx.drawImage(
-          puff.image,
-          Math.round(
-            width / 2 +
-              wheelSide * destW * 0.34 +
-              outward * destW * 0.05 -
-              puffW / 2 +
-              shakeX,
-          ),
-          Math.round(carY + destH - puffH * 0.7),
-          Math.round(puffW),
-          Math.round(puffH),
-        );
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    // speed streaks hug the road edges, then the LCD cluster on top
-    if (!reduceMotion) {
+    // pickup sparkle anchor — at the car in chase view, mid-windshield
+    // in cockpit view (the dash would hide the car spot)
+    let fxAnchorY = height * 0.55;
+    // speed streaks hug the road edges; cockpit view needs them UNDER the
+    // dash, so each branch calls this at the right moment
+    const drawStreaks = () => {
+      if (reduceMotion) return;
       // swing only with the car's own turning — straight car, straight
       // streaks, no matter how the road bends ahead
       vanishX += (width / 2 + pendingSteer * width * 0.06 - vanishX) * 0.12;
@@ -1310,6 +1222,160 @@ export function createEngine(opts: {
         roadNearW,
         horizonY,
         vanishX,
+      );
+    };
+
+    if (!cockpitMode) {
+      const steer = state.speed > MAX_SPEED * 0.02;
+      let frame = car.straight;
+      // slope frames on hills (dy under the car), steer frames when turning;
+      // the threshold only engages on pronounced slopes now that hills are
+      // full Jake Gordon height (a LOW rolling hill peaks ~80 world/segment)
+      const dy = playerSegment.p2.world.y - playerSegment.p1.world.y;
+      if (dy > SEGMENT_LENGTH * 0.35) frame = car.up;
+      else if (dy < -SEGMENT_LENGTH * 0.35) frame = car.down;
+      if (steer) {
+        // actual steering intent wins over slope
+        if (pendingSteer < -0.1) frame = car.left;
+        else if (pendingSteer > 0.1) frame = car.right;
+      }
+
+      const scale = CAMERA_DEPTH / PLAYER_Z;
+      // the car "pulls away" as speed builds: near scale at standstill,
+      // far scale at top speed — a smooth zoom-out instead of switching
+      // between discrete sprite sizes (the sheet's smaller sizes stay unused)
+      const CAR_SCALE_NEAR = 1.45; // ~29% of buffer width at standstill
+      const CAR_SCALE_FAR = 1.1; // ~22% at top speed
+      const carScale = interpolate(CAR_SCALE_NEAR, CAR_SCALE_FAR, speedPercent);
+      const destW = frame.w * scale * (width / 2) * carScale;
+      const destH = frame.h * scale * (width / 2) * carScale;
+      const carX = width / 2 - destW / 2 + shakeX;
+      const carY = height - destH - Math.round(height * 0.04) + bounce;
+
+      // respawn: the car breathes in and out of existence for a moment
+      const carAlpha =
+        state.respawn > 0 ? 0.5 + 0.5 * Math.sin(state.time * 9) : 1;
+
+      // soft shadow
+      ctx.globalAlpha = carAlpha * 0.9;
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(
+        width / 2 + shakeX,
+        height - Math.round(height * 0.03),
+        destW * 0.42,
+        destH * 0.08,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+
+      ctx.globalAlpha = carAlpha;
+      ctx.drawImage(
+        frame.image,
+        Math.round(carX),
+        Math.round(carY),
+        Math.round(destW),
+        Math.round(destH),
+      );
+      ctx.globalAlpha = 1;
+
+      // off-road dust puffs
+      if (
+        state.offRoad &&
+        state.speed > MAX_SPEED * 0.08 &&
+        car.smoke.length > 0
+      ) {
+        const puff =
+          car.smoke[Math.floor(state.time * 12) % car.smoke.length];
+        const puffW = destW * 0.22;
+        const puffH = (puff.h / puff.w) * puffW;
+        const side = Math.floor(state.time * 12) % 2 ? -1 : 1;
+        ctx.globalAlpha = 0.75;
+        ctx.drawImage(
+          puff.image,
+          // kicked up behind the rear wheels, at the car's own baseline
+          Math.round(width / 2 + side * destW * 0.34 - puffW / 2 + shakeX),
+          Math.round(carY + destH - puffH * 0.8),
+          Math.round(puffW),
+          Math.round(puffH),
+        );
+        ctx.globalAlpha = 1;
+      }
+
+      // drift smoke: in a hard curve at speed the car slides sideways
+      // (centrifugal push) and the rear tires scrub — puffs at both rear
+      // wheels, trailing outward from the bend
+      const curveSlide = Math.abs(playerSegment.curve) * speedPercent ** 2;
+      if (!state.offRoad && curveSlide > 1 && car.smoke.length > 0) {
+        const outward = playerSegment.curve > 0 ? -1 : 1;
+        for (const wheelSide of [-1, 1]) {
+          const puff =
+            car.smoke[
+              Math.floor(state.time * 14 + (wheelSide > 0 ? 1 : 0)) %
+                car.smoke.length
+            ];
+          const puffW = destW * 0.26;
+          const puffH = (puff.h / puff.w) * puffW;
+          ctx.globalAlpha = Math.min(0.85, curveSlide * 0.45);
+          ctx.drawImage(
+            puff.image,
+            Math.round(
+              width / 2 +
+                wheelSide * destW * 0.34 +
+                outward * destW * 0.05 -
+                puffW / 2 +
+                shakeX,
+            ),
+            Math.round(carY + destH - puffH * 0.7),
+            Math.round(puffW),
+            Math.round(puffH),
+          );
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      fxAnchorY = carY + destH * 0.3;
+      drawStreaks();
+    } else {
+      // first-person: streaks pass under the dash, then the cockpit goes
+      // on top — dash sway reuses the car's bounce/shake so the body
+      // feel survives the view switch
+      drawStreaks();
+      const dashW =
+        (cockpit.dash.h / cockpit.dash.w) * width > height
+          ? (cockpit.dash.w / cockpit.dash.h) * height
+          : width;
+      const dashH =
+        dashW === width ? (cockpit.dash.h / cockpit.dash.w) * width : height;
+      const swayX = pendingSteer * 2 * (width / RACER_WIDTH) + shakeX * 0.5;
+      const dashX = width / 2 - dashW / 2 + swayX;
+      const dashY = height - dashH + bounce * 0.5;
+      ctx.drawImage(
+        cockpit.dash.image,
+        Math.round(dashX),
+        Math.round(dashY),
+        Math.round(dashW),
+        Math.round(dashH),
+      );
+      // steering wheel: 3-frame sheet (left/center/right); geometry as
+      // fractions of the dash rect so both orientations line up
+      // (printed by scripts/build-cockpit.mjs)
+      const wf = pendingSteer < -0.1 ? 0 : pendingSteer > 0.1 ? 2 : 1;
+      const fw = cockpit.wheelFrame;
+      const wheelW = dashW * 0.3038;
+      const wheelH = dashH * 0.5989;
+      ctx.drawImage(
+        cockpit.wheel,
+        wf * fw,
+        0,
+        fw,
+        fw,
+        Math.round(dashX + dashW * 0.2304 - wheelW / 2),
+        Math.round(dashY + dashH * 0.6189 - wheelH / 2),
+        Math.round(wheelW),
+        Math.round(wheelH),
       );
     }
     // pickup feedback window — sparkle burst + gauge flash + rising "+1"
@@ -1332,7 +1398,7 @@ export function createEngine(opts: {
       if (fxAge < 0.5) {
         const p = fxAge / 0.5;
         const burstX = width / 2 + shakeX;
-        const burstY = carY + destH * 0.3;
+        const burstY = fxAnchorY;
         const rr = (4 + p * 26) * ui;
         const s = Math.max(1, Math.round((3 - p * 2) * ui));
         ctx.globalAlpha = 1 - p;
