@@ -1327,7 +1327,7 @@ export function createEngine(opts: {
       slope < -SEGMENT_LENGTH * 0.1 &&
       prevSlope >= slope &&
       state.time - lastSteepClimbAt < 0.9 &&
-      speedPercent > 0.55 &&
+      speedPercent > 87 / 180 && // airborne only above 87 km/h
       !state.offRoad &&
       state.respawn <= 0
     ) {
