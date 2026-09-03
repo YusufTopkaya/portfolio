@@ -47,6 +47,9 @@ async function postHandler(request: NextRequest) {
   if (action === "submit") {
     const ip = getClientIP(request);
     if (!rateLimit(`highscore:${ip}`, SUBMIT_LIMIT, SUBMIT_WINDOW_MS)) {
+      console.error(
+        `[highscore] submit rejected ip=${ip} status=429 reason="Too many requests"`,
+      );
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const { token, name, score, durationSec } = body as Record<string, unknown>;
@@ -56,6 +59,15 @@ async function postHandler(request: NextRequest) {
       typeof score !== "number" ||
       typeof durationSec !== "number"
     ) {
+      console.error(
+        `[highscore] submit rejected ip=${ip} status=400 reason="Missing or invalid fields"`,
+        {
+          token: typeof token,
+          name: typeof name,
+          score: typeof score,
+          durationSec: typeof durationSec,
+        },
+      );
       return NextResponse.json(
         { error: "Missing or invalid fields" },
         { status: 400 },
@@ -63,11 +75,20 @@ async function postHandler(request: NextRequest) {
     }
     const result = await submitScore(salt, { token, name, score, durationSec });
     if (!result.ok) {
+      const status = result.error === "invalid_token" ? 403 : 422;
+      console.error(
+        `[highscore] submit rejected ip=${ip} status=${status} reason="${result.message}"`,
+        { name, score, durationSec },
+      );
       return NextResponse.json(
         { error: result.message },
-        { status: result.error === "invalid_token" ? 403 : 422 },
+        { status },
       );
     }
+    console.log(
+      `[highscore] score saved ip=${ip} rank=${result.rank}`,
+      { name, score, durationSec },
+    );
     return noStore(NextResponse.json({ rank: result.rank, scores: result.scores }));
   }
 
