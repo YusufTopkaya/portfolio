@@ -1439,14 +1439,16 @@ export function createEngine(opts: {
       : 0;
 
     // ── background ──
-    // each layer rides the hills vertically at its own parallax speed
-    // (Jake Gordon v3/final: resolution * layerSpeed * playerY, with
-    // resolution = height/480 — sky slowest, near hills fastest)
+    // hill parallax rides the terrain vertically (Jake Gordon v3/final:
+    // resolution * layerSpeed * playerY, resolution = height/480). Sky and
+    // clouds keep their own slower rates, but BOTH mountain bands share the
+    // same horizon line: with separate rates the near band outclimbed the
+    // far band on ascents and its bases floated against the sky — two
+    // ranges stand on the same ground line
     const resolution = height / 480;
     const skyShiftY = resolution * 0.001 * playerY;
     const cloudShiftY = resolution * 0.0015 * playerY;
     const farShiftY = resolution * 0.002 * playerY;
-    const nearShiftY = resolution * 0.003 * playerY;
     // downhill peeks a strip of void above the sky image — fill it with
     // the sky's own top colour
     if (skyShiftY > 0) {
@@ -1473,11 +1475,7 @@ export function createEngine(opts: {
     ctx.drawImage(clouds, cloudX, cloudY);
     ctx.drawImage(clouds, cloudX + width, cloudY);
     drawBand(hillsFar, skyOffset * width * 0.12, horizonY - hillsFar.height);
-    drawBand(
-      hillsNear,
-      hillOffset * width * 0.08,
-      Math.round(height / 2 - nearShiftY) + yShift - hillsNear.height,
-    );
+    drawBand(hillsNear, hillOffset * width * 0.08, horizonY - hillsNear.height);
 
     // ── road ──
     let maxY = height;
@@ -1537,9 +1535,8 @@ export function createEngine(opts: {
     // crest gap-fill: when the road drops away behind a hill its farthest
     // line (maxY) can hang well below the mountain bases, leaving a raw
     // sky strip between the hills and the ground — bridge it with grass.
-    // Sky only shows below BOTH band bases, so start at the lower one.
-    const groundTop =
-      Math.round(height / 2 - Math.min(farShiftY, nearShiftY)) + yShift;
+    // Both bands share the horizon line, so the sky can only show below it.
+    const groundTop = horizonY;
     if (maxY > groundTop) {
       ctx.fillStyle = farGrass;
       ctx.fillRect(0, groundTop, width, maxY - groundTop);
