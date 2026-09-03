@@ -1691,6 +1691,9 @@ export function createEngine(opts: {
         vanishX,
       );
     };
+    // cornering feel: the mirrored world swings against the current bend
+    // (the mirror yaws with the car), smoothed so it eases in and out
+    mirrorSway += (-playerSegment.curve * speedPercent - mirrorSway) * 0.08;
 
     if (!cockpitMode) {
       const steer = state.speed > MAX_SPEED * 0.02;
@@ -1859,14 +1862,23 @@ export function createEngine(opts: {
       );
 
       // rearview mirror: a simulated pseudo-3d road strip streaming at the
-      // car's speed (renderMirror) — no real re-render of the world
-      const mX = Math.round(dashX + dashW * COCKPIT_MIRROR.xF);
-      const mY = Math.round(dashY + dashH * COCKPIT_MIRROR.yF);
-      const mW = Math.round(dashW * COCKPIT_MIRROR.wF);
-      const mH = Math.round(dashH * COCKPIT_MIRROR.hF);
-      // cornering feel: the mirrored world swings against the current bend
-      // (the mirror yaws with the car), smoothed so it eases in and out
-      mirrorSway += (-playerSegment.curve * speedPercent - mirrorSway) * 0.08;
+      // car's speed (renderMirror) — no real re-render of the world.
+      // Portrait buffers squeeze the dash into a thin strip and the baked
+      // glass shrinks to a few pixels — grow the scene past the bezel so
+      // the mirror stays readable (anchored at the glass's center)
+      let mW = Math.round(dashW * COCKPIT_MIRROR.wF);
+      let mH = Math.round(dashH * COCKPIT_MIRROR.hF);
+      if (width < RACER_WIDTH && mW < width * 0.22) {
+        const grow = (width * 0.22) / mW;
+        mW = Math.round(width * 0.22);
+        mH = Math.round(mH * grow);
+      }
+      const mX = Math.round(
+        dashX + dashW * COCKPIT_MIRROR.xF + (dashW * COCKPIT_MIRROR.wF - mW) / 2,
+      );
+      const mY = Math.round(
+        dashY + dashH * COCKPIT_MIRROR.yF + (dashH * COCKPIT_MIRROR.hF - mH) / 2,
+      );
       renderMirror(
         ctx,
         mX,
