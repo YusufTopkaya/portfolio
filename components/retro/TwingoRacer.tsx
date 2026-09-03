@@ -26,18 +26,6 @@ import {
 } from "./racer/sprites";
 import { buildTrack } from "./racer/track";
 
-const VIEW_STORAGE_KEY = "twingo:view";
-
-function readStoredView(): RacerView {
-  try {
-    return localStorage.getItem(VIEW_STORAGE_KEY) === "cockpit"
-      ? "cockpit"
-      : "chase";
-  } catch {
-    return "chase";
-  }
-}
-
 /** render buffer: landscape keeps the native 480×270, portrait phones get
     a taller buffer so the game fills the screen instead of letterboxing
     into a thin strip (pixel budget stays ~130k px for performance) */
@@ -54,7 +42,8 @@ export function TwingoRacer() {
   const [paused, setPaused] = useState(false);
   const [coarse, setCoarse] = useState(false);
   /* camera view: chase cam behind the car or first-person cockpit;
-     toggle with V / the CAM touch button, persisted in localStorage */
+     toggle with V / the CAM touch button — every run starts on the
+     chase cam, the choice is per-session only */
   const [view, setView] = useState<RacerView>("chase");
   /* cockpit sprites loaded — without them the toggle stays hidden */
   const [cockpitReady, setCockpitReady] = useState(false);  /* fuel ran dry: engine froze, overlay shows the score + PLAY AGAIN */
@@ -160,6 +149,7 @@ export function TwingoRacer() {
     gameOverRef.current = false;
     keysRef.current = { left: false, right: false, gas: false, brake: false };
     setGameOver(false);
+    setView("chase"); // every run starts on the chase cam
     setRunId((r) => r + 1);
   }, []);
 
@@ -173,15 +163,12 @@ export function TwingoRacer() {
     btn?.focus();
   }, []);
 
-  /* V key / CAM button: flip between chase cam and cockpit, persist it */
+  /* V key / CAM button: flip between chase cam and cockpit */
   const toggleView = useCallback(() => {
     if (!cockpitReadyRef.current) return;
     setView((v) => {
       const next: RacerView = v === "chase" ? "cockpit" : "chase";
       if (engineRef.current) engineRef.current.state.view = next;
-      try {
-        localStorage.setItem(VIEW_STORAGE_KEY, next);
-      } catch {}
       return next;
     });
   }, []);
@@ -265,7 +252,7 @@ export function TwingoRacer() {
           car,
           gasCan,
           cockpit,
-          view: readStoredView(),
+          view: "chase",
           width: buf.w,
           height: buf.h,
           clusterTopLeft: window.matchMedia("(pointer: coarse)").matches,
@@ -519,6 +506,33 @@ export function TwingoRacer() {
       >
         ✕
       </button>
+
+      {/* key legend — desktop only, hidden once the run is over */}
+      {!coarse && !gameOver && (
+        <div className="racer-keys font-pixel" aria-hidden="true">
+          <div className="racer-keys-row">
+            <span className="racer-key">W</span> GAS
+          </div>
+          <div className="racer-keys-row">
+            <span className="racer-key">S</span> BRAKE
+          </div>
+          <div className="racer-keys-row">
+            <span className="racer-key">A</span>
+            <span className="racer-key">D</span> STEER
+          </div>
+          {cockpitReady && (
+            <div className="racer-keys-row">
+              <span className="racer-key">V</span> CAMERA
+            </div>
+          )}
+          <div className="racer-keys-row">
+            <span className="racer-key">R</span> RESTART
+          </div>
+          <div className="racer-keys-row">
+            <span className="racer-key">ESC</span> EXIT
+          </div>
+        </div>
+      )}
 
       {coarse && (
         <div className="racer-touch" aria-hidden="true">

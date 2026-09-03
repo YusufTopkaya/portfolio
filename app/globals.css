@@ -834,6 +834,44 @@ html.crt-boot::after {
   box-shadow: 0 0 8px rgba(231, 110, 85, 0.5);
 }
 
+/* key legend: small grey-translucent panel on the left edge, listing
+   what each key does — desktop only (touch users get pedals) */
+.racer-keys {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(120, 120, 120, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.75);
+  pointer-events: none;
+  user-select: none;
+}
+
+.racer-keys-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.racer-key {
+  display: inline-block;
+  min-width: 16px;
+  padding: 2px 4px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  color: #d7ff9e;
+}
+
 .racer-touch {
   position: absolute;
   left: 0;
