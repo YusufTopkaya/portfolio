@@ -6,10 +6,12 @@
 // - keys the painted checkerboard (fake transparency) to real alpha
 //   inside the glass areas (windshield, side windows, mirror glass),
 //   then deletes leftover jpg specks (small opaque blobs inside glass)
-// - the wheel sprite is isolated by DIFF-KEYING the two renders: inside
-//   the wheel circle, pixels that differ between the sources ARE the
-//   wheel (rim, spokes, hub). Static dash parts visible through the rim
-//   openings stay in the master, so only real wheel pixels rotate.
+// - the wheel sprite is isolated per zone: the rim is an opaque ring, so
+//   its annulus (measured r 333..395, used with margin: 326..398) is
+//   kept UNCONDITIONALLY — no jpg-noise holes, no exterior specks.
+//   Inside the rim the two renders are DIFF-KEYED: pixels that differ
+//   ARE the wheel (spokes, hub). Static dash visible through the rim
+//   openings stays in the master, so only real wheel pixels rotate.
 // - emits public/images/twingo-cockpit.png (480x270 RGBA master)
 // - emits public/images/twingo-cockpit-wheel.png (3 frames side by side)
 // - detects the instrument-cluster screen and the rearview-mirror glass
@@ -36,6 +38,9 @@ const GLASS_RECTS = [
 
 // steering wheel circle in WHEEL_SRC coords (measured on a 200px grid)
 const WHEEL = { cx: 634, cy: 1004, r: 408 };
+// the rim ring, measured by radial luminance scans: inner edge ~333,
+// outer ~395. Kept unconditionally (opaque wheel paint) — with margin
+const RIM = { rIn: 326, rOut: 398 };
 // the generator redrew everything BEHIND the wheel between the two
 // renders (shelf, warning strip, speaker grilles, trim), so diff-keying
 // catches all of it. The wheel itself is: the rim ring + the hub/spoke
@@ -329,15 +334,21 @@ for (let oy = -4; oy <= 4; oy++) {
 console.log("wheel alignment offset:", best);
 const { ox, oy } = best;
 
-// mask: pixels that differ between the renders, inside the wheel circle
+// mask zones: exclusions (dash seen through openings) win first, then
+// the rim annulus is kept unconditionally, the exterior is dropped, and
+// the interior is diff-keyed between the renders
 const mask = new Uint8Array(wr.size * wr.size); // 1 = wheel pixel
 for (let y = 0; y < wr.size; y++) {
   for (let x = 0; x < wr.size; x++) {
     const sx = wr.x + x;
     const sy = wr.y + y;
     const r2 = (sx - WHEEL.cx) ** 2 + (sy - WHEEL.cy) ** 2;
-    const inCircle = r2 <= WHEEL.r ** 2;
-    if (!inCircle || isWheelExclusion(sx, sy)) continue;
+    if (isWheelExclusion(sx, sy)) continue;
+    if (r2 >= RIM.rIn ** 2 && r2 <= RIM.rOut ** 2) {
+      mask[y * wr.size + x] = 1;
+      continue;
+    }
+    if (r2 > RIM.rOut ** 2) continue;
     const by = sy - TOP_CROP;
     const ay = by + oy;
     const ax = sx + ox;
@@ -395,7 +406,8 @@ for (let y = 0; y < wr.size; y++) {
   console.log("wheel mask: kept", sizes[biggest], "px of", sizes.length, "components");
 }
 // 1px dilation with a looser threshold: catch the wheel's anti-aliased
-// edge pixels the strict diff missed
+// edge pixels the strict diff missed (only just outside the rim —
+// further out the redrawn dash also diffs and would grow specks)
 {
   const grown = Uint8Array.from(mask);
   for (let y = 0; y < wr.size; y++) {
@@ -420,6 +432,7 @@ for (let y = 0; y < wr.size; y++) {
       const sx = wr.x + x;
       const sy = wr.y + y;
       if (isWheelExclusion(sx, sy)) continue;
+      if ((sx - WHEEL.cx) ** 2 + (sy - WHEEL.cy) ** 2 > 400 ** 2) continue;
       const by = sy - TOP_CROP;
       const ay = by + oy;
       const ax = sx + ox;
@@ -436,6 +449,34 @@ for (let y = 0; y < wr.size; y++) {
     }
   }
   mask.set(grown);
+}
+// hole fill: a dropped pixel buried inside kept wheel paint (3+ of 4
+// neighbours) is a jpg-coincidence hole — fill it. Three passes close
+// 2-3px nicks; the big openings are far from kept rims and stay open.
+for (let pass = 0; pass < 3; pass++) {
+  const filled = Uint8Array.from(mask);
+  let n = 0;
+  for (let y = 1; y < wr.size - 1; y++) {
+    for (let x = 1; x < wr.size - 1; x++) {
+      if (mask[y * wr.size + x]) continue;
+      const sx = wr.x + x;
+      const sy = wr.y + y;
+      if (isWheelExclusion(sx, sy)) continue;
+      if ((sx - WHEEL.cx) ** 2 + (sy - WHEEL.cy) ** 2 > RIM.rOut ** 2)
+        continue;
+      const kept =
+        mask[y * wr.size + x - 1] +
+        mask[y * wr.size + x + 1] +
+        mask[(y - 1) * wr.size + x] +
+        mask[(y + 1) * wr.size + x];
+      if (kept >= 3) {
+        filled[y * wr.size + x] = 1;
+        n++;
+      }
+    }
+  }
+  mask.set(filled);
+  console.log(`hole fill pass ${pass + 1}: filled ${n} px`);
 }
 
 // cut the sprite from the WHEEL render, masked to real wheel pixels
