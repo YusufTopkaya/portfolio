@@ -36,21 +36,41 @@ const GLASS_RECTS = [
 
 // steering wheel circle in WHEEL_SRC coords (measured on a 200px grid)
 const WHEEL = { cx: 634, cy: 1004, r: 408 };
-// the dash warning-light strip: the generator redrew it at a different
-// spot in the wheel-less render, so diff-keying catches it — exclude it
-// explicitly (it belongs to the dash, it must not rotate with the rim)
-const STRIP = { x: 460, y: 795, w: 490, h: 100 };
-// same story for the dash shelf + trim visible through the wheel's top
-// opening (redrawn between the two renders). It sits fully inside the
-// rim's inner radius and no spoke reaches up there, so a radial-bound
-// band excludes it without biting the rim ring
-const SHELF = { y0: 645, y1: 800, rMax: 335 };
+// the generator redrew everything BEHIND the wheel between the two
+// renders (shelf, warning strip, speaker grilles, trim), so diff-keying
+// catches all of it. The wheel itself is: the rim ring + the hub/spoke
+// band. Everything visible through the rim's TOP OPENING (above the
+// hub band, inside the rim) is dash — drop the whole opening.
+// (x/y in WHEEL_RECT coords; rMax is just under the rim's inner radius)
+const TOP_OPENING = { yMax: 326, yMaxLeft: 348, xLeft: 210, rMax: 336 };
+// side-vent / A-pillar slivers just inside the rim at 9 and 3 o'clock
+const SIDE_SLIVER = { x: 30, yMin: 270 };
 const WHEEL_RECT = {
   x: WHEEL.cx - WHEEL.r - 10,
   y: WHEEL.cy - WHEEL.r - 10,
   size: WHEEL.r * 2 + 20,
 };
 const WHEEL_ANGLES = [-24, 0, 24]; // left, center, right
+
+// is (sx, sy) in WHEEL_SRC coords part of the dash seen THROUGH the
+// wheel (top opening, side slivers) rather than the wheel itself?
+function isWheelExclusion(sx, sy) {
+  const rx = sx - WHEEL_RECT.x;
+  const ry = sy - WHEEL_RECT.y;
+  const r2 = (sx - WHEEL.cx) ** 2 + (sy - WHEEL.cy) ** 2;
+  if (
+    r2 < TOP_OPENING.rMax ** 2 &&
+    (ry < TOP_OPENING.yMax ||
+      (ry < TOP_OPENING.yMaxLeft && rx < TOP_OPENING.xLeft))
+  )
+    return true;
+  if (
+    ry > SIDE_SLIVER.yMin &&
+    (rx < SIDE_SLIVER.x || rx > WHEEL_RECT.size - SIDE_SLIVER.x)
+  )
+    return true;
+  return false;
+}
 
 async function loadKeyedRgba(src, { keyGlass }) {
   const { data, info } = await sharp(src)
@@ -192,6 +212,63 @@ async function loadKeyedRgba(src, { keyGlass }) {
 
 // --- dash master: wheel-less interior, glass keyed, specks cleaned ---
 const dash = await loadKeyedRgba(DASH_SRC, { keyGlass: true });
+
+// black out the warning-light strip on the dash: a running car shows no
+// warning lights, and the generator's red icons read as visual noise
+// behind the wheel. Find the saturated icon pixels (red/orange/green on
+// the dark strip) and fill their bounding box with the strip's own dark
+// background. (dash buffer coords: source y - TOP_CROP)
+{
+  const X0 = 300;
+  const X1 = 1250;
+  const Y0 = 600;
+  const Y1 = 840;
+  let bx0 = dash.W;
+  let bx1 = -1;
+  let by0 = dash.OH;
+  let by1 = -1;
+  for (let y = Y0; y < Y1; y++) {
+    for (let x = X0; x < X1; x++) {
+      const d = (y * dash.W + x) * 4;
+      const r = dash.rgba[d];
+      const g = dash.rgba[d + 1];
+      const b = dash.rgba[d + 2];
+      const mx = Math.max(r, g, b);
+      if (mx > 90 && mx - Math.min(r, g, b) > 60) {
+        if (x < bx0) bx0 = x;
+        if (x > bx1) bx1 = x;
+        if (y < by0) by0 = y;
+        if (y > by1) by1 = y;
+      }
+    }
+  }
+  if (bx1 > bx0) {
+    const PAD = 12;
+    const FILL = [22, 20, 28]; // the strip's unlit background
+    for (
+      let y = Math.max(0, by0 - PAD);
+      y <= Math.min(dash.OH - 1, by1 + PAD);
+      y++
+    ) {
+      for (
+        let x = Math.max(0, bx0 - PAD);
+        x <= Math.min(dash.W - 1, bx1 + PAD);
+        x++
+      ) {
+        const d = (y * dash.W + x) * 4;
+        dash.rgba[d] = FILL[0];
+        dash.rgba[d + 1] = FILL[1];
+        dash.rgba[d + 2] = FILL[2];
+      }
+    }
+    console.log(
+      `blacked out warning strip: x ${bx0 - PAD}-${bx1 + PAD}, y ${by0 - PAD}-${by1 + PAD} (buffer coords)`,
+    );
+  } else {
+    console.log("warning strip: no icon pixels found, left as-is");
+  }
+}
+
 const masterPng = await sharp(dash.rgba, {
   raw: { width: dash.W, height: dash.OH, channels: 4 },
 })
@@ -246,14 +323,7 @@ for (let y = 0; y < wr.size; y++) {
     const sy = wr.y + y;
     const r2 = (sx - WHEEL.cx) ** 2 + (sy - WHEEL.cy) ** 2;
     const inCircle = r2 <= WHEEL.r ** 2;
-    const inStrip =
-      sx >= STRIP.x &&
-      sx < STRIP.x + STRIP.w &&
-      sy >= STRIP.y &&
-      sy < STRIP.y + STRIP.h;
-    const inShelf =
-      sy >= SHELF.y0 && sy <= SHELF.y1 && r2 < SHELF.rMax ** 2;
-    if (!inCircle || inStrip || inShelf) continue;
+    if (!inCircle || isWheelExclusion(sx, sy)) continue;
     const by = sy - TOP_CROP;
     const ay = by + oy;
     const ax = sx + ox;
@@ -335,19 +405,7 @@ for (let y = 0; y < wr.size; y++) {
       if (!nearWheel) continue;
       const sx = wr.x + x;
       const sy = wr.y + y;
-      if (
-        sx >= STRIP.x &&
-        sx < STRIP.x + STRIP.w &&
-        sy >= STRIP.y &&
-        sy < STRIP.y + STRIP.h
-      )
-        continue;
-      if (
-        sy >= SHELF.y0 &&
-        sy <= SHELF.y1 &&
-        (sx - WHEEL.cx) ** 2 + (sy - WHEEL.cy) ** 2 < SHELF.rMax ** 2
-      )
-        continue;
+      if (isWheelExclusion(sx, sy)) continue;
       const by = sy - TOP_CROP;
       const ay = by + oy;
       const ax = sx + ox;
@@ -367,6 +425,20 @@ for (let y = 0; y < wr.size; y++) {
 }
 
 // cut the sprite from the WHEEL render, masked to real wheel pixels
+if (process.env.COCKPIT_DEBUG) {
+  const dbg = Buffer.alloc(wr.size * wr.size * 4);
+  for (let i = 0; i < mask.length; i++) {
+    const d = i * 4;
+    dbg[d] = mask[i] ? 255 : 0;
+    dbg[d + 1] = 0;
+    dbg[d + 2] = mask[i] ? 0 : 255;
+    dbg[d + 3] = 255;
+  }
+  await sharp(dbg, { raw: { width: wr.size, height: wr.size, channels: 4 } })
+    .png()
+    .toFile("scripts/__wheel-mask-debug.png");
+  console.log("wrote scripts/__wheel-mask-debug.png");
+}
 const wheel = Buffer.alloc(wr.size * wr.size * 4);
 for (let y = 0; y < wr.size; y++) {
   for (let x = 0; x < wr.size; x++) {
