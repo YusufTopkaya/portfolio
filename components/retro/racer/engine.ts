@@ -227,6 +227,7 @@ function project(
   cameraZ: number,
   width: number,
   height: number,
+  yShift = 0,
 ) {
   p.camera.x = p.world.x - cameraX;
   p.camera.y = p.world.y - cameraY;
@@ -236,7 +237,7 @@ function project(
     width / 2 + p.screen.scale * p.camera.x * (width / 2),
   );
   p.screen.y = Math.round(
-    height / 2 - p.screen.scale * p.camera.y * (height / 2),
+    height / 2 - p.screen.scale * p.camera.y * (height / 2) + yShift,
   );
   p.screen.w = Math.round(p.screen.scale * ROAD_WIDTH * (width / 2));
 }
@@ -976,6 +977,12 @@ export function createEngine(opts: {
       playerSegment.p2.world.y,
       playerPercent,
     );
+    // first-person: the dash hides the bottom of the frame, so the whole
+    // world is pitched up into the windshield — a plain screen-space y
+    // shift on the projection (camera tilt). Horizon, hills, sprites and
+    // the hill-clip logic all derive from projected y, so they follow.
+    const cockpitMode = state.view === "cockpit" && cockpit !== null;
+    const yShift = cockpitMode ? -Math.round(height * 0.3) : 0;
 
     // ── background ──
     // each layer rides the hills vertically at its own parallax speed
@@ -1003,7 +1010,7 @@ export function createEngine(opts: {
       ctx.drawImage(img, x, yBase);
       ctx.drawImage(img, x + width, yBase);
     };
-    const horizonY = Math.round(height / 2 - farShiftY);
+    const horizonY = Math.round(height / 2 - farShiftY) + yShift;
     // clouds: the farthest layer — slowest curve parallax of all, plus a
     // gentle autonomous drift so the sunset sky is never static
     const cloudDrift = skyOffset * width * 0.05 + state.time * width * 0.006;
@@ -1015,7 +1022,7 @@ export function createEngine(opts: {
     drawBand(
       hillsNear,
       hillOffset * width * 0.08,
-      Math.round(height / 2 - nearShiftY) - hillsNear.height,
+      Math.round(height / 2 - nearShiftY) + yShift - hillsNear.height,
     );
 
     // ── road ──
@@ -1038,8 +1045,8 @@ export function createEngine(opts: {
       const camZ = cameraZBase - (segment.looped ? trackLength : 0);
       const camX = state.playerX * ROAD_WIDTH - x;
       const camY = playerY + CAMERA_HEIGHT;
-      project(segment.p1, camX, camY, camZ, width, height);
-      project(segment.p2, camX + dx, camY, camZ, width, height);
+      project(segment.p1, camX, camY, camZ, width, height, yShift);
+      project(segment.p2, camX + dx, camY, camZ, width, height, yShift);
 
       x += dx;
       dx += segment.curve;
@@ -1077,7 +1084,8 @@ export function createEngine(opts: {
     // line (maxY) can hang well below the mountain bases, leaving a raw
     // sky strip between the hills and the ground — bridge it with grass.
     // Sky only shows below BOTH band bases, so start at the lower one.
-    const groundTop = Math.round(height / 2 - Math.min(farShiftY, nearShiftY));
+    const groundTop =
+      Math.round(height / 2 - Math.min(farShiftY, nearShiftY)) + yShift;
     if (maxY > groundTop) {
       ctx.fillStyle = farGrass;
       ctx.fillRect(0, groundTop, width, maxY - groundTop);
@@ -1192,7 +1200,6 @@ export function createEngine(opts: {
     }
 
     // ── player: chase sprite behind the car, or first-person cockpit ──
-    const cockpitMode = state.view === "cockpit" && cockpit !== null;
     const speedPercent = state.speed / MAX_SPEED;
     // speed-dependent bounce, stronger off-road; killed for reduced motion
     const bounce = reduceMotion
@@ -1204,7 +1211,7 @@ export function createEngine(opts: {
         : 0;
     // pickup sparkle anchor — at the car in chase view, mid-windshield
     // in cockpit view (the dash would hide the car spot)
-    let fxAnchorY = height * 0.55;
+    let fxAnchorY = cockpitMode ? height * 0.3 : height * 0.55;
     // speed streaks hug the road edges; cockpit view needs them UNDER the
     // dash, so each branch calls this at the right moment
     const drawStreaks = () => {
