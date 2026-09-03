@@ -921,6 +921,15 @@ export function createEngine(opts: {
   // the car frame (left/right lean)
   let pendingSteer = 0;
 
+  // crest airtime: clearing a hilltop fast pops the car off the tarmac
+  // for a beat, then the suspension squashes on touchdown. Purely
+  // cosmetic — the physics underneath keep rolling unchanged
+  let prevSlope = 0;
+  let lastSteepClimbAt = -10; // engine time of the last steep climb segment
+  let airT = 0; // time left airborne
+  let airDur = 0; // total airtime of the current hop
+  let landT = 0; // landing squash timer
+
   // prebuilt backdrop layers — rebuilt by resize() after a rotation
   let sky: HTMLCanvasElement;
   let clouds: HTMLCanvasElement;
@@ -1006,6 +1015,34 @@ export function createEngine(opts: {
 
     state.playerX = Math.max(-2.2, Math.min(2.2, state.playerX));
     state.speed = Math.max(0, Math.min(MAX_SPEED, state.speed));
+
+    // crest hop: the road falling away steeply right after a steep climb
+    // means the car just cleared a hilltop at speed — give it a short
+    // hop, then a suspension squash when it sets back down. (At the crest
+    // itself the per-segment slope is ~0 by construction, so the trigger
+    // is the descent ramping up, armed by a steep climb <1s earlier)
+    const slope = playerSegment.p2.world.y - playerSegment.p1.world.y;
+    if (slope > SEGMENT_LENGTH * 0.4) lastSteepClimbAt = state.time;
+    if (
+      airT <= 0 &&
+      landT <= 0 &&
+      slope < -SEGMENT_LENGTH * 0.1 &&
+      prevSlope >= slope &&
+      state.time - lastSteepClimbAt < 0.9 &&
+      speedPercent > 0.55 &&
+      !state.offRoad &&
+      state.respawn <= 0
+    ) {
+      airDur = 0.28 + 0.3 * speedPercent;
+      airT = airDur;
+    }
+    prevSlope = slope;
+    if (airT > 0) {
+      airT = Math.max(0, airT - dt);
+      if (airT === 0) landT = 0.24;
+    } else if (landT > 0) {
+      landT = Math.max(0, landT - dt);
+    }
     // rolling drag decays exponentially and would creep forever — snap a
     // coasting crawl (<2 km/h) to a full stop, but never against a
     // downhill pull (a parked car on a descent must start rolling)
@@ -1305,10 +1342,22 @@ export function createEngine(opts: {
 
     // ── player: chase sprite behind the car, or first-person cockpit ──
     const speedPercent = state.speed / MAX_SPEED;
+    // crest hop: parabolic lift while airborne, a short damped squash on
+    // touchdown; the road bounce fades out while the wheels are off it
+    const airP = airDur > 0 && airT > 0 ? 1 - airT / airDur : 0;
+    const lift =
+      airT > 0
+        ? Math.sin(airP * Math.PI) * height * (0.02 + 0.02 * speedPercent)
+        : 0;
+    const landP = landT > 0 ? 1 - landT / 0.24 : 0;
+    const dip = landT > 0 ? Math.sin(landP * Math.PI) * height * 0.008 : 0;
     // speed-dependent bounce, stronger off-road; killed for reduced motion
-    const bounce = reduceMotion
-      ? 0
-      : Math.sin(state.time * 18) * (state.offRoad ? 2.2 : 0.8) * speedPercent;
+    const bounce =
+      reduceMotion || airT > 0
+        ? 0
+        : Math.sin(state.time * 18) *
+          (state.offRoad ? 2.2 : 0.8) *
+          speedPercent;
     const shakeX =
       !reduceMotion && state.offRoad && state.speed > MAX_SPEED * 0.1
         ? Math.sin(state.time * 47) * 1.5
@@ -1340,7 +1389,8 @@ export function createEngine(opts: {
     };
 
     if (!cockpitMode) {
-      const steer = state.speed > MAX_SPEED * 0.02;      let frame = car.straight;
+      const steer = state.speed > MAX_SPEED * 0.02;
+      let frame = car.straight;
       // slope frames on hills (dy under the car), steer frames when turning;
       // the threshold only engages on pronounced slopes now that hills are
       // full Jake Gordon height (a LOW rolling hill peaks ~80 world/segment)
@@ -1363,14 +1413,17 @@ export function createEngine(opts: {
       const destW = frame.w * scale * (width / 2) * carScale;
       const destH = frame.h * scale * (width / 2) * carScale;
       const carX = width / 2 - destW / 2 + shakeX;
-      const carY = height - destH - Math.round(height * 0.04) + bounce;
+      const carY =
+        height - destH - Math.round(height * 0.04) + bounce - lift + dip;
 
       // respawn: the car breathes in and out of existence for a moment
       const carAlpha =
         state.respawn > 0 ? 0.5 + 0.5 * Math.sin(state.time * 9) : 1;
 
-      // soft shadow
-      ctx.globalAlpha = carAlpha * 0.9;
+      // soft shadow — stays on the tarmac while the car is airborne, so
+      // the hop reads as real separation from the road
+      const shadowFade = 1 - Math.min(1, lift / (height * 0.035)) * 0.5;
+      ctx.globalAlpha = carAlpha * 0.9 * shadowFade;
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.beginPath();
       ctx.ellipse(
@@ -1464,7 +1517,9 @@ export function createEngine(opts: {
         dashW === width ? (cockpit.dash.h / cockpit.dash.w) * width : height;
       const swayX = pendingSteer * 2 * (width / RACER_WIDTH) + shakeX * 0.5;
       const dashX = width / 2 - dashW / 2 + swayX;
-      const dashY = height - dashH + bounce * 0.5;
+      // the body feel survives the hop too: the dash floats up a touch
+      // over the crest and thumps down on landing
+      const dashY = height - dashH + bounce * 0.5 - lift * 0.35 + dip * 1.3;
       ctx.drawImage(
         cockpit.dash.image,
         Math.round(dashX),
