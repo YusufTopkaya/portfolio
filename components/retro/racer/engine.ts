@@ -1421,7 +1421,21 @@ export function createEngine(opts: {
     // shift on the projection (camera tilt). Horizon, hills, sprites and
     // the hill-clip logic all derive from projected y, so they follow.
     const cockpitMode = state.view === "cockpit" && cockpit !== null;
-    const yShift = cockpitMode ? -Math.round(height * 0.3) : 0;
+    // crest hop, computed up front: parabolic lift while airborne, a short
+    // damped squash on touchdown. Chase cam SHOWS the car hopping; in the
+    // cockpit you ARE the car, so the world sinks by the lift instead and
+    // rises a touch on landing (suspension) while the dash takes the thump
+    const speedPercent = state.speed / MAX_SPEED;
+    const airP = airDur > 0 && airT > 0 ? 1 - airT / airDur : 0;
+    const lift =
+      airT > 0
+        ? Math.sin(airP * Math.PI) * height * (0.02 + 0.02 * speedPercent)
+        : 0;
+    const landP = landT > 0 ? 1 - landT / 0.24 : 0;
+    const dip = landT > 0 ? Math.sin(landP * Math.PI) * height * 0.008 : 0;
+    const yShift = cockpitMode
+      ? -Math.round(height * 0.3) + Math.round(lift - dip * 0.25)
+      : 0;
 
     // ── background ──
     // each layer rides the hills vertically at its own parallax speed
@@ -1639,16 +1653,8 @@ export function createEngine(opts: {
     }
 
     // ── player: chase sprite behind the car, or first-person cockpit ──
-    const speedPercent = state.speed / MAX_SPEED;
-    // crest hop: parabolic lift while airborne, a short damped squash on
-    // touchdown; the road bounce fades out while the wheels are off it
-    const airP = airDur > 0 && airT > 0 ? 1 - airT / airDur : 0;
-    const lift =
-      airT > 0
-        ? Math.sin(airP * Math.PI) * height * (0.02 + 0.02 * speedPercent)
-        : 0;
-    const landP = landT > 0 ? 1 - landT / 0.24 : 0;
-    const dip = landT > 0 ? Math.sin(landP * Math.PI) * height * 0.008 : 0;
+    // (speedPercent / lift / dip are computed up front — the cockpit sinks
+    // the world with them via yShift)
     // speed-dependent bounce, stronger off-road; killed for reduced motion
     const bounce =
       reduceMotion || airT > 0
@@ -1822,9 +1828,10 @@ export function createEngine(opts: {
         dashW === width ? (cockpit.dash.h / cockpit.dash.w) * width : height;
       const swayX = pendingSteer * 2 * (width / RACER_WIDTH) + shakeX * 0.5;
       const dashX = width / 2 - dashW / 2 + swayX;
-      // the body feel survives the hop too: the dash floats up a touch
-      // over the crest and thumps down on landing
-      const dashY = height - dashH + bounce * 0.5 - lift * 0.35 + dip * 1.3;
+      // the dash rides WITH the driver — while airborne it's the world
+      // that sinks (yShift above); on touchdown the suspension thump
+      // hits the dash
+      const dashY = height - dashH + bounce * 0.5 + dip * 1.3;
       ctx.drawImage(
         cockpit.dash.image,
         Math.round(dashX),
