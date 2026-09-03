@@ -1434,7 +1434,8 @@ export function createEngine(opts: {
     const landP = landT > 0 ? 1 - landT / 0.24 : 0;
     const dip = landT > 0 ? Math.sin(landP * Math.PI) * height * 0.008 : 0;
     const yShift = cockpitMode
-      ? -Math.round(height * 0.3) + Math.round(lift - dip * 0.25)
+      ? -Math.round(height * (width < RACER_WIDTH ? 0.4 : 0.3)) +
+        Math.round(lift - dip * 0.25)
       : 0;
 
     // ── background ──
@@ -1828,7 +1829,12 @@ export function createEngine(opts: {
           ? (cockpit.dash.w / cockpit.dash.h) * height
           : width;
       const dashH =
-        dashW === width ? (cockpit.dash.h / cockpit.dash.w) * width : height;
+        (dashW === width ? (cockpit.dash.h / cockpit.dash.w) * width : height) *
+        // portrait phones: the dash strip is thin, which reads as a high
+        // truck seat — stretch it taller so the dash hides the near road
+        // like a car's hood line (fractions keep wheel/mirror/cluster
+        // aligned; the buffer is already stretched vertically on phones)
+        (width < RACER_WIDTH ? 1.4 : 1);
       const swayX = pendingSteer * 2 * (width / RACER_WIDTH) + shakeX * 0.5;
       const dashX = width / 2 - dashW / 2 + swayX;
       // the dash rides WITH the driver — while airborne it's the world
