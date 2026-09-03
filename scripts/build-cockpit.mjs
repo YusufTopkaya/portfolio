@@ -7,11 +7,13 @@
 //   inside the glass areas (windshield, side windows, mirror glass),
 //   then deletes leftover jpg specks (small opaque blobs inside glass)
 // - the wheel sprite is isolated per zone: the rim is an opaque ring, so
-//   its annulus (measured r 333..395, used with margin: 326..398) is
+//   its annulus (measured r 333..395, used with margin: 326..392) is
 //   kept UNCONDITIONALLY — no jpg-noise holes, no exterior specks.
-//   Inside the rim the two renders are DIFF-KEYED: pixels that differ
-//   ARE the wheel (spokes, hub). Static dash visible through the rim
-//   openings stays in the master, so only real wheel pixels rotate.
+//   Inside the rim the wheel body is the only LIGHT paint, so light
+//   pixels are kept outright; darker pixels (outlines, the logo) are
+//   kept only when they differ between the renders AND sit right on the
+//   body. Dash fragments redrawn inside the openings are dark and off
+//   the body, so they drop out and the master shows through.
 // - emits public/images/twingo-cockpit.png (480x270 RGBA master)
 // - emits public/images/twingo-cockpit-wheel.png (3 frames side by side)
 // - detects the instrument-cluster screen and the rearview-mirror glass
@@ -39,8 +41,13 @@ const GLASS_RECTS = [
 // steering wheel circle in WHEEL_SRC coords (measured on a 200px grid)
 const WHEEL = { cx: 634, cy: 1004, r: 408 };
 // the rim ring, measured by radial luminance scans: inner edge ~333,
-// outer ~395. Kept unconditionally (opaque wheel paint) — with margin
-const RIM = { rIn: 326, rOut: 398 };
+// outer ~395 with the dark outline ending ~392 (past it the dash-top
+// highlight begins and would rotate with the wheel). Kept with margin
+const RIM = { rIn: 326, rOut: 392 };
+// inside the rim the wheel body is the only light paint
+const LIGHT_LUM = 105;
+// dark wheel details (outlines, logo) sit within a few px of the body
+const OUTLINE_REACH = 8;
 // the generator redrew everything BEHIND the wheel between the two
 // renders (shelf, warning strip, speaker grilles, trim), so diff-keying
 // catches all of it. The wheel itself is: the rim ring + the hub/spoke
@@ -55,6 +62,10 @@ const TOP_OPENING = { yMax: 326, yMaxLeft: 348, xLeft: 210, rMax: 336 };
 const RIGHT_OPENING = { x0: 500, x1: 775, rMax: 355 };
 const RIGHT_OPENING_YMAX = (rx) =>
   rx <= 640 ? 345 + 0.25 * (rx - RIGHT_OPENING.x0) : 380 + 0.12 * (rx - 640);
+// left notch: the dark opening between the band's left end and the rim
+// (you see the door panel through it). It sits next to the body, so the
+// outline-capture would hold onto it — exclude it explicitly
+const NOTCH_LEFT = { x0: 55, x1: 170, y0: 312, y1: 395, rMax: 340 };
 // side-vent / A-pillar slivers just inside the rim at 9 and 3 o'clock
 const SIDE_SLIVER = { x: 30, yMin: 270 };
 const WHEEL_RECT = {
@@ -81,6 +92,14 @@ function isWheelExclusion(sx, sy) {
     rx >= RIGHT_OPENING.x0 &&
     rx <= RIGHT_OPENING.x1 &&
     ry < RIGHT_OPENING_YMAX(rx)
+  )
+    return true;
+  if (
+    r2 < NOTCH_LEFT.rMax ** 2 &&
+    rx >= NOTCH_LEFT.x0 &&
+    rx <= NOTCH_LEFT.x1 &&
+    ry >= NOTCH_LEFT.y0 &&
+    ry <= NOTCH_LEFT.y1
   )
     return true;
   if (
@@ -336,33 +355,75 @@ const { ox, oy } = best;
 
 // mask zones: exclusions (dash seen through openings) win first, then
 // the rim annulus is kept unconditionally, the exterior is dropped, and
-// the interior is diff-keyed between the renders
+// the interior keeps light body paint outright plus dark details that
+// both differ between the renders and sit on the body
 const mask = new Uint8Array(wr.size * wr.size); // 1 = wheel pixel
+const body = new Uint8Array(wr.size * wr.size); // light paint + annulus
+const darkDiff = new Uint8Array(wr.size * wr.size); // dark, differs
 for (let y = 0; y < wr.size; y++) {
   for (let x = 0; x < wr.size; x++) {
     const sx = wr.x + x;
     const sy = wr.y + y;
+    const i = y * wr.size + x;
     const r2 = (sx - WHEEL.cx) ** 2 + (sy - WHEEL.cy) ** 2;
     if (isWheelExclusion(sx, sy)) continue;
     if (r2 >= RIM.rIn ** 2 && r2 <= RIM.rOut ** 2) {
-      mask[y * wr.size + x] = 1;
+      mask[i] = 1;
+      body[i] = 1;
       continue;
     }
     if (r2 > RIM.rOut ** 2) continue;
     const by = sy - TOP_CROP;
+    if (by < 0 || by >= wheelSrc.OH || sx >= wheelSrc.W) continue;
+    const s = (by * wheelSrc.W + sx) * 4;
+    const lum =
+      (wheelSrc.rgba[s] + wheelSrc.rgba[s + 1] + wheelSrc.rgba[s + 2]) / 3;
+    if (lum > LIGHT_LUM) {
+      mask[i] = 1;
+      body[i] = 1;
+      continue;
+    }
     const ay = by + oy;
     const ax = sx + ox;
-    if (by < 0 || by >= wheelSrc.OH || sx >= wheelSrc.W) continue;
     if (ay < 0 || ax < 0 || ay >= dash.OH || ax >= dash.W) continue;
     const da = (ay * dash.W + ax) * 4;
-    const db = (by * wheelSrc.W + sx) * 4;
     const diff = Math.max(
-      Math.abs(dash.rgba[da] - wheelSrc.rgba[db]),
-      Math.abs(dash.rgba[da + 1] - wheelSrc.rgba[db + 1]),
-      Math.abs(dash.rgba[da + 2] - wheelSrc.rgba[db + 2]),
+      Math.abs(dash.rgba[da] - wheelSrc.rgba[s]),
+      Math.abs(dash.rgba[da + 1] - wheelSrc.rgba[s + 1]),
+      Math.abs(dash.rgba[da + 2] - wheelSrc.rgba[s + 2]),
     );
-    if (diff > 16) mask[y * wr.size + x] = 1;
+    if (diff > 16) darkDiff[i] = 1;
   }
+}
+// outline capture: dilate the body a few px; differing dark pixels it
+// reaches are wheel outlines / logo, the rest is redrawn dash
+{
+  let near = Uint8Array.from(body);
+  for (let pass = 0; pass < OUTLINE_REACH; pass++) {
+    const next = Uint8Array.from(near);
+    for (let y = 1; y < wr.size - 1; y++) {
+      for (let x = 1; x < wr.size - 1; x++) {
+        const i = y * wr.size + x;
+        if (near[i]) continue;
+        const sx = wr.x + x;
+        const sy = wr.y + y;
+        if ((sx - WHEEL.cx) ** 2 + (sy - WHEEL.cy) ** 2 > 396 ** 2) continue;
+        if (near[i - 1] || near[i + 1] || near[i - wr.size] || near[i + wr.size])
+          next[i] = 1;
+      }
+    }
+    near = next;
+  }
+  let n = 0;
+  for (let i = 0; i < mask.length; i++) {
+    if (mask[i] || !darkDiff[i] || !near[i]) continue;
+    const x = i % wr.size;
+    const y = (i / wr.size) | 0;
+    if (isWheelExclusion(wr.x + x, wr.y + y)) continue;
+    mask[i] = 1;
+    n++;
+  }
+  console.log("outline capture: added", n, "dark px on the body");
 }
 // keep only the largest connected masked component: the wheel is one big
 // blob; jpg noise specks and faint rim echoes are small islands
@@ -404,51 +465,6 @@ for (let y = 0; y < wr.size; y++) {
   for (let i = 0; i < mask.length; i++)
     if (mask[i] && comp[i] !== biggest) mask[i] = 0;
   console.log("wheel mask: kept", sizes[biggest], "px of", sizes.length, "components");
-}
-// 1px dilation with a looser threshold: catch the wheel's anti-aliased
-// edge pixels the strict diff missed (only just outside the rim —
-// further out the redrawn dash also diffs and would grow specks)
-{
-  const grown = Uint8Array.from(mask);
-  for (let y = 0; y < wr.size; y++) {
-    for (let x = 0; x < wr.size; x++) {
-      if (mask[y * wr.size + x]) continue;
-      let nearWheel = false;
-      for (const [dx, dy] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ]) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= wr.size || ny >= wr.size) continue;
-        if (mask[ny * wr.size + nx]) {
-          nearWheel = true;
-          break;
-        }
-      }
-      if (!nearWheel) continue;
-      const sx = wr.x + x;
-      const sy = wr.y + y;
-      if (isWheelExclusion(sx, sy)) continue;
-      if ((sx - WHEEL.cx) ** 2 + (sy - WHEEL.cy) ** 2 > 400 ** 2) continue;
-      const by = sy - TOP_CROP;
-      const ay = by + oy;
-      const ax = sx + ox;
-      if (by < 0 || by >= wheelSrc.OH || sx >= wheelSrc.W) continue;
-      if (ay < 0 || ax < 0 || ay >= dash.OH || ax >= dash.W) continue;
-      const da = (ay * dash.W + ax) * 4;
-      const db = (by * wheelSrc.W + sx) * 4;
-      const diff = Math.max(
-        Math.abs(dash.rgba[da] - wheelSrc.rgba[db]),
-        Math.abs(dash.rgba[da + 1] - wheelSrc.rgba[db + 1]),
-        Math.abs(dash.rgba[da + 2] - wheelSrc.rgba[db + 2]),
-      );
-      if (diff > 8) grown[y * wr.size + x] = 1;
-    }
-  }
-  mask.set(grown);
 }
 // hole fill: a dropped pixel buried inside kept wheel paint (3+ of 4
 // neighbours) is a jpg-coincidence hole — fill it. Three passes close
