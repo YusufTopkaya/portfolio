@@ -1720,7 +1720,7 @@ export function createEngine(opts: {
       // the road's vertical stretch makes the lanes read huge — boost the
       // sprite so it keeps roughly a lane of visual width
       const portraitBoost =
-        width < RACER_WIDTH ? Math.min(1.6, (RACER_WIDTH / width) * 0.85) : 1;
+        width < RACER_WIDTH ? Math.min(2, (RACER_WIDTH / width) * 1.15) : 1;
       const carScale =
         interpolate(CAR_SCALE_NEAR, CAR_SCALE_FAR, speedPercent) *
         portraitBoost;
