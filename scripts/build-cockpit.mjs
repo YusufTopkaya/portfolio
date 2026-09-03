@@ -43,6 +43,13 @@ const WHEEL = { cx: 634, cy: 1004, r: 408 };
 // hub band, inside the rim) is dash — drop the whole opening.
 // (x/y in WHEEL_RECT coords; rMax is just under the rim's inner radius)
 const TOP_OPENING = { yMax: 326, yMaxLeft: 348, xLeft: 210, rMax: 336 };
+// on the right the hub band sweeps downward toward its 3-o'clock rim
+// connection, so the opening (dash trim + a dark shadow wedge) reaches
+// below the flat cutoff. Follow the band's measured top edge:
+// dark wedge spans y~342..380..396 between rect x 536..775
+const RIGHT_OPENING = { x0: 500, x1: 775, rMax: 355 };
+const RIGHT_OPENING_YMAX = (rx) =>
+  rx <= 640 ? 345 + 0.25 * (rx - RIGHT_OPENING.x0) : 380 + 0.12 * (rx - 640);
 // side-vent / A-pillar slivers just inside the rim at 9 and 3 o'clock
 const SIDE_SLIVER = { x: 30, yMin: 270 };
 const WHEEL_RECT = {
@@ -62,6 +69,13 @@ function isWheelExclusion(sx, sy) {
     r2 < TOP_OPENING.rMax ** 2 &&
     (ry < TOP_OPENING.yMax ||
       (ry < TOP_OPENING.yMaxLeft && rx < TOP_OPENING.xLeft))
+  )
+    return true;
+  if (
+    r2 < RIGHT_OPENING.rMax ** 2 &&
+    rx >= RIGHT_OPENING.x0 &&
+    rx <= RIGHT_OPENING.x1 &&
+    ry < RIGHT_OPENING_YMAX(rx)
   )
     return true;
   if (
