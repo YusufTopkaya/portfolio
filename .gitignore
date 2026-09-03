@@ -52,3 +52,6 @@ plans/
 
 # serena MCP tool cache (local tooling state)
 .serena/
+
+# Twingo Racer highscore store (runtime data, not source)
+/data/

@@ -47,6 +47,10 @@ RUN apk add --no-cache vips
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Writable dir for the Twingo Racer highscore store (data/highscores.json).
+# Mount a volume here in Dokploy or scores reset on every redeploy.
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
