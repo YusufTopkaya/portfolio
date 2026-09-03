@@ -158,6 +158,12 @@ export interface CockpitSprites {
 
 export type RacerView = "chase" | "cockpit";
 
+/* cockpit dash geometry as fractions of the drawn dash rect — measured
+   and printed by scripts/build-cockpit.mjs */
+const COCKPIT_WHEEL = { cxF: 0.2304, cyF: 0.6189, fwF: 0.3038, fhF: 0.5989 };
+const COCKPIT_MIRROR = { xF: 0.4146, yF: 0.037, wF: 0.1729, hF: 0.0815 };
+const COCKPIT_CLUSTER = { xF: 0.4188, yF: 0.3704, wF: 0.1688, hF: 0.0704 };
+
 export interface EngineState {
   position: number;
   playerX: number;
@@ -690,6 +696,104 @@ function renderCluster(
   );
 }
 
+/* cockpit mode: the dash art has the MK1's real central cluster screen
+   baked in (detected by build-cockpit.mjs) — paint the live readouts
+   straight onto it: deep green LCD glass, bright green 7-segment digits
+   (both colours sampled off the generated art) */
+function renderDashCluster(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  kmh: number,
+  score: number,
+  fuel: number,
+  time: number,
+  flash: boolean,
+): { x: number; y: number } {
+  const u = h / 19; // the baked screen is 19px tall on the 480x270 master
+  ctx.fillStyle = "#23522d";
+  ctx.beginPath();
+  ctx.roundRect(
+    Math.round(x),
+    Math.round(y),
+    Math.round(w),
+    Math.round(h),
+    Math.max(1, Math.round(2 * u)),
+  );
+  ctx.fill();
+  const segColor = "#87de73";
+  const ghostColor = "rgba(135,222,115,0.10)";
+
+  // big speed readout, left
+  const size = 6.2 * u;
+  const gap = 2.2 * u;
+  const digitW = size + gap;
+  const digitsX = x + 3.5 * u;
+  const digitsY = y + (h - size * 2) / 2;
+  const text = String(Math.min(999, Math.round(kmh))).padStart(3, " ");
+  for (let i = 0; i < 3; i++) {
+    drawSevenSeg(ctx, digitsX + i * digitW, digitsY, size, "8", ghostColor);
+    if (text[i] !== " ") {
+      drawSevenSeg(ctx, digitsX + i * digitW, digitsY, size, text[i], segColor);
+    }
+  }
+  ctx.fillStyle = segColor;
+  ctx.font = `${Math.max(3, Math.round(3.2 * u))}px monospace`;
+  ctx.fillText(
+    "km/h",
+    Math.round(digitsX + 3 * digitW + 1 * u),
+    Math.round(digitsY + size * 2),
+  );
+
+  // score where the real cluster shows the trip counter, top-right
+  const tSize = 3.1 * u;
+  const tGap = 1.1 * u;
+  const tW = tSize + tGap;
+  const scoreText = String(Math.min(99999, Math.floor(score))).padStart(5, " ");
+  const scoreX = x + w - 2.5 * u - 5 * tW;
+  const scoreY = y + 2 * u;
+  for (let i = 0; i < 5; i++) {
+    drawSevenSeg(ctx, scoreX + i * tW, scoreY, tSize, "8", ghostColor);
+    if (scoreText[i] !== " ") {
+      drawSevenSeg(ctx, scoreX + i * tW, scoreY, tSize, scoreText[i], segColor);
+    }
+  }
+
+  // fuel dots, bottom-right: same semantics as the floating panel's gauge
+  // (lit dots, pickup flash, low-fuel blink), minus the pump and legends —
+  // no room for them on the baked screen
+  const dots = FUEL_MAX;
+  const lit = Math.ceil(fuel);
+  const low = fuel <= 1.5;
+  const blinkOn = Math.floor(time * 2.5) % 2 === 0;
+  const r = Math.max(1, 1.05 * u);
+  const step = 3 * u;
+  const dotsX = x + w - 2.5 * u - (dots - 1) * step - r;
+  const dotsY = y + h - 3.2 * u;
+  for (let i = 0; i < dots; i++) {
+    const cx = dotsX + i * step;
+    ctx.beginPath();
+    ctx.arc(Math.round(cx), Math.round(dotsY), r, 0, Math.PI * 2);
+    if (i < lit) {
+      if (low && i === lit - 1) {
+        ctx.fillStyle = blinkOn ? "#e2703a" : "rgba(226,112,58,0.3)";
+      } else {
+        ctx.fillStyle = flash ? "#e2703a" : segColor;
+      }
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = segColor;
+      ctx.lineWidth = Math.max(1, 0.5 * u);
+      ctx.stroke();
+    }
+  }
+
+  // "+1" pickup popup floats up from the dots row
+  return { x: dotsX, y: dotsY - 2 * u };
+}
+
 /* anime-style speed streaks hugging the road edges: each streak lies on a
    line from the vanishing point through a spot just off the rumble strip,
    so they stream past PARALLEL to the road edges (t² easing compresses
@@ -1212,6 +1316,9 @@ export function createEngine(opts: {
     // pickup sparkle anchor — at the car in chase view, mid-windshield
     // in cockpit view (the dash would hide the car spot)
     let fxAnchorY = cockpitMode ? height * 0.3 : height * 0.55;
+    // cockpit dash placement, captured in the first-person branch so the
+    // instrument cluster can be painted onto the dash art afterwards
+    let dashGeom: { x: number; y: number; w: number; h: number } | null = null;
     // speed streaks hug the road edges; cockpit view needs them UNDER the
     // dash, so each branch calls this at the right moment
     const drawStreaks = () => {
@@ -1233,8 +1340,7 @@ export function createEngine(opts: {
     };
 
     if (!cockpitMode) {
-      const steer = state.speed > MAX_SPEED * 0.02;
-      let frame = car.straight;
+      const steer = state.speed > MAX_SPEED * 0.02;      let frame = car.straight;
       // slope frames on hills (dy under the car), steer frames when turning;
       // the threshold only engages on pronounced slopes now that hills are
       // full Jake Gordon height (a LOW rolling hill peaks ~80 world/segment)
@@ -1371,33 +1477,63 @@ export function createEngine(opts: {
       // (printed by scripts/build-cockpit.mjs)
       const wf = pendingSteer < -0.1 ? 0 : pendingSteer > 0.1 ? 2 : 1;
       const fw = cockpit.wheelFrame;
-      const wheelW = dashW * 0.3038;
-      const wheelH = dashH * 0.5989;
+      const wheelW = dashW * COCKPIT_WHEEL.fwF;
+      const wheelH = dashH * COCKPIT_WHEEL.fhF;
       ctx.drawImage(
         cockpit.wheel,
         wf * fw,
         0,
         fw,
         fw,
-        Math.round(dashX + dashW * 0.2304 - wheelW / 2),
-        Math.round(dashY + dashH * 0.6189 - wheelH / 2),
+        Math.round(dashX + dashW * COCKPIT_WHEEL.cxF - wheelW / 2),
+        Math.round(dashY + dashH * COCKPIT_WHEEL.cyF - wheelH / 2),
         Math.round(wheelW),
         Math.round(wheelH),
       );
+
+      // rearview mirror: frost the glass — a blurred, dimmed smear of the
+      // world passing behind us (a true mirror image isn't needed)
+      const mX = Math.round(dashX + dashW * COCKPIT_MIRROR.xF);
+      const mY = Math.round(dashY + dashH * COCKPIT_MIRROR.yF);
+      const mW = Math.round(dashW * COCKPIT_MIRROR.wF);
+      const mH = Math.round(dashH * COCKPIT_MIRROR.hF);
+      ctx.save();
+      ctx.filter = "blur(1.5px) brightness(0.75)";
+      ctx.drawImage(ctx.canvas, mX, mY, mW, mH, mX, mY, mW, mH);
+      ctx.restore();
+
+      dashGeom = { x: dashX, y: dashY, w: dashW, h: dashH };
     }
     // pickup feedback window — sparkle burst + gauge flash + rising "+1"
     const fxAge = state.time - lastPickupAt;
-    const gaugePos = renderCluster(
-      ctx,
-      width,
-      height,
-      speedPercent * 180,
-      state.score,
-      state.fuel,
-      state.time,
-      fxAge < 0.5,
-      opts.clusterTopLeft,
-    );
+    // cockpit view: the readouts live on the dash's own cluster screen;
+    // chase view: the floating LCD panel (bottom-right, or top-left on
+    // touch so the pedals don't cover it)
+    const gaugePos =
+      cockpitMode && dashGeom
+        ? renderDashCluster(
+            ctx,
+            dashGeom.x + dashGeom.w * COCKPIT_CLUSTER.xF,
+            dashGeom.y + dashGeom.h * COCKPIT_CLUSTER.yF,
+            dashGeom.w * COCKPIT_CLUSTER.wF,
+            dashGeom.h * COCKPIT_CLUSTER.hF,
+            speedPercent * 180,
+            state.score,
+            state.fuel,
+            state.time,
+            fxAge < 0.5,
+          )
+        : renderCluster(
+            ctx,
+            width,
+            height,
+            speedPercent * 180,
+            state.score,
+            state.fuel,
+            state.time,
+            fxAge < 0.5,
+            opts.clusterTopLeft,
+          );
 
     if (fxAge < 0.8) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
