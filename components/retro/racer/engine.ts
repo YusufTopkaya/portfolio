@@ -839,6 +839,301 @@ function renderSpeedLines(
   }
 }
 
+/* rearview mirror: a SIMULATED rear view — no re-render of the world, but
+   the same pseudo-3d projection as the main road (extentofthejam.com/pseudo)
+   miniaturized into the glass, looking BACKWARD: segment curves accumulate
+   in reverse (backward dx/ddx walk), so a right-hand bend the car just
+   drove through leaves the road behind receding to the LEFT — a plane
+   mirror flips depth, not left/right, and this matches it. Steering left
+   shifts the mirrored road right, as it should. Hills come straight from
+   the segments' stored world.y (the site's #hills trick): rings rise and
+   fall with the real terrain, and the far side of a crest is hidden by the
+   same maxY clip rule as the main renderer. The visible road starts
+   ZOFF segments behind the bumper (a real mirror never shows it) — that
+   alone calms the stream, since the 1/z flow rate explodes near z=0. */
+function renderMirror(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  position: number,
+  playerX: number,
+  /** the car's world y (interpolated at its segment) — hills reference */
+  carY: number,
+  segments: Segment[],
+  /** smoothed -curve×speed — the cornering sway that swings the glass */
+  sway: number,
+) {
+  ctx.save();
+  // keep the scene inside the rounded mirror glass
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, Math.max(1, Math.round(h * 0.2)));
+  ctx.clip();
+
+  const horizon = y + h * 0.45;
+  const bottom = y + h;
+  // mid-corner the whole mirrored world swings against the bend — the
+  // vanishing point rides the sway, so even before the bend itself
+  // recedes into view you FEEL the turn in the glass
+  const cx = x + w / 2 + sway * w * 0.06;
+
+  // sunset sky, same palette as the main backdrop
+  const sky = ctx.createLinearGradient(0, y, 0, horizon);
+  sky.addColorStop(0, "#1a1c3f");
+  sky.addColorStop(0.7, "#7a3b69");
+  sky.addColorStop(1, "#e2703a");
+  ctx.fillStyle = sky;
+  ctx.fillRect(x, y, w, horizon - y);
+  // ground
+  ctx.fillStyle = "#377934";
+  ctx.fillRect(x, horizon, w, bottom - horizon);
+
+  const N = segments.length;
+  const DD = 20; // segments of road behind shown in the glass
+  const segIdx = Math.floor(position / SEGMENT_LENGTH) % N;
+  const frac = (position % SEGMENT_LENGTH) / SEGMENT_LENGTH;
+
+  // world-x of each segment boundary behind the car, relative to the car:
+  // reverse-walk the curve accumulation (wrap-safe — no absolute centers
+  // needed). Forward is x += dx, dx += curve; backward both invert.
+  // world-y needs no walk: boundary heights are stored per segment.
+  const ringX: number[] = [0];
+  const ringY: number[] = [0];
+  let hdx = 0;
+  for (let k = 1; k <= DD; k++) {
+    const seg = segments[(segIdx - k + N) % N];
+    hdx -= seg.curve;
+    ringX.push(ringX[k - 1] - hdx);
+    ringY.push(seg.p1.world.y - carY);
+  }
+
+  // the honest curve offsets (x/RW of the road width) are invisible at
+  // mirror scale — the glass is a feel instrument, so the lateral read is
+  // amplified. playerX stays 1:1: steering left pushes the road right
+  const LATERAL_GAIN = 3.5;
+  // the mirror shows the road starting ZOFF segments behind the bumper —
+  // calms the stream (1/z flow explodes near z=0) and matches a real
+  // rearview, which never shows the car's own tail
+  const ZOFF = 1.8;
+  // effective camera height in world units — how strongly a hill lifts
+  // a ring off the ground line (main engine uses CAMERA_HEIGHT = 1000)
+  const MIRROR_CAM_H = 1200;
+
+  // ring k sits (k - frac + ZOFF) segments behind the bumper; perspective
+  // factor is 1/z for the y drop, the road half-width AND the hill lift
+  const ringAt = (k: number) => {
+    const z = (k - frac + ZOFF) * SEGMENT_LENGTH;
+    const persp = (0.7 * SEGMENT_LENGTH) / z;
+    return {
+      persp,
+      ry:
+        horizon +
+        (bottom - horizon) * persp * (1 - ringY[k] / MIRROR_CAM_H),
+      rw: w * 0.5 * persp,
+      rx:
+        cx +
+        ((ringX[k] * LATERAL_GAIN - playerX * ROAD_WIDTH) / ROAD_WIDTH) *
+          (w * 0.5 * persp),
+    };
+  };
+
+  // apron: the road continues from the nearest ring down to the glass
+  // bottom. rx/rw are linear in persp through the vanishing point, so the
+  // ring-0 edges extrapolate cleanly to persp = 1. Without this a grass
+  // gap breathes under the road once per segment, right after frac resets
+  let maxY = bottom;
+  const vis: boolean[] = new Array(DD + 1).fill(false);
+  const r0 = ringAt(0);
+  if (r0.persp < 1) {
+    const apron = {
+      ry: Math.min(
+        bottom,
+        horizon + (bottom - horizon) * (1 - ringY[0] / MIRROR_CAM_H),
+      ),
+      rw: r0.rw / r0.persp,
+      rx: cx + (r0.rx - cx) / r0.persp,
+    };
+    if (apron.ry > r0.ry) {
+      const seg = segments[segIdx];
+      polygon(
+        ctx,
+        apron.rx - apron.rw,
+        apron.ry,
+        apron.rx + apron.rw,
+        apron.ry,
+        r0.rx + r0.rw,
+        r0.ry,
+        r0.rx - r0.rw,
+        r0.ry,
+        seg.color.road,
+      );
+      if (seg.color.lane !== seg.color.road) {
+        for (let lane = 1; lane < LANES; lane++) {
+          const off = (lane * 2) / LANES - 1;
+          const lxn = apron.rx + off * apron.rw;
+          const lxf = r0.rx + off * r0.rw;
+          const lw1 = Math.max(1, apron.rw / 32);
+          const lw2 = Math.max(1, r0.rw / 32);
+          polygon(
+            ctx,
+            lxn - lw1,
+            apron.ry,
+            lxn + lw1,
+            apron.ry,
+            lxf + lw2,
+            r0.ry,
+            lxf - lw2,
+            r0.ry,
+            seg.color.lane,
+          );
+        }
+      }
+      maxY = r0.ry;
+      vis[0] = true;
+    }
+  }
+
+  // hills need the main renderer's occlusion rule, which walks NEAR→FAR:
+  // skip strips that climb back down the far side of a crest (far edge
+  // below the near edge) or sit below the highest line drawn so far
+  for (let n = 0; n < DD; n++) {
+    const near = ringAt(n);
+    const far = ringAt(n + 1);
+    if (far.ry >= near.ry || far.ry >= maxY) continue;
+    const seg = segments[(segIdx - n + N) % N];
+    // road strip, alternating shades like the main road
+    polygon(
+      ctx,
+      near.rx - near.rw,
+      near.ry,
+      near.rx + near.rw,
+      near.ry,
+      far.rx + far.rw,
+      far.ry,
+      far.rx - far.rw,
+      far.ry,
+      seg.color.road,
+    );
+    // 3 lanes → 2 dashed lines, on "light" segments only (as on the road)
+    if (seg.color.lane !== seg.color.road) {
+      for (let lane = 1; lane < LANES; lane++) {
+        const off = (lane * 2) / LANES - 1; // ±1/3 of the half-width
+        const lxn = near.rx + off * near.rw;
+        const lxf = far.rx + off * far.rw;
+        const lw1 = Math.max(1, near.rw / 32);
+        const lw2 = Math.max(1, far.rw / 32);
+        polygon(
+          ctx,
+          lxn - lw1,
+          near.ry,
+          lxn + lw1,
+          near.ry,
+          lxf + lw2,
+          far.ry,
+          lxf - lw2,
+          far.ry,
+          seg.color.lane,
+        );
+      }
+    }
+    maxY = far.ry;
+    vis[n] = true;
+    vis[n + 1] = true;
+  }
+
+  /* roadside flavor — a SEPARATE little world, pure feel: each segment
+     behind the car seeds its own deterministic random object (tree / sign
+     / light pole). These are NOT the real roadside sprites we passed —
+     they live only in the glass and stream toward the horizon with the
+     road, far to near */
+  const hash01 = (n: number) => {
+    const r = Math.sin(n * 127.1) * 43758.5453;
+    return r - Math.floor(r);
+  };
+  for (let k = DD; k >= 1; k--) {
+    if (!vis[k]) continue; // hidden behind a crest
+    const seed = ((segIdx - k + N) % N) * 3;
+    const r1 = hash01(seed + 1);
+    if (r1 > 0.55) continue; // ~55% of segments carry an object
+    const ring = ringAt(k);
+    if (ring.rw < 2) continue; // too far to matter
+    const r2 = hash01(seed + 2);
+    const r3 = hash01(seed + 3);
+    const side = r2 < 0.5 ? -1 : 1;
+    const ox = Math.round(ring.rx + side * ring.rw * (1.15 + r3 * 0.45));
+    const oy = Math.round(ring.ry);
+    const s = ring.rw * 0.42; // object size unit, scales with the road
+    const type = r1 / 0.55; // 0..1
+    if (type < 0.5) {
+      // tree: stubby trunk + triangle canopy
+      ctx.fillStyle = "#5a3a28";
+      ctx.fillRect(
+        Math.round(ox - s * 0.06),
+        Math.round(oy - s * 0.42),
+        Math.max(1, Math.round(s * 0.12)),
+        Math.max(1, Math.round(s * 0.42)),
+      );
+      polygon(
+        ctx,
+        Math.round(ox - s * 0.42),
+        Math.round(oy - s * 0.35),
+        Math.round(ox + s * 0.42),
+        Math.round(oy - s * 0.35),
+        ox,
+        Math.round(oy - s * 1.15),
+        ox,
+        Math.round(oy - s * 1.15),
+        "#2e7a37",
+      );
+    } else if (type < 0.78) {
+      // sign: gray pole, white board with an orange top band
+      ctx.fillStyle = "#8a8a8f";
+      ctx.fillRect(
+        ox,
+        Math.round(oy - s * 0.8),
+        Math.max(1, Math.round(s * 0.07)),
+        Math.max(1, Math.round(s * 0.8)),
+      );
+      ctx.fillStyle = "#e8e8e8";
+      ctx.fillRect(
+        Math.round(ox - s * 0.28),
+        Math.round(oy - s * 1.05),
+        Math.max(1, Math.round(s * 0.56)),
+        Math.max(1, Math.round(s * 0.32)),
+      );
+      ctx.fillStyle = "#e2703a";
+      ctx.fillRect(
+        Math.round(ox - s * 0.28),
+        Math.round(oy - s * 1.05),
+        Math.max(1, Math.round(s * 0.56)),
+        Math.max(1, Math.round(s * 0.1)),
+      );
+    } else {
+      // light pole: tall thin mast, glowing head leaning toward the road
+      ctx.fillStyle = "#3a3a40";
+      ctx.fillRect(
+        ox,
+        Math.round(oy - s * 1.25),
+        Math.max(1, Math.round(s * 0.06)),
+        Math.max(1, Math.round(s * 1.25)),
+      );
+      ctx.fillStyle = "#d7ff9e";
+      ctx.fillRect(
+        Math.round(side === 1 ? ox - s * 0.2 : ox),
+        Math.round(oy - s * 1.3),
+        Math.max(1, Math.round(s * 0.2)),
+        Math.max(1, Math.round(s * 0.09)),
+      );
+    }
+  }
+
+  // glass tint so the scene reads as a reflection, not a window
+  ctx.fillStyle = "rgba(20,22,40,0.28)";
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+}
+
 export interface RacerEngine {
   update(dt: number, input: RacerInput): void;
   render(ctx: CanvasRenderingContext2D): void;
@@ -896,6 +1191,9 @@ export function createEngine(opts: {
   // the car runs straight the lines stream straight, they swing only
   // when the car actually turns
   let vanishX = width / 2;
+  // cornering sway of the rearview mirror scene (smoothed -curve×speed) —
+  // eases in and out so a hard bend swings the glass instead of snapping it
+  let mirrorSway = 0;
   // engine time of the last gas-can pickup — drives the collect feedback
   // (sparkle burst at the car, gauge flash, rising "+1")
   let lastPickupAt = -10;
@@ -1409,7 +1707,14 @@ export function createEngine(opts: {
       // between discrete sprite sizes (the sheet's smaller sizes stay unused)
       const CAR_SCALE_NEAR = 1.45; // ~29% of buffer width at standstill
       const CAR_SCALE_FAR = 1.1; // ~22% at top speed
-      const carScale = interpolate(CAR_SCALE_NEAR, CAR_SCALE_FAR, speedPercent);
+      // portrait buffers (300px phones) shrink the car with the width while
+      // the road's vertical stretch makes the lanes read huge — boost the
+      // sprite so it keeps roughly a lane of visual width
+      const portraitBoost =
+        width < RACER_WIDTH ? Math.min(1.6, (RACER_WIDTH / width) * 0.85) : 1;
+      const carScale =
+        interpolate(CAR_SCALE_NEAR, CAR_SCALE_FAR, speedPercent) *
+        portraitBoost;
       const destW = frame.w * scale * (width / 2) * carScale;
       const destH = frame.h * scale * (width / 2) * carScale;
       const carX = width / 2 - destW / 2 + shakeX;
@@ -1546,16 +1851,27 @@ export function createEngine(opts: {
         Math.round(wheelH),
       );
 
-      // rearview mirror: frost the glass — a blurred, dimmed smear of the
-      // world passing behind us (a true mirror image isn't needed)
+      // rearview mirror: a simulated pseudo-3d road strip streaming at the
+      // car's speed (renderMirror) — no real re-render of the world
       const mX = Math.round(dashX + dashW * COCKPIT_MIRROR.xF);
       const mY = Math.round(dashY + dashH * COCKPIT_MIRROR.yF);
       const mW = Math.round(dashW * COCKPIT_MIRROR.wF);
       const mH = Math.round(dashH * COCKPIT_MIRROR.hF);
-      ctx.save();
-      ctx.filter = "blur(1.5px) brightness(0.75)";
-      ctx.drawImage(ctx.canvas, mX, mY, mW, mH, mX, mY, mW, mH);
-      ctx.restore();
+      // cornering feel: the mirrored world swings against the current bend
+      // (the mirror yaws with the car), smoothed so it eases in and out
+      mirrorSway += (-playerSegment.curve * speedPercent - mirrorSway) * 0.08;
+      renderMirror(
+        ctx,
+        mX,
+        mY,
+        mW,
+        mH,
+        state.position,
+        state.playerX,
+        playerY,
+        segments,
+        mirrorSway,
+      );
 
       dashGeom = { x: dashX, y: dashY, w: dashW, h: dashH };
     }
