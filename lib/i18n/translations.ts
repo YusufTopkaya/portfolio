@@ -75,6 +75,10 @@ export type Translations = {
         heading: string;
         body: string;
       };
+      leaderboard: {
+        heading: string;
+        body: string;
+      };
       externalLinks: {
         heading: string;
         body: string;
@@ -168,12 +172,16 @@ export const translations: Translations = {
         heading: "4. Data Sharing",
         body: "I do not sell, trade, or transfer your personal data to third parties. Analytics data collected by Google and Microsoft is subject to their respective privacy policies.",
       },
+      leaderboard: {
+        heading: "5. Highscore Leaderboard",
+        body: "The Twingo Racer mini-game stores highscores (your chosen 3-character initials, the score, and the run duration) on this site's own server to display a public top-10 list. No account, email, or other personal data is collected for this, and the data is not shared with third parties.",
+      },
       externalLinks: {
-        heading: "5. External Links",
+        heading: "6. External Links",
         body: "This website contains links to external sites (GitHub, LinkedIn, Medium, etc.). I am not responsible for the privacy practices of those sites.",
       },
       contact: {
-        heading: "6. Contact",
+        heading: "7. Contact",
         body: "If you have questions about this privacy policy, you can reach me at:",
       },
     },
@@ -258,12 +266,16 @@ export const translations: Translations = {
         heading: "4. Veri Paylaşımı",
         body: "Kişisel verilerinizi üçüncü taraflara satmıyor, takas etmiyor veya aktarmıyorum. Google ve Microsoft tarafından toplanan analitik veriler, kendi gizlilik politikalarına tabidir.",
       },
+      leaderboard: {
+        heading: "5. Yüksek Skor Tablosu",
+        body: "Twingo Racer mini oyunu, herkese açık ilk 10 listesini göstermek için yüksek skorları (seçtiğiniz 3 karakterli isim, skor ve oyun süresi) bu sitenin kendi sunucusunda saklar. Bunun için hesap, e-posta veya başka bir kişisel veri toplanmaz ve bu veriler üçüncü taraflarla paylaşılmaz.",
+      },
       externalLinks: {
-        heading: "5. Harici Bağlantılar",
+        heading: "6. Harici Bağlantılar",
         body: "Bu web sitesi harici sitelere (GitHub, LinkedIn, Medium vb.) bağlantılar içerir. Bu sitelerin gizlilik uygulamalarından sorumlu değilim.",
       },
       contact: {
-        heading: "6. İletişim",
+        heading: "7. İletişim",
         body: "Bu gizlilik politikası hakkında sorularınız varsa bana şu adresten ulaşabilirsiniz:",
       },
     },
@@ -348,12 +360,16 @@ export const translations: Translations = {
         heading: "4. Datenweitergabe",
         body: "Ich verkaufe, tausche oder übertrage Ihre persönlichen Daten nicht an Dritte. Die von Google und Microsoft erhobenen Analysedaten unterliegen den jeweiligen Datenschutzrichtlinien.",
       },
+      leaderboard: {
+        heading: "5. Highscore-Bestenliste",
+        body: "Das Twingo-Racer-Minispiel speichert Highscores (die von dir gewählten 3 Zeichen, die Punktzahl und die Spieldauer) auf dem eigenen Server dieser Website, um eine öffentliche Top-10-Liste anzuzeigen. Dafür werden kein Konto, keine E-Mail-Adresse oder andere persönliche Daten erhoben, und die Daten werden nicht an Dritte weitergegeben.",
+      },
       externalLinks: {
-        heading: "5. Externe Links",
+        heading: "6. Externe Links",
         body: "Diese Website enthält Links zu externen Seiten (GitHub, LinkedIn, Medium usw.). Ich bin nicht für die Datenschutzpraktiken dieser Seiten verantwortlich.",
       },
       contact: {
-        heading: "6. Kontakt",
+        heading: "7. Kontakt",
         body: "Wenn Sie Fragen zu dieser Datenschutzerklärung haben, können Sie mich erreichen unter:",
       },
     },
@@ -438,12 +454,16 @@ export const translations: Translations = {
         heading: "4. Partage des données",
         body: "Je ne vends, n'échange ni ne transfère vos données personnelles à des tiers. Les données d'analyse collectées par Google et Microsoft sont soumises à leurs politiques de confidentialité respectives.",
       },
+      leaderboard: {
+        heading: "5. Classement des meilleurs scores",
+        body: "Le mini-jeu Twingo Racer enregistre les meilleurs scores (vos 3 caractères choisis, le score et la durée de la partie) sur le serveur propre de ce site afin d'afficher un top 10 public. Aucun compte, e-mail ou autre donnée personnelle n'est collecté à cette fin, et ces données ne sont pas partagées avec des tiers.",
+      },
       externalLinks: {
-        heading: "5. Liens externes",
+        heading: "6. Liens externes",
         body: "Ce site contient des liens vers des sites externes (GitHub, LinkedIn, Medium, etc.). Je ne suis pas responsable des pratiques de confidentialité de ces sites.",
       },
       contact: {
-        heading: "6. Contact",
+        heading: "7. Contact",
         body: "Si vous avez des questions sur cette politique de confidentialité, vous pouvez me joindre à l'adresse suivante :",
       },
     },
@@ -528,12 +548,16 @@ export const translations: Translations = {
         heading: "4. Compartir datos",
         body: "No vendo, intercambio ni transfiero tus datos personales a terceros. Los datos de analítica recopilados por Google y Microsoft están sujetos a sus respectivas políticas de privacidad.",
       },
+      leaderboard: {
+        heading: "5. Clasificación de puntuaciones",
+        body: "El minijuego Twingo Racer guarda las puntuaciones más altas (tus 3 caracteres elegidos, la puntuación y la duración de la partida) en el propio servidor de este sitio para mostrar un top 10 público. No se recopila ninguna cuenta, correo electrónico u otro dato personal para ello, y estos datos no se comparten con terceros.",
+      },
       externalLinks: {
-        heading: "5. Enlaces externos",
+        heading: "6. Enlaces externos",
         body: "Este sitio web contiene enlaces a sitios externos (GitHub, LinkedIn, Medium, etc.). No soy responsable de las prácticas de privacidad de esos sitios.",
       },
       contact: {
-        heading: "6. Contacto",
+        heading: "7. Contacto",
         body: "Si tienes preguntas sobre esta política de privacidad, puedes contactarme en:",
       },
     },
@@ -618,12 +642,16 @@ export const translations: Translations = {
         heading: "4. Delen van gegevens",
         body: "Ik verkoop, ruil of draag je persoonlijke gegevens niet over aan derden. Analytische gegevens die door Google en Microsoft worden verzameld, vallen onder hun respectieve privacybeleid.",
       },
+      leaderboard: {
+        heading: "5. Highscore-lijst",
+        body: "De minigame Twingo Racer slaat highscores (jouw gekozen 3 tekens, de score en de speelduur) op de eigen server van deze site op om een openbare top-10 te tonen. Hiervoor worden geen account, e-mailadres of andere persoonlijke gegevens verzameld, en deze gegevens worden niet met derden gedeeld.",
+      },
       externalLinks: {
-        heading: "5. Externe links",
+        heading: "6. Externe links",
         body: "Deze website bevat links naar externe sites (GitHub, LinkedIn, Medium, enz.). Ik ben niet verantwoordelijk voor het privacybeleid van die sites.",
       },
       contact: {
-        heading: "6. Contact",
+        heading: "7. Contact",
         body: "Als je vragen hebt over dit privacybeleid, kun je me bereiken op:",
       },
     },
@@ -708,12 +736,16 @@ export const translations: Translations = {
         heading: "4. Compartilhamento de Dados",
         body: "Eu não vendo, troco ou transfiro seus dados pessoais para terceiros. Os dados de análise coletados pelo Google e pela Microsoft estão sujeitos às suas respectivas políticas de privacidade.",
       },
+      leaderboard: {
+        heading: "5. Tabela de recordes",
+        body: "O minijogo Twingo Racer armazena os recordes (os seus 3 caracteres escolhidos, a pontuação e a duração da partida) no próprio servidor deste site para exibir um top 10 público. Nenhuma conta, e-mail ou outro dado pessoal é coletado para isso, e esses dados não são compartilhados com terceiros.",
+      },
       externalLinks: {
-        heading: "5. Links Externos",
+        heading: "6. Links Externos",
         body: "Este site contém links para sites externos (GitHub, LinkedIn, Medium, etc.). Não sou responsável pelas práticas de privacidade desses sites.",
       },
       contact: {
-        heading: "6. Contato",
+        heading: "7. Contato",
         body: "Se você tiver dúvidas sobre esta política de privacidade, pode entrar em contato comigo em:",
       },
     },
@@ -798,12 +830,16 @@ export const translations: Translations = {
         heading: "4. Condivisione dei dati",
         body: "Non vendo, scambio né trasferisco i tuoi dati personali a terzi. I dati analitici raccolti da Google e Microsoft sono soggetti alle rispettive informative sulla privacy.",
       },
+      leaderboard: {
+        heading: "5. Classifica dei punteggi",
+        body: "Il minigioco Twingo Racer salva i punteggi più alti (i tuoi 3 caratteri scelti, il punteggio e la durata della partita) sul server proprio di questo sito per mostrare una top 10 pubblica. Non vengono raccolti account, e-mail o altri dati personali a questo scopo, e tali dati non vengono condivisi con terzi.",
+      },
       externalLinks: {
-        heading: "5. Link esterni",
+        heading: "6. Link esterni",
         body: "Questo sito web contiene link a siti esterni (GitHub, LinkedIn, Medium, ecc.). Non sono responsabile delle pratiche sulla privacy di quei siti.",
       },
       contact: {
-        heading: "6. Contatto",
+        heading: "7. Contatto",
         body: "Se hai domande su questa informativa sulla privacy, puoi contattarmi a:",
       },
     },
@@ -888,12 +924,16 @@ export const translations: Translations = {
         heading: "4. Udostępnianie danych",
         body: "Nie sprzedaję, nie wymieniam ani nie przekazuję twoich danych osobowych stronom trzecim. Dane analityczne zbierane przez Google i Microsoft podlegają ich odpowiednim politykom prywatności.",
       },
+      leaderboard: {
+        heading: "5. Tabela najlepszych wyników",
+        body: "Minigra Twingo Racer zapisuje najlepsze wyniki (wybrane przez ciebie 3 znaki, wynik i czas gry) na własnym serwerze tej strony, aby wyświetlać publiczną listę top 10. Nie są zbierane żadne konta, adresy e-mail ani inne dane osobowe, a te dane nie są udostępniane stronom trzecim.",
+      },
       externalLinks: {
-        heading: "5. Linki zewnętrzne",
+        heading: "6. Linki zewnętrzne",
         body: "Ta witryna zawiera linki do stron zewnętrznych (GitHub, LinkedIn, Medium itp.). Nie ponoszę odpowiedzialności za praktyki prywatności tych stron.",
       },
       contact: {
-        heading: "6. Kontakt",
+        heading: "7. Kontakt",
         body: "Jeśli masz pytania dotyczące tej polityki prywatności, możesz się ze mną skontaktować pod adresem:",
       },
     },
@@ -978,12 +1018,16 @@ export const translations: Translations = {
         heading: "4. データの共有",
         body: "私はあなたの個人データを第三者に販売、交換、または譲渡しません。GoogleおよびMicrosoftによって収集された分析データは、それぞれのプライバシーポリシーの対象となります。",
       },
+      leaderboard: {
+        heading: "5. ハイスコアランキング",
+        body: "ミニゲーム「Twingo Racer」は、公開トップ10リストを表示するために、ハイスコア(選択した3文字のイニシャル、スコア、プレイ時間)をこのサイトの自前のサーバーに保存します。このためにアカウント、メールアドレス、その他の個人データは収集されず、これらのデータが第三者と共有されることもありません。",
+      },
       externalLinks: {
-        heading: "5. 外部リンク",
+        heading: "6. 外部リンク",
         body: "このウェブサイトには外部サイト（GitHub、LinkedIn、Mediumなど）へのリンクが含まれています。これらのサイトのプライバシー慣行について、私は責任を負いません。",
       },
       contact: {
-        heading: "6. お問い合わせ",
+        heading: "7. お問い合わせ",
         body: "このプライバシーポリシーについてご質問がある場合は、次の連絡先までご連絡ください：",
       },
     },
@@ -1067,12 +1111,16 @@ export const translations: Translations = {
         heading: "4. 데이터 공유",
         body: "저는 귀하의 개인 데이터를 제3자에게 판매, 교환 또는 이전하지 않습니다. Google과 Microsoft가 수집한 분석 데이터는 각각의 개인정보 처리방침의 적용을 받습니다.",
       },
+      leaderboard: {
+        heading: "5. 최고 점수 리더보드",
+        body: "Twingo Racer 미니게임은 공개 상위 10개 목록을 표시하기 위해 최고 점수(선택한 3자 이니셜, 점수, 플레이 시간)를 이 사이트의 자체 서버에 저장합니다. 이를 위해 계정, 이메일 또는 기타 개인 데이터는 수집되지 않으며, 해당 데이터는 제3자와 공유되지 않습니다.",
+      },
       externalLinks: {
-        heading: "5. 외부 링크",
+        heading: "6. 외부 링크",
         body: "이 웹사이트에는 외부 사이트(GitHub, LinkedIn, Medium 등)로 연결되는 링크가 포함되어 있습니다. 저는 해당 사이트의 개인정보 처리 관행에 대해 책임을 지지 않습니다.",
       },
       contact: {
-        heading: "6. 연락처",
+        heading: "7. 연락처",
         body: "이 개인정보 처리방침에 대해 궁금한 점이 있으시면 다음 주소로 연락해 주세요:",
       },
     },
@@ -1156,12 +1204,16 @@ export const translations: Translations = {
         heading: "4. 数据共享",
         body: "我不会将您的个人数据出售、交换或转让给第三方。Google 和 Microsoft 收集的分析数据受其各自隐私政策的约束。",
       },
+      leaderboard: {
+        heading: "5. 高分排行榜",
+        body: "Twingo Racer 小游戏会将高分(您选择的 3 个字符、得分和游戏时长)存储在本网站自己的服务器上,以展示公开的前十名榜单。为此不会收集任何账户、电子邮件或其他个人数据,这些数据也不会与第三方共享。",
+      },
       externalLinks: {
-        heading: "5. 外部链接",
+        heading: "6. 外部链接",
         body: "本网站包含指向外部网站（GitHub、LinkedIn、Medium 等）的链接。我对这些网站的隐私惯例概不负责。",
       },
       contact: {
-        heading: "6. 联系方式",
+        heading: "7. 联系方式",
         body: "如果您对本隐私政策有任何疑问，可以通过以下方式联系我：",
       },
     },
@@ -1246,12 +1298,16 @@ export const translations: Translations = {
         heading: "4. Передача данных",
         body: "Я не продаю, не обмениваю и не передаю ваши персональные данные третьим лицам. Аналитические данные, собираемые Google и Microsoft, регулируются их соответствующими политиками конфиденциальности.",
       },
+      leaderboard: {
+        heading: "5. Таблица рекордов",
+        body: "Мини-игра Twingo Racer сохраняет рекорды (выбранные вами 3 символа, счёт и длительность заезда) на собственном сервере этого сайта для отображения публичного топ-10. Для этого не собираются аккаунты, адреса электронной почты или другие персональные данные, и эти данные не передаются третьим лицам.",
+      },
       externalLinks: {
-        heading: "5. Внешние ссылки",
+        heading: "6. Внешние ссылки",
         body: "Этот сайт содержит ссылки на внешние ресурсы (GitHub, LinkedIn, Medium и др.). Я не несу ответственности за практики конфиденциальности этих сайтов.",
       },
       contact: {
-        heading: "6. Контакты",
+        heading: "7. Контакты",
         body: "Если у вас есть вопросы об этой политике конфиденциальности, вы можете связаться со мной по адресу:",
       },
     },

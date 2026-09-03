@@ -176,6 +176,13 @@ export default async function PrivacyPage({ params }: PageProps) {
 
             <section>
               <h2 className="text-xl font-semibold mb-3">
+                {t.privacy.leaderboard.heading}
+              </h2>
+              <p>{t.privacy.leaderboard.body}</p>
+            </section>
+
+            <section>
+              <h2 className="text-xl font-semibold mb-3">
                 {t.privacy.externalLinks.heading}
               </h2>
               <p>{t.privacy.externalLinks.body}</p>
