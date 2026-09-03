@@ -16,9 +16,27 @@ import {
   RACER_WIDTH,
   type RacerEngine,
   type RacerInput,
+  type RacerView,
 } from "./racer/engine";
-import { loadCarFrames, loadGasCan, makeRoadside } from "./racer/sprites";
+import {
+  loadCarFrames,
+  loadCockpit,
+  loadGasCan,
+  makeRoadside,
+} from "./racer/sprites";
 import { buildTrack } from "./racer/track";
+
+const VIEW_STORAGE_KEY = "twingo:view";
+
+function readStoredView(): RacerView {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === "cockpit"
+      ? "cockpit"
+      : "chase";
+  } catch {
+    return "chase";
+  }
+}
 
 /** render buffer: landscape keeps the native 480×270, portrait phones get
     a taller buffer so the game fills the screen instead of letterboxing
@@ -35,7 +53,11 @@ export function TwingoRacer() {
   const [intro, setIntro] = useState(false);
   const [paused, setPaused] = useState(false);
   const [coarse, setCoarse] = useState(false);
-  /* fuel ran dry: engine froze, overlay shows the score + PLAY AGAIN */
+  /* camera view: chase cam behind the car or first-person cockpit;
+     toggle with V / the CAM touch button, persisted in localStorage */
+  const [view, setView] = useState<RacerView>("chase");
+  /* cockpit sprites loaded — without them the toggle stays hidden */
+  const [cockpitReady, setCockpitReady] = useState(false);  /* fuel ran dry: engine froze, overlay shows the score + PLAY AGAIN */
   const [gameOver, setGameOver] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
   /* elapsed engine time of the finished run — sent as the score's
@@ -63,6 +85,10 @@ export function TwingoRacer() {
      null when the highscore service is unavailable — the game then
      silently plays without the leaderboard */
   const tokenRef = useRef<string | null>(null);
+  /* mirror of cockpitReady for the key handler — the boot effect's
+     listeners close over the first render's toggleView, so the state
+     value would be stale there */
+  const cockpitReadyRef = useRef(false);
   const keysRef = useRef<RacerInput>({
     left: false,
     right: false,
@@ -147,6 +173,19 @@ export function TwingoRacer() {
     btn?.focus();
   }, []);
 
+  /* V key / CAM button: flip between chase cam and cockpit, persist it */
+  const toggleView = useCallback(() => {
+    if (!cockpitReadyRef.current) return;
+    setView((v) => {
+      const next: RacerView = v === "chase" ? "cockpit" : "chase";
+      if (engineRef.current) engineRef.current.state.view = next;
+      try {
+        localStorage.setItem(VIEW_STORAGE_KEY, next);
+      } catch {}
+      return next;
+    });
+  }, []);
+
   /* the START buttons dispatch this event */
   useEffect(() => {
     const onStart = () => {
@@ -211,23 +250,29 @@ export function TwingoRacer() {
 
     (async () => {
       if (!engineRef.current) {
-        const [car, gasCan] = await Promise.all([
+        const [car, gasCan, cockpit] = await Promise.all([
           loadCarFrames(),
           loadGasCan(),
+          loadCockpit(),
         ]);
         if (cancelled) return;
+        cockpitReadyRef.current = cockpit !== null;
+        setCockpitReady(cockpit !== null);
         const { segments } = buildTrack(427);
         engineRef.current = createEngine({
           segments,
           roadside: makeRoadside(),
           car,
           gasCan,
+          cockpit,
+          view: readStoredView(),
           width: buf.w,
           height: buf.h,
           clusterTopLeft: window.matchMedia("(pointer: coarse)").matches,
           reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
         });
+        setView(engineRef.current.state.view);
       } else {
         // orientation flipped mid-run: keep the run, re-fit the renderer
         engineRef.current.resize(buf.w, buf.h);
@@ -261,6 +306,11 @@ export function TwingoRacer() {
       // R restarts the run instantly: zero score, zero speed, full tank
       if (down && (k === "r" || ev.code === "KeyR")) {
         playAgain();
+        return;
+      }
+      // V flips between chase cam and first-person cockpit
+      if (down && (k === "v" || ev.code === "KeyV")) {
+        toggleView();
         return;
       }
       const input = map[k] ?? map[ev.code.toLowerCase()];
@@ -488,6 +538,17 @@ export function TwingoRacer() {
               ▶
             </button>
           </div>
+          {cockpitReady && (
+            <div className="racer-touch-group racer-touch-cam">
+              <button
+                type="button"
+                className={`racer-touch-btn racer-cam-btn font-pixel${view === "cockpit" ? " racer-cam-on" : ""}`}
+                onClick={toggleView}
+              >
+                CAM
+              </button>
+            </div>
+          )}
           <div className="racer-touch-group">
             <button
               type="button"

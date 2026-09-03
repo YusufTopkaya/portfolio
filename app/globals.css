@@ -869,6 +869,18 @@ html.crt-boot::after {
   transform: translateY(2px);
 }
 
+.racer-cam-btn {
+  width: 52px;
+  height: 44px;
+  font-size: 8px;
+  align-self: flex-end;
+}
+
+.racer-cam-btn.racer-cam-on {
+  background: rgba(146, 204, 65, 0.45);
+  border-color: #d7ff9e;
+}
+
 .racer-gameover {
   position: absolute;
   top: 50%;
