@@ -3,9 +3,12 @@
 /**
  * Twingo Racer — full-screen OutRun-style pseudo-3d driving game.
  * Opened by the START button on the retro CRT (or the mobile ticker
- * bar), which dispatches a "twingo:start" window event. The overlay is
- * opaque and pausable; ESC / ✕ closes it and returns focus to START.
- * The engine itself lives in ./racer and is framework-free.
+ * bar), which dispatches a "twingo:start" window event. The overlay
+ * first lands on a title screen (retro artwork with clickable START /
+ * LEADERBOARD hit areas, ↑/↓ + Enter work too); the engine boots only
+ * once START is pressed there. ESC / ✕ closes it and returns focus to
+ * the CRT START button. The engine itself lives in ./racer and is
+ * framework-free.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -38,6 +41,14 @@ function computeBuf(): { w: number; h: number } {
 
 export function TwingoRacer() {
   const [open, setOpen] = useState(false);
+  /* the overlay opens on the title screen; the engine only boots once
+     START is pressed (or PLAY AGAIN after a run) */
+  const [screen, setScreen] = useState<"title" | "playing">("title");
+  /* title screen: which artwork button is armed for Enter, and whether
+     the read-only leaderboard panel is open over the title */
+  const [titleSel, setTitleSel] = useState<"start" | "board">("start");
+  const [titleBoard, setTitleBoard] = useState(false);
+  const [boardError, setBoardError] = useState(false);
   const [intro, setIntro] = useState(false);
   const [paused, setPaused] = useState(false);
   const [coarse, setCoarse] = useState(false);
@@ -46,7 +57,10 @@ export function TwingoRacer() {
      chase cam, the choice is per-session only */
   const [view, setView] = useState<RacerView>("chase");
   /* cockpit sprites loaded — without them the toggle stays hidden */
-  const [cockpitReady, setCockpitReady] = useState(false);  /* fuel ran dry: engine froze, overlay shows the score + PLAY AGAIN */
+  const [cockpitReady, setCockpitReady] =
+    useState(
+      false,
+    ); /* fuel ran dry: engine froze, overlay shows the score + PLAY AGAIN */
   const [gameOver, setGameOver] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
   /* elapsed engine time of the finished run — sent as the score's
@@ -88,10 +102,12 @@ export function TwingoRacer() {
   pausedRef.current = paused;
 
   /* each run gets a fresh single-use submit token; PLAY AGAIN re-issues.
-     On failure the leaderboard UI stays hidden and the game just plays. */
+     On failure the leaderboard UI stays hidden and the game just plays.
+     Gated on actually starting a run so idling on the title screen never
+     burns a token. */
   // biome-ignore lint/correctness/useExhaustiveDependencies: runId intentionally re-issues a token when PLAY AGAIN starts a new run
   useEffect(() => {
-    if (!open) return;
+    if (!open || screen !== "playing") return;
     tokenRef.current = null;
     setBoard(null);
     setInitials("");
@@ -103,7 +119,9 @@ export function TwingoRacer() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "start" }),
     })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
+      )
       .then((d: { token: string }) => {
         if (!cancelled) tokenRef.current = d.token;
       })
@@ -113,7 +131,7 @@ export function TwingoRacer() {
     return () => {
       cancelled = true;
     };
-  }, [open, runId]);
+  }, [open, runId, screen]);
 
   /* submit the run to the leaderboard with this run's single-use token */
   const submitScore = useCallback(async () => {
@@ -156,11 +174,39 @@ export function TwingoRacer() {
   const close = useCallback(() => {
     setOpen(false);
     setPaused(false);
+    // reset to the title screen for the next session
+    setScreen("title");
+    setTitleSel("start");
+    setTitleBoard(false);
     // return focus to whichever START button is visible
     const btn =
       document.getElementById("crt-start-btn") ??
       document.getElementById("ticker-start-btn");
     btn?.focus();
+  }, []);
+
+  /* START on the title screen: boot the engine and drop into the READY
+     flash. If the previous session ended mid-overlay (game over never
+     replayed), reset the run first — same as PLAY AGAIN. */
+  const startRun = useCallback(() => {
+    setTitleBoard(false);
+    if (gameOverRef.current) playAgain();
+    setScreen("playing");
+    setIntro(true);
+  }, [playAgain]);
+
+  /* LEADERBOARD on the title screen: read-only top-10 panel — no token
+     needed to look, only to submit after a run */
+  const openTitleBoard = useCallback(() => {
+    setTitleBoard(true);
+    setBoard(null);
+    setBoardError(false);
+    fetch("/api/highscore")
+      .then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
+      )
+      .then((d: { scores: ScoreEntry[] }) => setBoard(d.scores))
+      .catch(() => setBoardError(true));
   }, []);
 
   /* V key / CAM button: flip between chase cam and cockpit */
@@ -173,17 +219,59 @@ export function TwingoRacer() {
     });
   }, []);
 
-  /* the START buttons dispatch this event */
+  /* the START buttons dispatch this event — the overlay opens on the
+     title screen, the engine boots only when START is pressed there */
   useEffect(() => {
     const onStart = () => {
       setBuf(computeBuf());
       setOpen(true);
-      setIntro(true);
+      setScreen("title");
+      setTitleSel("start");
+      setTitleBoard(false);
       setCoarse(window.matchMedia("(pointer: coarse)").matches);
     };
     window.addEventListener("twingo:start", onStart);
     return () => window.removeEventListener("twingo:start", onStart);
   }, []);
+
+  /* lock page scroll and grab focus while the overlay is open (title
+     screen included, not just the running game) */
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = "hidden";
+    overlayRef.current?.focus();
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
+  /* title screen keyboard control: ↑/↓ (or W/S) arm a button, Enter or
+     Space activates it ("PRESS ENTER TO SELECT"), Escape closes the
+     leaderboard panel first, then the overlay */
+  useEffect(() => {
+    if (!open || screen !== "title") return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        if (titleBoard) setTitleBoard(false);
+        else close();
+        return;
+      }
+      if (titleBoard) return;
+      const k = ev.key.toLowerCase();
+      if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
+        ev.preventDefault();
+        setTitleSel((s) => (s === "start" ? "board" : "start"));
+        return;
+      }
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        if (titleSel === "start") startRun();
+        else openTitleBoard();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, screen, titleBoard, titleSel, close, startRun, openTitleBoard]);
 
   /* rotating the phone mid-run flips the buffer between the landscape and
      portrait shapes; the engine keeps its state and just re-fits (resize) */
@@ -195,16 +283,15 @@ export function TwingoRacer() {
     return () => mq.removeEventListener("change", onFlip);
   }, [open]);
 
-  /* engine boot + game loop, alive only while the overlay is open */
+  /* engine boot + game loop, alive only while a run is on screen — the
+     title screen is a static image and never boots the engine */
   // biome-ignore lint/correctness/useExhaustiveDependencies: runId intentionally re-boots the engine when PLAY AGAIN is pressed
   useEffect(() => {
-    if (!open) return;
+    if (!open || screen !== "playing") return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
 
-    document.body.style.overflow = "hidden";
-    overlayRef.current?.focus();
     const introTimer = window.setTimeout(() => setIntro(false), 1200);
 
     let cancelled = false;
@@ -331,7 +418,6 @@ export function TwingoRacer() {
       cancelled = true;
       cancelAnimationFrame(raf);
       window.clearTimeout(introTimer);
-      document.body.style.overflow = "";
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
       document.removeEventListener("visibilitychange", autoPause);
@@ -339,7 +425,7 @@ export function TwingoRacer() {
       // release any held keys so the car doesn't drive off on its own
       keysRef.current = { left: false, right: false, gas: false, brake: false };
     };
-  }, [open, close, buf.w, buf.h, runId]);
+  }, [open, screen, close, buf.w, buf.h, runId]);
 
   const bindTouch = (key: keyof RacerInput) => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -381,30 +467,127 @@ export function TwingoRacer() {
       onClick={() => paused && setPaused(false)}
       onKeyDown={() => paused && setPaused(false)}
     >
-      <div className="racer-crt">
-        <div className="racer-screen">
-          <canvas
-            ref={canvasRef}
-            width={buf.w}
-            height={buf.h}
-            className="racer-canvas"
-            style={{
-              width: `min(calc(100vw - var(--racer-bezel-x)), calc((100vh - var(--racer-bezel-y)) * ${buf.w / buf.h}))`,
-            }}
-          />
-          {/* glass effects live ON the screen: scanlines, corner vignette,
-              hazy CRT grain creeping in from the bezel edges, and a faint
-              diagonal glare */}
-          <div className="racer-scanlines" aria-hidden="true" />
-          <div className="racer-vignette" aria-hidden="true" />
-          <div className="racer-grain" aria-hidden="true" />
-          <div className="racer-glare" aria-hidden="true" />
+      {screen === "title" ? (
+        <div className="racer-title">
+          {/* blurred cover copy of the art fills the letterbox bands;
+              display:contents keeps the picture wrapper out of layout */}
+          <picture>
+            <source
+              media="(min-aspect-ratio: 1/1)"
+              srcSet="/images/twingo-title-desktop.webp"
+            />
+            <img
+              className="racer-title-bg"
+              src="/images/twingo-title-mobile.webp"
+              alt=""
+            />
+          </picture>
+          {/* aspect-locked box: the hit areas below stay glued to the
+              painted buttons at any viewport size */}
+          <div className="racer-title-art">
+            <picture>
+              <source
+                media="(min-aspect-ratio: 1/1)"
+                srcSet="/images/twingo-title-desktop.webp"
+              />
+              <img
+                className="racer-title-img"
+                src="/images/twingo-title-mobile.webp"
+                alt="2026 Twingo Racer — title screen"
+              />
+            </picture>
+            <button
+              type="button"
+              className={`racer-title-btn racer-title-btn-start${
+                titleSel === "start" ? " racer-title-btn-sel" : ""
+              }`}
+              aria-label="Start race"
+              onClick={startRun}
+              onPointerEnter={() => setTitleSel("start")}
+              ref={(el) => {
+                if (titleSel === "start" && !titleBoard) el?.focus();
+              }}
+            />
+            <button
+              type="button"
+              className={`racer-title-btn racer-title-btn-board${
+                titleSel === "board" ? " racer-title-btn-sel" : ""
+              }`}
+              aria-label="Show leaderboard"
+              onClick={openTitleBoard}
+              onPointerEnter={() => setTitleSel("board")}
+              ref={(el) => {
+                if (titleSel === "board" && !titleBoard) el?.focus();
+              }}
+            />
+          </div>
+          {titleBoard && (
+            <div
+              className="racer-gameover racer-title-panel font-pixel"
+              role="dialog"
+              aria-label="Leaderboard"
+            >
+              <div className="racer-gameover-title">LEADERBOARD</div>
+              {board && board.length > 0 && (
+                <ol className="racer-leaderboard">
+                  {board.map((s, i) => (
+                    <li key={`${s.name}-${s.at}-${i}`}>
+                      <span className="racer-lb-name">
+                        {String(i + 1).padStart(2, "0")}. {s.name}
+                      </span>
+                      <span className="racer-lb-score">{s.score}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {board && board.length === 0 && (
+                <div className="racer-gameover-score">NO SCORES YET</div>
+              )}
+              {boardError && (
+                <div className="racer-initials-error">
+                  LEADERBOARD UNAVAILABLE
+                </div>
+              )}
+              {!board && !boardError && (
+                <div className="racer-gameover-score">LOADING...</div>
+              )}
+              <button
+                type="button"
+                className="racer-playagain font-pixel"
+                onClick={() => setTitleBoard(false)}
+                ref={(el) => el?.focus()}
+              >
+                BACK
+              </button>
+            </div>
+          )}
         </div>
-        <div className="racer-crt-chin" aria-hidden="true">
-          <span className="racer-crt-brand font-pixel">TWINGO-427</span>
-          <span className="racer-crt-led" />
+      ) : (
+        <div className="racer-crt">
+          <div className="racer-screen">
+            <canvas
+              ref={canvasRef}
+              width={buf.w}
+              height={buf.h}
+              className="racer-canvas"
+              style={{
+                width: `min(calc(100vw - var(--racer-bezel-x)), calc((100vh - var(--racer-bezel-y)) * ${buf.w / buf.h}))`,
+              }}
+            />
+            {/* glass effects live ON the screen: scanlines, corner vignette,
+                hazy CRT grain creeping in from the bezel edges, and a faint
+                diagonal glare */}
+            <div className="racer-scanlines" aria-hidden="true" />
+            <div className="racer-vignette" aria-hidden="true" />
+            <div className="racer-grain" aria-hidden="true" />
+            <div className="racer-glare" aria-hidden="true" />
+          </div>
+          <div className="racer-crt-chin" aria-hidden="true">
+            <span className="racer-crt-brand font-pixel">TWINGO-427</span>
+            <span className="racer-crt-led" />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* no DOM HUD — speed and score live on the in-canvas LCD cluster */}
 
@@ -418,7 +601,7 @@ export function TwingoRacer() {
           PAUSED — CLICK TO RESUME
         </div>
       )}
-      {gameOver && (
+      {gameOver && screen === "playing" && (
         <div className="racer-gameover font-pixel" role="alert">
           <div className="racer-gameover-title">GAME OVER</div>
           <div className="racer-gameover-score">SCORE {finalScore}</div>
@@ -508,7 +691,7 @@ export function TwingoRacer() {
       </button>
 
       {/* key legend — desktop only, hidden once the run is over */}
-      {!coarse && !gameOver && (
+      {screen === "playing" && !coarse && !gameOver && (
         <div className="racer-keys font-pixel" aria-hidden="true">
           <div className="racer-keys-row">
             <span className="racer-key">W</span> GAS
@@ -534,7 +717,7 @@ export function TwingoRacer() {
         </div>
       )}
 
-      {coarse && (
+      {screen === "playing" && coarse && (
         <div className="racer-touch" aria-hidden="true">
           <div className="racer-touch-group">
             <button
