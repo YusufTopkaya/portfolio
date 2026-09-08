@@ -120,7 +120,10 @@ const GRAVITY_MAX_GRADE = 0.6;
 const ROLL_DRAG = 0.3;
 const OFFROAD_DECEL = -MAX_SPEED * 0.75;
 const OFFROAD_LIMIT = MAX_SPEED / 4;
-const CENTRIFUGAL = 0.3;
+const CENTRIFUGAL = 0.36;
+// speed bleed per unit of cornering overload (|p·curve·CENTRIFUGAL| − 1)
+// — tire scrub as a fraction of top speed per second
+const TIRE_SCRUB = 0.23;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank drains quadratically with speed: full throttle burns a dot
@@ -1311,8 +1314,17 @@ export function createEngine(opts: {
 
     if (input.left) state.playerX -= dx;
     if (input.right) state.playerX += dx;
-    // centrifugal push on curves (Jake Gordon)
-    state.playerX -= dx * speedPercent * playerSegment.curve * CENTRIFUGAL;
+    // centrifugal push on curves (Jake Gordon), tuned so every bend has a
+    // real grip-limited corner speed — the balance p·curve·CENTRIFUGAL = 1
+    // gives easy ≈ flat-out, medium ≈ 125 km/h, hard ≈ 85 km/h. Above the
+    // limit the tires scrub: speed bleeds even while you stay on the
+    // tarmac, so 180 km/h through a bend is never free
+    const lateral = speedPercent * playerSegment.curve * CENTRIFUGAL;
+    state.playerX -= dx * lateral;
+    const scrub = Math.max(0, Math.abs(lateral) - 1);
+    if (scrub > 0 && state.speed > 0) {
+      state.speed -= scrub * TIRE_SCRUB * MAX_SPEED * dt;
+    }
 
     // gravity along the grade: negative when the road falls away ahead
     // (pulls the car forward), positive on a climb (bleeds speed)

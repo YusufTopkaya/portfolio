@@ -418,9 +418,10 @@ function makePole(): HTMLCanvasElement {
 
 export function makeRoadside(): RoadsideSprite[] {
   return [
-    { image: makePine(), w: 48, h: 72, offset: 0, scale: 3.2 },
+    // pines tower over the car — a roadside tree reads as a TREE, not a bonsai
+    { image: makePine(), w: 48, h: 72, offset: 0, scale: 6.2 },
     { image: makeSign(), w: 40, h: 56, offset: 0, scale: 1.8 },
-    { image: makePole(), w: 20, h: 64, offset: 0, scale: 1.5 },
+    { image: makePole(), w: 20, h: 64, offset: 0, scale: 2.2 },
   ];
 }
 
