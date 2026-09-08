@@ -15,7 +15,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScoreEntry } from "@/lib/highscore";
 import {
   createEngine,
-  ENGINE_CONSTANTS,
   RACER_HEIGHT,
   RACER_WIDTH,
   type RacerEngine,
@@ -731,12 +730,13 @@ export function TwingoRacer() {
                 ).padStart(2, "0")}
               </div>
               <div>
-                SPEED{" "}
-                {Math.round(
-                  (engineRef.current.state.speed /
-                    ENGINE_CONSTANTS.MAX_SPEED) *
-                    180,
-                )}{" "}
+                AVG{" "}
+                {engineRef.current.state.time > 0.5
+                  ? Math.round(
+                      (engineRef.current.state.distanceKm /
+                        (engineRef.current.state.time / 3600)),
+                    )
+                  : 0}{" "}
                 KM/H
               </div>
             </div>

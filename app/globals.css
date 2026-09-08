@@ -877,12 +877,14 @@ html.crt-boot::after {
   color: rgba(215, 255, 158, 0.55);
 }
 
-/* touch pause trigger: top-left corner, mirrors the ✕ close button on the
-   right — only shows on coarse pointers during a live run */
+/* touch pause trigger: top-right, just left of the ✕ close button — the
+   top-left corner belongs to the LCD cluster on touch devices (portrait
+   phones), so the button must not live there. Only shows on coarse
+   pointers during a live run */
 .racer-pause-touch {
   position: absolute;
   top: 10px;
-  left: 12px;
+  right: 52px;
   font-size: 12px;
   color: #d7ff9e;
   background: #1c1a16;
