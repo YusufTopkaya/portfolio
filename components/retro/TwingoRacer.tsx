@@ -332,7 +332,10 @@ export function TwingoRacer() {
         if (cancelled) return;
         cockpitReadyRef.current = cockpit !== null;
         setCockpitReady(cockpit !== null);
-        const { segments } = buildTrack(427);
+        // fresh random layout every run — the seeded generator keeps its
+        // geometric constraints (alternating curve sides, balanced hills,
+        // seamless loop) regardless of seed
+        const { segments } = buildTrack(Math.floor(Math.random() * 2 ** 31));
         engineRef.current = createEngine({
           segments,
           roadside: makeRoadside(),

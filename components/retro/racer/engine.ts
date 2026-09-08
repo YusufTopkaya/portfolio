@@ -123,13 +123,14 @@ const CENTRIFUGAL = 0.3;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank drains quadratically with speed: full throttle burns a dot
-// in ~6 s, gentle cruising sips — miss a few cans in a row at speed
-// and the gauge visibly melts
-const FUEL_DRAIN_IDLE = 0.008; // gauge dots per second at a standstill
+// in ~9 s, gentle cruising sips. Idle burn is non-trivial on purpose —
+// standing still must never be a viable fuel-saving strategy
+const FUEL_DRAIN_IDLE = 0.03; // gauge dots per second at a standstill
 // extra dots per second at full speed — applied quadratically
-// (speedPercent²), so burning up the road melts the gauge much faster
-// than cruising; one dot lasts ~6 s flat out
-const FUEL_DRAIN_SPEED = 0.16;
+// (speedPercent²). Kept shallow so the fuel-economy optimum sits near
+// ~110 km/h instead of a crawl: (IDLE+SPEED·p²)/p is minimized at
+// p = sqrt(IDLE/SPEED)
+const FUEL_DRAIN_SPEED = 0.08;
 const PICKUP_RESPAWN = 45; // seconds before a taken gas can re-arms
 const FAR_OFFROAD = 2.0; // |playerX| at/above this = stranded past the trees
 const LANES = 3;
@@ -173,7 +174,7 @@ export interface EngineState {
   distanceKm: number;
   /** metres driven × speed multiplier — the arcade score */
   score: number;
-  /** current score multiplier (1/2/3 by speed, 1 while off-road/respawning) */
+  /** current score multiplier (1/2/3/4 by speed, 1 while off-road/respawning) */
   multiplier: number;
   /** >0 while the car respawns (breathing fade) after going too far off-road */
   respawn: number;
@@ -673,10 +674,10 @@ function renderCluster(
   const tSize = 5 * ui;
   const tGap = 1.5 * ui;
   const tW = tSize + tGap;
-  const scoreText = String(Math.min(99999, Math.floor(score))).padStart(5, " ");
-  const scoreX = x0 + pw - pad - Math.round(7 * ui) - 5 * tW;
+  const scoreText = String(Math.floor(score)).padStart(5, " ");
+  const scoreX = x0 + pw - pad - Math.round(7 * ui) - scoreText.length * tW;
   const scoreY = y0 + pad + Math.round(4 * ui);
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < scoreText.length; i++) {
     drawSevenSeg(ctx, scoreX + i * tW, scoreY, tSize, "8", ghostColor);
     if (scoreText[i] !== " ") {
       drawSevenSeg(ctx, scoreX + i * tW, scoreY, tSize, scoreText[i], segColor);
@@ -751,10 +752,10 @@ function renderDashCluster(
   const tSize = 3.1 * u;
   const tGap = 1.1 * u;
   const tW = tSize + tGap;
-  const scoreText = String(Math.min(99999, Math.floor(score))).padStart(5, " ");
-  const scoreX = x + w - 2.5 * u - 5 * tW;
+  const scoreText = String(Math.floor(score)).padStart(5, " ");
+  const scoreX = x + w - 2.5 * u - scoreText.length * tW;
   const scoreY = y + 2 * u;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < scoreText.length; i++) {
     drawSevenSeg(ctx, scoreX + i * tW, scoreY, tSize, "8", ghostColor);
     if (scoreText[i] !== " ") {
       drawSevenSeg(ctx, scoreX + i * tW, scoreY, tSize, scoreText[i], segColor);
@@ -1209,7 +1210,7 @@ export function createEngine(opts: {
     if (seg.pickup) canOrdinal.set(seg.index, ordinal++);
   }
   const pickupActive = (seg: Segment): boolean => {
-    const hidden = Math.min(0.7, Math.floor(state.score / 1000) * 0.01);
+    const hidden = Math.min(0.4, Math.floor(state.score / 1000) * 0.01);
     if (hidden <= 0) return true;
     const ord = canOrdinal.get(seg.index);
     if (ord === undefined) return true;
@@ -1333,6 +1334,9 @@ export function createEngine(opts: {
     ) {
       airDur = 0.28 + 0.3 * speedPercent;
       airT = airDur;
+      // style bonus for clearing the crest — scales with entry speed so a
+      // full-throttle hop is worth noticeably more than a lazy one
+      state.score += Math.round(150 + 400 * speedPercent);
     }
     prevSlope = slope;
     if (airT > 0) {
@@ -1387,16 +1391,20 @@ export function createEngine(opts: {
     }
 
     // score: metres driven, multiplied when cruising fast AND clean —
-    // off-road or respawning drops the multiplier back to x1
+    // off-road or respawning drops the multiplier back to x1. The 170+
+    // tier exists to keep flat-out driving worth the fuel and the risk:
+    // without it the optimal strategy collapses to a steady 150 cruise
     const kmh = (state.speed / MAX_SPEED) * 180;
     state.multiplier =
       state.offRoad || state.respawn > 0
         ? 1
-        : kmh > 150
-          ? 3
-          : kmh > 110
-            ? 2
-            : 1;
+        : kmh > 170
+          ? 4
+          : kmh > 150
+            ? 3
+            : kmh > 110
+              ? 2
+              : 1;
     state.score += ((kmh * dt) / 3.6) * state.multiplier;
 
     // horizon drifts opposite the current curve, faster with speed

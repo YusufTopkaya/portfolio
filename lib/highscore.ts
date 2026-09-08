@@ -17,7 +17,8 @@ interface StoreFile {
 
 const MAX_SCORES = 50;
 const NONCE_TTL_MS = 30 * 60 * 1000;
-const MAX_SCORE_PER_SEC = 150; // generous plausibility bound
+const MAX_SCORE_PER_SEC = 300; // generous plausibility bound: 200/s flat out
+// at the x4 multiplier, plus crest-hop bonuses on top
 const MIN_DURATION_SEC = 3;
 
 const STORE_PATH =
@@ -102,7 +103,7 @@ export async function submitScore(
   if (isProfane(name)) {
     return { ok: false, error: "invalid_input", message: "Name not allowed" };
   }
-  if (!Number.isFinite(score) || !Number.isInteger(score) || score < 0 || score > 10_000_000) {
+  if (!Number.isFinite(score) || !Number.isInteger(score) || score < 0) {
     return { ok: false, error: "invalid_input", message: "Invalid score" };
   }
   if (!Number.isFinite(durationSec) || durationSec < MIN_DURATION_SEC || durationSec > 86_400) {
