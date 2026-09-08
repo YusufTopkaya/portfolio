@@ -819,6 +819,84 @@ html.crt-boot::after {
   padding: 12px 18px;
 }
 
+/* pause menu (ESC / touch ❚❚): same CRT-panel language as the game-over
+   overlay, but green instead of red — paused, not dead */
+.racer-pausemenu {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 3px solid #6e8f50;
+  padding: 22px 34px;
+  text-align: center;
+  z-index: 3;
+}
+
+.racer-pausemenu-title {
+  font-size: 16px;
+  color: #d7ff9e;
+  text-shadow: 0 0 10px rgba(146, 204, 65, 0.8);
+}
+
+.racer-pausemenu-btn {
+  font-size: 11px;
+  color: #0d1f0a;
+  background: #92cc41;
+  border: 2px solid #d7ff9e;
+  padding: 8px 16px;
+  min-width: 140px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.racer-pausemenu-btn:hover,
+.racer-pausemenu-btn-sel {
+  background: #d7ff9e;
+  box-shadow: 0 0 10px rgba(146, 204, 65, 0.7);
+}
+
+.racer-pausemenu-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 9px;
+  color: #d7ff9e;
+  background: rgba(146, 204, 65, 0.12);
+  border: 1px solid #6e8f50;
+  padding: 10px 16px;
+  min-width: 180px;
+}
+
+.racer-pausemenu-hint {
+  font-size: 7px;
+  color: rgba(215, 255, 158, 0.55);
+}
+
+/* touch pause trigger: top-left corner, mirrors the ✕ close button on the
+   right — only shows on coarse pointers during a live run */
+.racer-pause-touch {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 12px;
+  color: #d7ff9e;
+  background: #1c1a16;
+  border: 2px solid #6e6650;
+  padding: 4px 10px;
+  cursor: pointer;
+  z-index: 3;
+}
+
+.racer-pause-touch:hover {
+  background: #2a2419;
+  box-shadow: 0 0 8px rgba(146, 204, 65, 0.5);
+}
+
 .racer-close {
   position: absolute;
   top: 10px;

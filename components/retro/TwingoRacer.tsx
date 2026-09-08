@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScoreEntry } from "@/lib/highscore";
 import {
   createEngine,
+  ENGINE_CONSTANTS,
   RACER_HEIGHT,
   RACER_WIDTH,
   type RacerEngine,
@@ -51,6 +52,14 @@ export function TwingoRacer() {
   const [boardError, setBoardError] = useState(false);
   const [intro, setIntro] = useState(false);
   const [paused, setPaused] = useState(false);
+  /* pause menu (ESC / ⏸): freezes the run and offers STATS / RESTART /
+     QUIT. Distinct from the plain auto-pause banner shown on tab blur */
+  const [pauseMenu, setPauseMenu] = useState(false);
+  const [pauseSel, setPauseSel] = useState<"stats" | "restart" | "quit">(
+    "stats",
+  );
+  /* STATS option expands the current run's numbers inside the menu */
+  const [pauseStats, setPauseStats] = useState(false);
   const [coarse, setCoarse] = useState(false);
   /* camera view: chase cam behind the car or first-person cockpit;
      toggle with V / the CAM touch button — every run starts on the
@@ -84,6 +93,10 @@ export function TwingoRacer() {
   const engineRef = useRef<RacerEngine | null>(null);
   const pausedRef = useRef(false);
   const gameOverRef = useRef(false);
+  /* mirrors for the engine-loop key handler — it closes over the first
+     render's callbacks, so pause state must reach it through refs */
+  const pauseMenuRef = useRef(false);
+  const pauseSelRef = useRef<"stats" | "restart" | "quit">("stats");
   /* single-use HMAC token for the current run's score submission;
      null when the highscore service is unavailable — the game then
      silently plays without the leaderboard */
@@ -100,6 +113,8 @@ export function TwingoRacer() {
   });
 
   pausedRef.current = paused;
+  pauseMenuRef.current = pauseMenu;
+  pauseSelRef.current = pauseSel;
 
   /* each run gets a fresh single-use submit token; PLAY AGAIN re-issues.
      On failure the leaderboard UI stays hidden and the game just plays.
@@ -167,6 +182,8 @@ export function TwingoRacer() {
     gameOverRef.current = false;
     keysRef.current = { left: false, right: false, gas: false, brake: false };
     setGameOver(false);
+    setPauseMenu(false);
+    setPaused(false);
     setView("chase"); // every run starts on the chase cam
     setRunId((r) => r + 1);
   }, []);
@@ -174,6 +191,7 @@ export function TwingoRacer() {
   const close = useCallback(() => {
     setOpen(false);
     setPaused(false);
+    setPauseMenu(false);
     // reset to the title screen for the next session
     setScreen("title");
     setTitleSel("start");
@@ -183,6 +201,33 @@ export function TwingoRacer() {
       document.getElementById("crt-start-btn") ??
       document.getElementById("ticker-start-btn");
     btn?.focus();
+  }, []);
+
+  /* ESC / ⏸ during a run: freeze the engine and open the pause menu */
+  const openPauseMenu = useCallback(() => {
+    keysRef.current = { left: false, right: false, gas: false, brake: false };
+    setPaused(true);
+    setPauseMenu(true);
+    setPauseSel("stats");
+  }, []);
+
+  const resumeFromPause = useCallback(() => {
+    setPauseMenu(false);
+    setPaused(false);
+  }, []);
+
+  /* QUIT from the pause menu: drop the engine (so the next START boots a
+     fresh run instead of resuming at speed) and land on the title screen */
+  const quitToTitle = useCallback(() => {
+    engineRef.current = null;
+    gameOverRef.current = false;
+    keysRef.current = { left: false, right: false, gas: false, brake: false };
+    setGameOver(false);
+    setPauseMenu(false);
+    setPaused(false);
+    setScreen("title");
+    setTitleSel("start");
+    setTitleBoard(false);
   }, []);
 
   /* START on the title screen: boot the engine and drop into the READY
@@ -377,7 +422,33 @@ export function TwingoRacer() {
         keys: "brake",
       };
       if (down && ev.key === "Escape") {
-        close();
+        // ESC while the pause menu is up = resume; otherwise open it —
+        // never on top of the game-over overlay (its own buttons rule there)
+        if (pauseMenuRef.current) resumeFromPause();
+        else if (!gameOverRef.current) openPauseMenu();
+        return;
+      }
+      // pause menu keyboard control: ↑/↓ arm an option, Enter/Space runs it
+      if (pauseMenuRef.current) {
+        if (!down) return;
+        const sel = pauseSelRef.current;
+        if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
+          ev.preventDefault();
+          const order = ["stats", "restart", "quit"] as const;
+          const i = order.indexOf(sel);
+          const next =
+            k === "arrowup" || k === "w"
+              ? order[(i + order.length - 1) % order.length]
+              : order[(i + 1) % order.length];
+          setPauseSel(next);
+          return;
+        }
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          if (sel === "stats") setPauseStats((s) => !s);
+          else if (sel === "restart") playAgain();
+          else quitToTitle();
+        }
         return;
       }
       // R restarts the run instantly: zero score, zero speed, full tank
@@ -467,8 +538,8 @@ export function TwingoRacer() {
       role="dialog"
       aria-label="Twingo Racer — OutRun style driving game"
       className="racer-overlay"
-      onClick={() => paused && setPaused(false)}
-      onKeyDown={() => paused && setPaused(false)}
+      onClick={() => paused && !pauseMenu && setPaused(false)}
+      onKeyDown={() => paused && !pauseMenu && setPaused(false)}
     >
       {screen === "title" ? (
         <div className="racer-title">
@@ -599,9 +670,75 @@ export function TwingoRacer() {
           READY...
         </div>
       )}
-      {paused && (
+      {paused && !pauseMenu && (
         <div className="racer-paused font-pixel" role="status">
           PAUSED — CLICK TO RESUME
+        </div>
+      )}
+      {pauseMenu && screen === "playing" && (
+        <div
+          className="racer-pausemenu font-pixel"
+          role="menu"
+          aria-label="Pause menu"
+        >
+          <div className="racer-pausemenu-title">PAUSED</div>
+          <button
+            type="button"
+            role="menuitem"
+            className={`racer-pausemenu-btn${
+              pauseSel === "stats" ? " racer-pausemenu-btn-sel" : ""
+            }`}
+            onClick={() => setPauseStats((s) => !s)}
+            onPointerEnter={() => setPauseSel("stats")}
+          >
+            STATS
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`racer-pausemenu-btn${
+              pauseSel === "restart" ? " racer-pausemenu-btn-sel" : ""
+            }`}
+            onClick={playAgain}
+            onPointerEnter={() => setPauseSel("restart")}
+          >
+            RESTART
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`racer-pausemenu-btn${
+              pauseSel === "quit" ? " racer-pausemenu-btn-sel" : ""
+            }`}
+            onClick={quitToTitle}
+            onPointerEnter={() => setPauseSel("quit")}
+          >
+            QUIT
+          </button>
+          {pauseStats && engineRef.current && (
+            <div className="racer-pausemenu-stats">
+              <div>SCORE {Math.floor(engineRef.current.state.score)}</div>
+              <div>
+                DIST {engineRef.current.state.distanceKm.toFixed(2)} KM
+              </div>
+              <div>
+                TIME {Math.floor(engineRef.current.state.time / 60)}:
+                {String(
+                  Math.floor(engineRef.current.state.time % 60),
+                ).padStart(2, "0")}
+              </div>
+              <div>
+                SPEED{" "}
+                {Math.round(
+                  (engineRef.current.state.speed /
+                    ENGINE_CONSTANTS.MAX_SPEED) *
+                    180,
+                )}{" "}
+                KM/H
+              </div>
+            </div>
+          )}
+          <div className="racer-pausemenu-hint">ESC — RESUME</div>
         </div>
       )}
       {gameOver && screen === "playing" && (
@@ -715,9 +852,20 @@ export function TwingoRacer() {
             <span className="racer-key">R</span> RESTART
           </div>
           <div className="racer-keys-row">
-            <span className="racer-key">ESC</span> EXIT
+            <span className="racer-key">ESC</span> MENU
           </div>
         </div>
+      )}
+
+      {screen === "playing" && coarse && !gameOver && (
+        <button
+          type="button"
+          className="racer-pause-touch font-pixel"
+          onClick={openPauseMenu}
+          aria-label="Pause game"
+        >
+          ❚❚
+        </button>
       )}
 
       {screen === "playing" && coarse && (
