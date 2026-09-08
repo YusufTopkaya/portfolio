@@ -29,8 +29,9 @@ export function Footer({ profile, lang, translations }: FooterProps) {
       <div className="glass-bold border-t border-white/10 dark:border-white/5">
         <div className="container mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            {/* Social links with glass pills */}
-            <div className="flex gap-3 flex-wrap justify-center">
+            {/* Social links with glass pills — offset clears the fixed
+                retro PC that owns the bottom-left corner on desktop */}
+            <div className="flex gap-3 flex-wrap justify-center md:ml-[264px]">
               {profile.socialLinks.map((link) => (
                 <a
                   key={link.name}
