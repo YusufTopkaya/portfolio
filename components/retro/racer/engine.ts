@@ -123,14 +123,14 @@ const CENTRIFUGAL = 0.3;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank drains quadratically with speed: full throttle burns a dot
-// in ~9 s, gentle cruising sips. Idle burn is non-trivial on purpose —
+// in ~6.7 s, gentle cruising sips. Idle burn is non-trivial on purpose —
 // standing still must never be a viable fuel-saving strategy
-const FUEL_DRAIN_IDLE = 0.03; // gauge dots per second at a standstill
+const FUEL_DRAIN_IDLE = 0.04; // gauge dots per second at a standstill
 // extra dots per second at full speed — applied quadratically
 // (speedPercent²). Kept shallow so the fuel-economy optimum sits near
 // ~110 km/h instead of a crawl: (IDLE+SPEED·p²)/p is minimized at
 // p = sqrt(IDLE/SPEED)
-const FUEL_DRAIN_SPEED = 0.08;
+const FUEL_DRAIN_SPEED = 0.11;
 const PICKUP_RESPAWN = 45; // seconds before a taken gas can re-arms
 const FAR_OFFROAD = 2.0; // |playerX| at/above this = stranded past the trees
 const LANES = 3;
@@ -1198,8 +1198,10 @@ export function createEngine(opts: {
   // engine time of the last gas-can pickup — drives the collect feedback
   // (sparkle burst at the car, gauge flash, rising "+1")
   let lastPickupAt = -10;
-  // scarcity ramps with score: every 1000 points hides another 1% of the
-  // track's cans (capped at 70% so the track never fully dries out).
+  // scarcity ramps with score: every 1500 points hides another 1% of the
+  // track's cans (capped at 75% so the track never fully dries out).
+  // Tuned so a flawless flat-out run dies around ~110k — the fuel game
+  // is decided by collection discipline, not by cruising slow.
   // Cans are hidden in golden-ratio order over their ordinal on the
   // track, so the hidden ones stay evenly spread instead of clumping
   // and the hidden count matches the percentage even with few cans —
@@ -1210,7 +1212,7 @@ export function createEngine(opts: {
     if (seg.pickup) canOrdinal.set(seg.index, ordinal++);
   }
   const pickupActive = (seg: Segment): boolean => {
-    const hidden = Math.min(0.4, Math.floor(state.score / 1000) * 0.01);
+    const hidden = Math.min(0.75, Math.floor(state.score / 1500) * 0.01);
     if (hidden <= 0) return true;
     const ord = canOrdinal.get(seg.index);
     if (ord === undefined) return true;
