@@ -28,7 +28,7 @@ import {
   loadGasCan,
   makeRoadside,
 } from "./racer/sprites";
-import { buildTrack } from "./racer/track";
+import { createTrackGenerator } from "./racer/track";
 
 /** render buffer: landscape keeps the native 480×270, portrait phones get
     a taller buffer so the game fills the screen instead of letterboxing
@@ -377,12 +377,15 @@ export function TwingoRacer() {
         if (cancelled) return;
         cockpitReadyRef.current = cockpit !== null;
         setCockpitReady(cockpit !== null);
-        // fresh random layout every run — the seeded generator keeps its
-        // geometric constraints (alternating curve sides, balanced hills,
-        // seamless loop) regardless of seed
-        const { segments } = buildTrack(Math.floor(Math.random() * 2 ** 31));
+        // fresh random layout every run — the seeded generator deals
+        // sections forever under its geometric limits (alternating curve
+        // sides, sea-level-sprung hills); the track never loops
+        const { segments, extend } = createTrackGenerator(
+          Math.floor(Math.random() * 2 ** 31),
+        );
         engineRef.current = createEngine({
           segments,
+          extend,
           roadside: makeRoadside(),
           car,
           gasCan,

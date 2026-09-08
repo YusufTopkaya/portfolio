@@ -81,11 +81,12 @@ export interface Segment {
   p2: SegmentPoint;
   sprites: SegmentSprite[];
   /** collectible gas can on the tarmac, x in road half-width units
-      (±1 = edge). respawnAt: engine time when a taken can re-arms */
-  pickup?: { x: number; respawnAt: number };
+      (±1 = edge). big: every 10th can — worth 2 gauge dots, drawn larger,
+      and resists scarcity hiding at half rate. ordinal: position in the
+      can sequence, drives the golden-ratio hiding pattern */
+  pickup?: { x: number; big?: boolean; ordinal: number };
   color: typeof COLORS.light | typeof COLORS.dark;
   clip: number;
-  looped: boolean;
 }
 
 /* engine constants (Jake Gordon's values, tuned down for a 480x270 buffer) */
@@ -131,7 +132,6 @@ const FUEL_DRAIN_IDLE = 0.04; // gauge dots per second at a standstill
 // ~110 km/h instead of a crawl: (IDLE+SPEED·p²)/p is minimized at
 // p = sqrt(IDLE/SPEED)
 const FUEL_DRAIN_SPEED = 0.11;
-const PICKUP_RESPAWN = 45; // seconds before a taken gas can re-arms
 const FAR_OFFROAD = 2.0; // |playerX| at/above this = stranded past the trees
 const LANES = 3;
 
@@ -210,7 +210,6 @@ export function makeSegment(
     sprites: [],
     color: Math.floor(n / RUMBLE_LENGTH) % 2 ? COLORS.dark : COLORS.light,
     clip: 0,
-    looped: false,
   };
   seg.p1.world.y = y1;
   seg.p2.world.y = y2;
@@ -890,9 +889,11 @@ function renderMirror(
   ctx.fillStyle = "#377934";
   ctx.fillRect(x, horizon, w, bottom - horizon);
 
-  const N = segments.length;
+  // windowed view of the endless track: segments[0].index is the absolute
+  // index of the oldest segment still alive (the engine drops the rest)
+  const base = segments[0].index;
   const DD = 20; // segments of road behind shown in the glass
-  const segIdx = Math.floor(position / SEGMENT_LENGTH) % N;
+  const segIdx = Math.floor(position / SEGMENT_LENGTH);
   const frac = (position % SEGMENT_LENGTH) / SEGMENT_LENGTH;
 
   // world-x of each segment boundary behind the car, relative to the car:
@@ -903,7 +904,15 @@ function renderMirror(
   const ringY: number[] = [0];
   let hdx = 0;
   for (let k = 1; k <= DD; k++) {
-    const seg = segments[(segIdx - k + N) % N];
+    const i = segIdx - k - base;
+    if (i < 0) {
+      // the window edge — only reachable in the run's first seconds:
+      // hold the last known ring flat instead of wrapping around
+      ringX.push(ringX[k - 1]);
+      ringY.push(0);
+      continue;
+    }
+    const seg = segments[i];
     hdx -= seg.curve;
     ringX.push(ringX[k - 1] - hdx);
     ringY.push(seg.p1.world.y - carY);
@@ -956,7 +965,7 @@ function renderMirror(
       rx: cx + (r0.rx - cx) / r0.persp,
     };
     if (apron.ry > r0.ry) {
-      const seg = segments[segIdx];
+      const seg = segments[Math.max(0, segIdx - base)];
       polygon(
         ctx,
         apron.rx - apron.rw,
@@ -1002,7 +1011,7 @@ function renderMirror(
     const near = ringAt(n);
     const far = ringAt(n + 1);
     if (far.ry >= near.ry || far.ry >= maxY) continue;
-    const seg = segments[(segIdx - n + N) % N];
+    const seg = segments[Math.max(0, segIdx - n - base)];
     // road strip, alternating shades like the main road
     polygon(
       ctx,
@@ -1054,7 +1063,7 @@ function renderMirror(
   };
   for (let k = DD; k >= 1; k--) {
     if (!vis[k]) continue; // hidden behind a crest
-    const seed = ((segIdx - k + N) % N) * 3;
+    const seed = Math.max(0, segIdx - k - base) * 3;
     const r1 = hash01(seed + 1);
     if (r1 > 0.55) continue; // ~55% of segments carry an object
     const ring = ringAt(k);
@@ -1142,11 +1151,14 @@ export interface RacerEngine {
       game state is kept, only the prebuilt backdrop layers are rebuilt */
   resize(width: number, height: number): void;
   state: EngineState;
-  trackLength: number;
 }
 
 export function createEngine(opts: {
   segments: Segment[];
+  /** the track never loops: the generator appends sections on demand so
+      at least `upToAbsIndex` absolute segments exist. The engine splices
+      off segments the car has left far behind */
+  extend: (upToAbsIndex: number) => void;
   roadside: RoadsideSprite[];
   car: CarFrames;
   gasCan: CarFrame;
@@ -1162,12 +1174,21 @@ export function createEngine(opts: {
   /** touch devices: LCD cluster goes top-left so the pedals don't cover it */
   clusterTopLeft?: boolean;
 }): RacerEngine {
-  const { segments, roadside, car, gasCan, reduceMotion } = opts;
+  const { segments, extend, roadside, car, gasCan, reduceMotion } = opts;
   const cockpit = opts.cockpit ?? null;
   // mutable so resize() can re-fit the renderer when the device rotates
   let width = opts.width ?? RACER_WIDTH;
   let height = opts.height ?? RACER_HEIGHT;
-  const trackLength = segments.length * SEGMENT_LENGTH;
+  // rolling window over the infinite track: ~2 minutes of flat-out
+  // driving stays generated ahead; behind the car a short tail survives
+  // (the rearview mirror walks 20 segments back). baseIndex = absolute
+  // index of segments[0]
+  const AHEAD_SEGMENTS = 120 * 60;
+  const BEHIND_SEGMENTS = 240;
+  let baseIndex = 0;
+  // the generator starts empty — buffer the first ~2 minutes up front so
+  // the very first update/render already has road under the car
+  extend(AHEAD_SEGMENTS);
 
   const state: EngineState = {
     position: 0,
@@ -1200,23 +1221,19 @@ export function createEngine(opts: {
   let lastPickupAt = -10;
   // scarcity ramps with score: every 1500 points hides another 1% of the
   // track's cans (capped at 75% so the track never fully dries out).
-  // Tuned so a flawless flat-out run dies around ~110k — the fuel game
-  // is decided by collection discipline, not by cruising slow.
-  // Cans are hidden in golden-ratio order over their ordinal on the
-  // track, so the hidden ones stay evenly spread instead of clumping
-  // and the hidden count matches the percentage even with few cans —
-  // update() and render() must agree on this
-  const canOrdinal = new Map<number, number>();
-  let ordinal = 0;
-  for (const seg of segments) {
-    if (seg.pickup) canOrdinal.set(seg.index, ordinal++);
-  }
+  // Big cans (every 10th) resist at half the rate — the relief valve must
+  // survive into the late game. Cans are hidden in golden-ratio order
+  // over their ordinal, so the hidden ones stay evenly spread instead of
+  // clumping and the hidden count matches the percentage even with few
+  // cans — update() and render() must agree on this
   const pickupActive = (seg: Segment): boolean => {
+    const pk = seg.pickup;
+    if (!pk) return true;
     const hidden = Math.min(0.75, Math.floor(state.score / 1500) * 0.01);
     if (hidden <= 0) return true;
-    const ord = canOrdinal.get(seg.index);
-    if (ord === undefined) return true;
-    return (ord * 0.6180339887498949) % 1 >= hidden;
+    return (
+      (pk.ordinal * 0.6180339887498949) % 1 >= (pk.big ? hidden / 2 : hidden)
+    );
   };
   // steering intent captured in update(), consumed by render() to pick
   // the car frame (left/right lean)
@@ -1266,7 +1283,8 @@ export function createEngine(opts: {
   }
 
   function findSegment(z: number): Segment {
-    return segments[Math.floor(z / SEGMENT_LENGTH) % segments.length];
+    const i = Math.floor(z / SEGMENT_LENGTH) - baseIndex;
+    return segments[Math.max(0, Math.min(segments.length - 1, i))];
   }
 
   function update(dt: number, input: RacerInput) {
@@ -1281,8 +1299,15 @@ export function createEngine(opts: {
     state.position += state.speed * dt;
     // display km at the same scale as the 180 km/h top speed
     state.distanceKm += speedPercent * 180 * (dt / 3600);
-    while (state.position >= trackLength) state.position -= trackLength;
-    while (state.position < 0) state.position += trackLength;
+    // rolling window over the endless track: keep ~2 minutes of flat-out
+    // road generated ahead, drop what the car left far behind
+    const absIndex = Math.floor(state.position / SEGMENT_LENGTH);
+    extend(absIndex + AHEAD_SEGMENTS);
+    const drop = absIndex - BEHIND_SEGMENTS - baseIndex;
+    if (drop > 0) {
+      segments.splice(0, drop);
+      baseIndex += drop;
+    }
 
     if (input.left) state.playerX -= dx;
     if (input.right) state.playerX += dx;
@@ -1370,17 +1395,18 @@ export function createEngine(opts: {
     if (state.respawn > 0) {
       state.respawn = Math.max(0, state.respawn - dt);
     } else {
-      // gas cans: drive through one to light another gauge dot
+      // gas cans: drive through one to light gauge dots (+2 for the big
+      // ones). A taken can is gone for good — the road behind is never
+      // revisited on an endless track
       const pk = playerSegment.pickup;
       if (
         pk &&
         pickupActive(playerSegment) &&
-        pk.respawnAt <= state.time &&
         Math.abs(state.playerX - pk.x) < 0.24 &&
         state.speed > MAX_SPEED * 0.02
       ) {
-        state.fuel = Math.min(FUEL_MAX, state.fuel + 1);
-        pk.respawnAt = state.time + PICKUP_RESPAWN;
+        state.fuel = Math.min(FUEL_MAX, state.fuel + (pk.big ? 2 : 1));
+        playerSegment.pickup = undefined;
         lastPickupAt = state.time;
       }
       // stranded way off the road, past the roadside trees: respawn on
@@ -1500,11 +1526,10 @@ export function createEngine(opts: {
     let roadNearW = width * 0.45;
 
     for (let n = 0; n < DRAW_DISTANCE; n++) {
-      const segment = segments[(baseSegment.index + n) % segments.length];
-      segment.looped = segment.index < baseSegment.index;
+      const segment = segments[baseSegment.index + n - baseIndex];
       segment.clip = maxY;
 
-      const camZ = cameraZBase - (segment.looped ? trackLength : 0);
+      const camZ = cameraZBase;
       const camX = state.playerX * ROAD_WIDTH - x;
       const camY = playerY + CAMERA_HEIGHT;
       project(segment.p1, camX, camY, camZ, width, height, yShift);
@@ -1555,18 +1580,20 @@ export function createEngine(opts: {
     // ── roadside sprites, far to near (painter's algorithm; Lou: keep
     //    them sorted by z and scale by the line's projection factor) ──
     for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
-      const segment = segments[(baseSegment.index + n) % segments.length];
+      const segment = segments[baseSegment.index + n - baseIndex];
       const pk = segment.pickup;
       if (!pk && segment.sprites.length === 0) continue;
 
       // gas cans hover above the tarmac of their segment, bobbing gently
-      // so they catch the eye; taken cans stay gone until they re-arm
-      if (pk && pickupActive(segment) && pk.respawnAt <= state.time) {
+      // so they catch the eye; big cans (every 10th, worth 2 dots) are
+      // drawn larger with a hotter halo — the relief must read from afar
+      if (pk && pickupActive(segment)) {
         const scale = segment.p1.screen.scale;
         // much bigger than the roadside-sprite factor (4.2): pickups must
         // read from far away and feel worth steering for
-        const destW = gasCan.w * scale * (width / 2) * 8;
-        const destH = gasCan.h * scale * (width / 2) * 8;
+        const sizeMul = pk.big ? 1.6 : 1;
+        const destW = gasCan.w * scale * (width / 2) * 8 * sizeMul;
+        const destH = gasCan.h * scale * (width / 2) * 8 * sizeMul;
         if (destW >= 2) {
           // floats above the road: fixed hover height + slow bob
           const bob =
@@ -1597,10 +1624,13 @@ export function createEngine(opts: {
             );
             ctx.fill();
             // pulsing halo ring — at distance the can itself is a few
-            // pixels, so this is what reads as "pickup here!" from afar
-            const pulse = 0.5 + 0.5 * Math.sin(state.time * 5 + segment.index);
-            ctx.strokeStyle = `rgba(255,215,94,${0.35 + 0.35 * pulse})`;
-            ctx.lineWidth = Math.max(1, destW * 0.07);
+            // pixels, so this is what reads as "pickup here!" from afar.
+            // Big cans pulse faster and hotter, with a second outer ring
+            const pulse =
+              0.5 +
+              0.5 * Math.sin(state.time * (pk.big ? 9 : 5) + segment.index);
+            ctx.strokeStyle = `rgba(255,215,94,${(pk.big ? 0.55 : 0.35) + (pk.big ? 0.45 : 0.35) * pulse})`;
+            ctx.lineWidth = Math.max(1, destW * (pk.big ? 0.09 : 0.07));
             ctx.beginPath();
             ctx.ellipse(
               Math.round(destX + destW / 2),
@@ -1612,6 +1642,21 @@ export function createEngine(opts: {
               Math.PI * 2,
             );
             ctx.stroke();
+            if (pk.big) {
+              ctx.strokeStyle = `rgba(255,242,190,${0.2 + 0.3 * pulse})`;
+              ctx.lineWidth = Math.max(1, destW * 0.04);
+              ctx.beginPath();
+              ctx.ellipse(
+                Math.round(destX + destW / 2),
+                Math.round(destY + (visibleH / destH) * destH * 0.5),
+                destW * 0.88,
+                (visibleH / destH) * destH * 0.8,
+                0,
+                0,
+                Math.PI * 2,
+              );
+              ctx.stroke();
+            }
             ctx.drawImage(
               gasCan.image,
               0,
@@ -2007,7 +2052,7 @@ export function createEngine(opts: {
     }
   }
 
-  return { update, render, resize, state, trackLength };
+  return { update, render, resize, state };
 }
 
 export const ENGINE_CONSTANTS = {
