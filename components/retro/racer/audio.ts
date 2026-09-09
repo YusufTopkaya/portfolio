@@ -155,7 +155,8 @@ export function createRacerAudio(): RacerAudio {
   let wasThrottle = false; // falling edge fires the overrun crackle
 
   const makeNoise = (c: AudioContext): AudioBufferSourceNode => {
-    const len = c.sampleRate;
+    // 4 s buffer: a 1 s loop repeats audibly as a warble under the exhaust
+    const len = c.sampleRate * 4;
     const buf = c.createBuffer(1, len, c.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -306,7 +307,9 @@ export function createRacerAudio(): RacerAudio {
         engHarm.type = "sawtooth";
         engFat = ctx.createOscillator();
         engFat.type = "sawtooth";
-        engFat.detune.value = 10; // cents off the main saw — chorus fatness
+        engFat.detune.value = 5; // cents off the main saw — chorus fatness
+        // (10 cents beat against the main saw at a rate that climbed with
+        // revs and warbled at cruise)
         engFilter = ctx.createBiquadFilter();
         engFilter.type = "lowpass";
         engFilter.frequency.value = 400;
