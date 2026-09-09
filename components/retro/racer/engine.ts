@@ -124,6 +124,10 @@ const CENTRIFUGAL = 0.36;
 // speed bleed per unit of cornering overload (|p·curve·CENTRIFUGAL| − 1)
 // — tire scrub as a fraction of top speed per second
 const TIRE_SCRUB = 0.23;
+// 5-speed box: top of each gear in km/h. A gear change lifts the throttle
+// for SHIFT_TIME seconds — revs drop, no drive, then it hooks up again
+const GEAR_TOPS = [45, 80, 115, 150, 180];
+const SHIFT_TIME = 0.28;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank drains quadratically with speed: full throttle burns a dot
@@ -186,6 +190,16 @@ export interface EngineState {
   /** fuel ran dry and the car rolled to a standstill */
   gameOver: boolean;
   offRoad: boolean;
+  /** current gear, 1-5 (top of each band in GEAR_TOPS) */
+  gear: number;
+  /** >0 while the throttle is lifted between gears, counts down in seconds */
+  shiftT: number;
+  /** tire slide past the grip limit this frame (0 = planted, grows with scrub) */
+  skid: number;
+  /** revs inside the current gear, 0-1 — drives the engine note */
+  rpm01: number;
+  /** brake pedal held this frame — lights the stop lamps */
+  braking: boolean;
   /** camera: behind the car or through the windshield */
   view: RacerView;
 }
@@ -1207,6 +1221,11 @@ export function createEngine(opts: {
     fuel: FUEL_MAX,
     gameOver: false,
     offRoad: false,
+    gear: 1,
+    shiftT: 0,
+    skid: 0,
+    rpm01: 0,
+    braking: false,
     view: opts.view === "cockpit" && cockpit ? "cockpit" : "chase",
   };
 
@@ -1340,7 +1359,31 @@ export function createEngine(opts: {
     );
     const hillForce = ((-GRAVITY_KMH * grade) / 180) * MAX_SPEED;
 
-    if (input.gas && state.fuel > 0) {
+    state.skid = scrub;
+
+    // gearbox: find the band this speed belongs to and lift the throttle
+    // for a beat on every change — like a real shift, no drive while the
+    // clutch is in. rpm01 is revs inside the current band for the sound
+    const kmhNow = (state.speed / MAX_SPEED) * 180;
+    let gear = GEAR_TOPS.length;
+    for (let g = 0; g < GEAR_TOPS.length; g++) {
+      if (kmhNow <= GEAR_TOPS[g]) {
+        gear = g + 1;
+        break;
+      }
+    }
+    if (gear !== state.gear && kmhNow > 5) state.shiftT = SHIFT_TIME;
+    state.gear = gear;
+    state.shiftT = Math.max(0, state.shiftT - dt);
+    const gearLo = gear > 1 ? GEAR_TOPS[gear - 2] : 0;
+    const gearHi = GEAR_TOPS[gear - 1];
+    state.rpm01 = Math.max(
+      0,
+      Math.min(1, (kmhNow - gearLo) / (gearHi - gearLo)),
+    );
+    state.braking = input.brake;
+
+    if (input.gas && state.fuel > 0 && state.shiftT <= 0) {
       // throttle follows the measured km/h curve of the real car
       const kmh = (state.speed / MAX_SPEED) * 180;
       state.speed += (ACCEL_KMH(kmh) / 180) * MAX_SPEED * dt;
@@ -1828,6 +1871,29 @@ export function createEngine(opts: {
         Math.round(destH),
       );
       ctx.globalAlpha = 1;
+
+      // stop lamps: two taillights + the high-level strip under the rear
+      // window glow red while the brake pedal is down — like a real car
+      // they stay lit at a standstill. A soft halo under a brighter core
+      // sells the lamp bloom at sprite scale
+      if (state.braking && state.respawn <= 0) {
+        const lamp = (fx: number, fy: number, fw: number, fh: number) => {
+          const lx = carX + destW * fx;
+          const ly = carY + destH * fy;
+          const lw = destW * fw;
+          const lh = destH * fh;
+          ctx.globalAlpha = carAlpha * 0.45;
+          ctx.fillStyle = "#ff2020";
+          ctx.fillRect(lx - lw * 0.35, ly - lh * 0.5, lw * 1.7, lh * 2);
+          ctx.globalAlpha = carAlpha;
+          ctx.fillStyle = "#ff5a4a";
+          ctx.fillRect(lx, ly, lw, lh);
+        };
+        lamp(0.05, 0.52, 0.1, 0.06); // left taillight
+        lamp(0.85, 0.52, 0.1, 0.06); // right taillight
+        lamp(0.38, 0.43, 0.24, 0.04); // strip under the rear window
+        ctx.globalAlpha = 1;
+      }
 
       // off-road dust puffs
       if (

@@ -22,7 +22,7 @@ import {
   type RacerInput,
   type RacerView,
 } from "./racer/engine";
-import { createRacerAudio, type RacerAudio } from "./racer/audio";
+import { createRacerAudio, type RacerAudio, type RacerVolumes } from "./racer/audio";
 import {
   loadCarFrames,
   loadCockpit,
@@ -48,7 +48,9 @@ export function TwingoRacer() {
   const [screen, setScreen] = useState<"title" | "playing">("title");
   /* title screen: which artwork button is armed for Enter, and whether
      the read-only leaderboard panel is open over the title */
-  const [titleSel, setTitleSel] = useState<"start" | "board">("start");
+  const [titleSel, setTitleSel] = useState<"start" | "board" | "settings">(
+    "start",
+  );
   const [titleBoard, setTitleBoard] = useState(false);
   const [boardError, setBoardError] = useState(false);
   const [intro, setIntro] = useState(false);
@@ -56,9 +58,9 @@ export function TwingoRacer() {
   /* pause menu (ESC / ⏸): freezes the run and offers STATS / RESTART /
      QUIT. Distinct from the plain auto-pause banner shown on tab blur */
   const [pauseMenu, setPauseMenu] = useState(false);
-  const [pauseSel, setPauseSel] = useState<"stats" | "restart" | "quit">(
-    "stats",
-  );
+  const [pauseSel, setPauseSel] = useState<
+    "stats" | "settings" | "restart" | "quit"
+  >("stats");
   /* STATS option expands the current run's numbers inside the menu */
   const [pauseStats, setPauseStats] = useState(false);
   const [coarse, setCoarse] = useState(false);
@@ -72,6 +74,34 @@ export function TwingoRacer() {
   );
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
+  /* per-channel volumes (0-10 each) — music / engine / menu effects get
+     their own bus under the master mute; persisted across sessions */
+  const [vols, setVols] = useState<RacerVolumes>(() => {
+    const clamp = (n: unknown) =>
+      Math.max(0, Math.min(10, Math.round(Number(n) || 0)));
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("twingo:vol");
+        if (raw) {
+          const p = JSON.parse(raw) as Partial<RacerVolumes>;
+          return {
+            music: clamp(p.music ?? 8),
+            engine: clamp(p.engine ?? 8),
+            menu: clamp(p.menu ?? 8),
+          };
+        }
+      } catch {}
+    }
+    return { music: 8, engine: 8, menu: 8 };
+  });
+  const volsRef = useRef(vols);
+  volsRef.current = vols;
+  /* sound settings panel: reachable from the title screen (chip under the
+     artwork) and from the pause menu (SETTINGS option). settingsRow is
+     the armed slider when it's open */
+  const [titleSettingsOpen, setTitleSettingsOpen] = useState(false);
+  const [pauseSettingsOpen, setPauseSettingsOpen] = useState(false);
+  const [settingsRow, setSettingsRow] = useState(0);
   /* camera view: chase cam behind the car or first-person cockpit;
      toggle with V / the CAM touch button — every run starts on the
      chase cam, the choice is per-session only */
@@ -107,7 +137,15 @@ export function TwingoRacer() {
   /* mirrors for the engine-loop key handler — it closes over the first
      render's callbacks, so pause state must reach it through refs */
   const pauseMenuRef = useRef(false);
-  const pauseSelRef = useRef<"stats" | "restart" | "quit">("stats");
+  const pauseSelRef = useRef<"stats" | "settings" | "restart" | "quit">(
+    "stats",
+  );
+  /* settings panel mirrors for the engine-loop key handler (same stale-
+     closure reason as pauseMenuRef above) */
+  const pauseSettingsOpenRef = useRef(false);
+  const settingsRowRef = useRef(0);
+  pauseSettingsOpenRef.current = pauseSettingsOpen;
+  settingsRowRef.current = settingsRow;
   /* single-use HMAC token for the current run's score submission;
      null when the highscore service is unavailable — the game then
      silently plays without the leaderboard */
@@ -197,6 +235,22 @@ export function TwingoRacer() {
     });
   }, []);
 
+  /* settings panel sliders: bump one channel by a step (clamped 0-10),
+     push it live into the audio buses and remember it across sessions */
+  const adjustVol = useCallback((row: number, delta: number) => {
+    const key = (["music", "engine", "menu"] as const)[row];
+    if (!key) return;
+    audioRef.current?.menuMove();
+    setVols((v) => {
+      const next = { ...v, [key]: Math.max(0, Math.min(10, v[key] + delta)) };
+      try {
+        localStorage.setItem("twingo:vol", JSON.stringify(next));
+      } catch {}
+      audioRef.current?.setVolumes(next);
+      return next;
+    });
+  }, []);
+
   /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly */
   const playAgain = useCallback(() => {
     audioRef.current?.menuSelect();
@@ -215,10 +269,12 @@ export function TwingoRacer() {
     setOpen(false);
     setPaused(false);
     setPauseMenu(false);
+    setPauseSettingsOpen(false);
     // reset to the title screen for the next session
     setScreen("title");
     setTitleSel("start");
     setTitleBoard(false);
+    setTitleSettingsOpen(false);
     // return focus to whichever START button is visible
     const btn =
       document.getElementById("crt-start-btn") ??
@@ -233,6 +289,7 @@ export function TwingoRacer() {
     setPaused(true);
     setPauseMenu(true);
     setPauseSel("stats");
+    setPauseSettingsOpen(false);
   }, []);
 
   const resumeFromPause = useCallback(() => {
@@ -249,13 +306,15 @@ export function TwingoRacer() {
     keysRef.current = { left: false, right: false, gas: false, brake: false };
     // silence the engine hum; the music keeps playing over the title art
     audioRef.current?.menuSelect();
-    audioRef.current?.drive(0, false, false);
+    audioRef.current?.drive(0, false, false, 0, 0, false, 0);
     setGameOver(false);
     setPauseMenu(false);
+    setPauseSettingsOpen(false);
     setPaused(false);
     setScreen("title");
     setTitleSel("start");
     setTitleBoard(false);
+    setTitleSettingsOpen(false);
   }, []);
 
   /* START on the title screen: boot the engine and drop into the READY
@@ -300,6 +359,7 @@ export function TwingoRacer() {
       if (!audioRef.current) {
         audioRef.current = createRacerAudio();
         audioRef.current.setMuted(mutedRef.current);
+        audioRef.current.setVolumes(volsRef.current);
       }
       audioRef.current.start();
       setBuf(computeBuf());
@@ -307,6 +367,7 @@ export function TwingoRacer() {
       setScreen("title");
       setTitleSel("start");
       setTitleBoard(false);
+      setTitleSettingsOpen(false);
       setCoarse(window.matchMedia("(pointer: coarse)").matches);
     };
     window.addEventListener("twingo:start", onStart);
@@ -326,17 +387,41 @@ export function TwingoRacer() {
 
   /* title screen keyboard control: ↑/↓ (or W/S) arm a button, Enter or
      Space activates it ("PRESS ENTER TO SELECT"), Escape closes the
-     leaderboard panel first, then the overlay */
+     settings/leaderboard panel first, then the overlay. While SETTINGS is
+     open, ↑/↓ picks a channel and ←/→ sets its level */
   useEffect(() => {
     if (!open || screen !== "title") return;
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") {
-        if (titleBoard) setTitleBoard(false);
+        if (titleSettingsOpen) setTitleSettingsOpen(false);
+        else if (titleBoard) setTitleBoard(false);
         else close();
         return;
       }
       if (titleBoard) return;
       const k = ev.key.toLowerCase();
+      if (titleSettingsOpen) {
+        if (k === "arrowup" || k === "w") {
+          ev.preventDefault();
+          audioRef.current?.menuMove();
+          setSettingsRow((r) => (r + 2) % 3);
+        } else if (k === "arrowdown" || k === "s") {
+          ev.preventDefault();
+          audioRef.current?.menuMove();
+          setSettingsRow((r) => (r + 1) % 3);
+        } else if (k === "arrowleft" || k === "a") {
+          ev.preventDefault();
+          adjustVol(settingsRow, -1);
+        } else if (k === "arrowright" || k === "d") {
+          ev.preventDefault();
+          adjustVol(settingsRow, 1);
+        } else if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          audioRef.current?.menuSelect();
+          setTitleSettingsOpen(false);
+        }
+        return;
+      }
       if (k === "m") {
         toggleMute();
         return;
@@ -344,19 +429,28 @@ export function TwingoRacer() {
       if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
         ev.preventDefault();
         audioRef.current?.menuMove();
-        setTitleSel((s) => (s === "start" ? "board" : "start"));
+        const order = ["start", "board", "settings"] as const;
+        setTitleSel((s) => {
+          const i = order.indexOf(s);
+          const step = k === "arrowup" || k === "w" ? order.length - 1 : 1;
+          return order[(i + step) % order.length];
+        });
         return;
       }
       if (ev.key === "Enter" || ev.key === " ") {
         ev.preventDefault();
         audioRef.current?.menuSelect();
         if (titleSel === "start") startRun();
-        else openTitleBoard();
+        else if (titleSel === "board") openTitleBoard();
+        else {
+          setSettingsRow(0);
+          setTitleSettingsOpen(true);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, screen, titleBoard, titleSel, close, startRun, openTitleBoard, toggleMute]);
+  }, [open, screen, titleBoard, titleSel, titleSettingsOpen, settingsRow, close, startRun, openTitleBoard, toggleMute, adjustVol]);
 
   /* rotating the phone mid-run flips the buffer between the landscape and
      portrait shapes; the engine keeps its state and just re-fits (resize) */
@@ -394,6 +488,10 @@ export function TwingoRacer() {
           e.state.speed / ENGINE_CONSTANTS.MAX_SPEED,
           keysRef.current.gas,
           keysRef.current.brake,
+          e.state.skid,
+          e.state.rpm01,
+          e.state.shiftT > 0,
+          e.state.score,
         );
         if (e.state.gameOver && !gameOverRef.current) {
           gameOverRef.current = true;
@@ -472,9 +570,11 @@ export function TwingoRacer() {
         keys: "brake",
       };
       if (down && ev.key === "Escape") {
-        // ESC while the pause menu is up = resume; otherwise open it —
-        // never on top of the game-over overlay (its own buttons rule there)
-        if (pauseMenuRef.current) resumeFromPause();
+        // ESC peels one layer at a time: settings panel → pause menu →
+        // (during a run) open the pause menu — never on top of the
+        // game-over overlay (its own buttons rule there)
+        if (pauseSettingsOpenRef.current) setPauseSettingsOpen(false);
+        else if (pauseMenuRef.current) resumeFromPause();
         else if (!gameOverRef.current) openPauseMenu();
         return;
       }
@@ -482,13 +582,37 @@ export function TwingoRacer() {
       if (pauseMenuRef.current) {
         if (!down) return;
         const sel = pauseSelRef.current;
+        if (pauseSettingsOpenRef.current) {
+          // settings panel owns the keys while open: ↑/↓ picks a channel,
+          // ←/→ steps its level, Enter closes back to the menu
+          if (k === "arrowup" || k === "w") {
+            ev.preventDefault();
+            audioRef.current?.menuMove();
+            setSettingsRow((r) => (r + 2) % 3);
+          } else if (k === "arrowdown" || k === "s") {
+            ev.preventDefault();
+            audioRef.current?.menuMove();
+            setSettingsRow((r) => (r + 1) % 3);
+          } else if (k === "arrowleft" || k === "a") {
+            ev.preventDefault();
+            adjustVol(settingsRowRef.current, -1);
+          } else if (k === "arrowright" || k === "d") {
+            ev.preventDefault();
+            adjustVol(settingsRowRef.current, 1);
+          } else if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            audioRef.current?.menuSelect();
+            setPauseSettingsOpen(false);
+          }
+          return;
+        }
         if (k === "m") {
           toggleMute();
           return;
         }
         if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
           ev.preventDefault();
-          const order = ["stats", "restart", "quit"] as const;
+          const order = ["stats", "settings", "restart", "quit"] as const;
           const i = order.indexOf(sel);
           const next =
             k === "arrowup" || k === "w"
@@ -503,6 +627,10 @@ export function TwingoRacer() {
           if (sel === "stats") {
             audioRef.current?.menuSelect();
             setPauseStats((s) => !s);
+          } else if (sel === "settings") {
+            audioRef.current?.menuSelect();
+            setSettingsRow(0);
+            setPauseSettingsOpen(true);
           } else if (sel === "restart") playAgain();
           else quitToTitle();
         }
@@ -561,7 +689,7 @@ export function TwingoRacer() {
       // release any held keys so the car doesn't drive off on its own
       keysRef.current = { left: false, right: false, gas: false, brake: false };
     };
-  }, [open, screen, close, buf.w, buf.h, runId, toggleMute]);
+  }, [open, screen, close, buf.w, buf.h, runId, toggleMute, adjustVol]);
 
   const bindTouch = (key: keyof RacerInput) => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -583,6 +711,75 @@ export function TwingoRacer() {
   });
 
   if (!open) return null;
+
+  /* sound settings panel — shared by the title screen and the pause menu.
+     Three channels, ten steps each; ◀ ▶ buttons keep it playable on touch */
+  const settingsPanel = (onBack: () => void) => (
+    <div
+      className="racer-settings font-pixel"
+      role="dialog"
+      aria-label="Sound settings"
+    >
+      <div className="racer-settings-title">SETTINGS</div>
+      {(["music", "engine", "menu"] as const).map((ch, i) => (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard control lives on the overlay's window-level handler
+        <div
+          key={ch}
+          className={`racer-settings-row${
+            settingsRow === i ? " racer-settings-row-sel" : ""
+          }`}
+          onClick={() => setSettingsRow(i)}
+        >
+          <button
+            type="button"
+            className="racer-settings-step font-pixel"
+            aria-label={`${ch} volume down`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSettingsRow(i);
+              adjustVol(i, -1);
+            }}
+          >
+            ◀
+          </button>
+          <span className="racer-settings-label">{ch.toUpperCase()}</span>
+          <span className="racer-settings-bar" aria-hidden="true">
+            {Array.from({ length: 10 }, (_, s) => (
+              <span
+                key={s}
+                className={`racer-settings-seg${
+                  s < vols[ch] ? " racer-settings-seg-on" : ""
+                }`}
+              />
+            ))}
+          </span>
+          <button
+            type="button"
+            className="racer-settings-step font-pixel"
+            aria-label={`${ch} volume up`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSettingsRow(i);
+              adjustVol(i, 1);
+            }}
+          >
+            ▶
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="racer-playagain font-pixel"
+        onClick={() => {
+          audioRef.current?.menuSelect();
+          onBack();
+        }}
+      >
+        BACK
+      </button>
+      <div className="racer-pausemenu-hint">↑↓ CHANNEL ◀▶ LEVEL</div>
+    </div>
+  );
 
   /* a fresh run token exists and the score would crack the top-10
      (or the board isn't full / hasn't loaded yet) → offer the form */
@@ -657,6 +854,27 @@ export function TwingoRacer() {
               }}
             />
           </div>
+          {/* sound settings chip — the artwork's painted buttons can't
+              grow a third one, so this lives as a small DOM chip under it */}
+          <button
+            type="button"
+            className={`racer-title-settings font-pixel${
+              titleSel === "settings" ? " racer-title-settings-sel" : ""
+            }`}
+            onClick={() => {
+              audioRef.current?.menuSelect();
+              setSettingsRow(0);
+              setTitleSettingsOpen(true);
+            }}
+            onPointerEnter={() => setTitleSel("settings")}
+            ref={(el) => {
+              if (titleSel === "settings" && !titleBoard && !titleSettingsOpen)
+                el?.focus();
+            }}
+          >
+            SETTINGS
+          </button>
+          {titleSettingsOpen && settingsPanel(() => setTitleSettingsOpen(false))}
           {titleBoard && (
             <div
               className="racer-gameover racer-title-panel font-pixel"
@@ -765,6 +983,24 @@ export function TwingoRacer() {
             type="button"
             role="menuitem"
             className={`racer-pausemenu-btn${
+              pauseSel === "settings" ? " racer-pausemenu-btn-sel" : ""
+            }`}
+            onClick={() => {
+              audioRef.current?.menuSelect();
+              setSettingsRow(0);
+              setPauseSettingsOpen(true);
+            }}
+            onPointerEnter={() => {
+              audioRef.current?.menuMove();
+              setPauseSel("settings");
+            }}
+          >
+            SETTINGS
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`racer-pausemenu-btn${
               pauseSel === "restart" ? " racer-pausemenu-btn-sel" : ""
             }`}
             onClick={playAgain}
@@ -813,6 +1049,8 @@ export function TwingoRacer() {
               </div>
             </div>
           )}
+          {pauseSettingsOpen &&
+            settingsPanel(() => setPauseSettingsOpen(false))}
           <div className="racer-pausemenu-hint">ESC — RESUME</div>
         </div>
       )}

@@ -877,6 +877,104 @@ html.crt-boot::after {
   color: rgba(215, 255, 158, 0.55);
 }
 
+/* sound settings panel — shared by the title screen and the pause menu.
+   A full-screen dimmer so it reads the same over the artwork as over the
+   frozen game; three channels, ten segments each */
+.racer-settings {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.85);
+  text-align: center;
+}
+
+.racer-settings-title {
+  font-size: 14px;
+  color: #d7ff9e;
+  text-shadow: 0 0 10px rgba(146, 204, 65, 0.8);
+}
+
+.racer-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 9px;
+  color: #d7ff9e;
+  padding: 6px 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.racer-settings-row-sel {
+  border-color: #6e8f50;
+  background: rgba(146, 204, 65, 0.12);
+}
+
+.racer-settings-label {
+  min-width: 60px;
+  text-align: left;
+}
+
+.racer-settings-bar {
+  display: flex;
+  gap: 3px;
+}
+
+.racer-settings-seg {
+  width: 8px;
+  height: 12px;
+  background: rgba(146, 204, 65, 0.18);
+  border: 1px solid #6e8f50;
+}
+
+.racer-settings-seg-on {
+  background: #92cc41;
+  box-shadow: 0 0 6px rgba(146, 204, 65, 0.8);
+}
+
+.racer-settings-step {
+  font-size: 10px;
+  color: #0d1f0a;
+  background: #92cc41;
+  border: 2px solid #d7ff9e;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.racer-settings-step:hover {
+  background: #d7ff9e;
+}
+
+/* title-screen SETTINGS chip: the artwork's START/LEADERBOARD buttons are
+   painted into the image and can't grow a sibling, so the third entry
+   lives as a small DOM chip centered under the art box */
+.racer-title-settings {
+  position: absolute;
+  bottom: 4%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #d7ff9e;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid #6e8f50;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  z-index: 1;
+}
+
+.racer-title-settings:hover,
+.racer-title-settings-sel {
+  border-color: #d7ff9e;
+  box-shadow: 0 0 10px rgba(146, 204, 65, 0.7);
+}
+
 /* touch pause trigger: top-right, just left of the ✕ close button — the
    top-left corner belongs to the LCD cluster on touch devices (portrait
    phones), so the button must not live there. Only shows on coarse
