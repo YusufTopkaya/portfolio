@@ -1,15 +1,17 @@
 /**
  * Procedural audio for the Twingo racer — pure Web Audio, zero assets.
  *
- * The engine voice is modeled on the real car, not an arcade whine: the
- * Mk1 Twingo has the D7F — a 1149 cc 8v inline-FOUR — whose four-stroke
- * exhaust firing frequency is RPM × cylinders / 120 = RPM / 30: ~28 Hz
- * at the 850 rpm idle, 200 Hz at the 6000 rpm redline. Three harmonics
- * of that pulse (sub sine, main saw, and the 2nd harmonic that dominates
- * real exhaust recordings) run through a lowpass whose cutoff follows
- * throttle LOAD more than revs — a nailed throttle is loud and bright at
- * any rpm, a lifted one goes soft and dark. A filtered-noise rumble sits
- * under it for body.
+ * The engine voice is modeled on the real car, but tuned angry — sport
+ * exhaust spec: the Mk1 Twingo's D7F is a 1149 cc 8v inline-FOUR, so the
+ * four-stroke exhaust firing frequency is RPM × cylinders / 120 = RPM / 30:
+ * ~28 Hz at the 850 rpm idle, 200 Hz at the 6000 rpm redline. Harmonics of
+ * that pulse (sub sine, main saw, the dominant 2nd harmonic, plus a
+ * slightly detuned second saw for fatness) run through a resonant lowpass
+ * into a waveshaper whose drive follows throttle LOAD — a pinned throttle
+ * growls, a lifted one goes soft. Lifting off at revs cracks off a burst
+ * of overrun pops, and at the redline the rev limiter bounces the
+ * ignition in a hard ~18 Hz gate. A filtered-noise rumble sits under it
+ * all for body.
  *
  * The gearbox does the rest for free: rpm01 is wheel-speed over the
  * current gear's top, so an upshift drops the revs by the ratio gap on
@@ -123,12 +125,15 @@ export function createRacerAudio(): RacerAudio {
   let muted = false;
   let volumes: RacerVolumes = { music: 8, engine: 8, menu: 8 };
 
-  // engine voice: sub sine + main saw + 2nd-harmonic saw through a
-  // load-driven lowpass, with a filtered-noise exhaust rumble beneath
+  // engine voice: sub sine + main saw + 2nd-harmonic saw + a detuned fat
+  // saw through a resonant load-driven lowpass into a waveshaper, with a
+  // filtered-noise exhaust rumble beneath
   let engSub: OscillatorNode | null = null;
   let engMain: OscillatorNode | null = null;
   let engHarm: OscillatorNode | null = null;
+  let engFat: OscillatorNode | null = null;
   let engFilter: BiquadFilterNode | null = null;
+  let preDrive: GainNode | null = null;
   let engGain: GainNode | null = null;
   let rumbleGain: GainNode | null = null;
   let loadSmooth = 0; // throttle load, eased toward the target each frame
@@ -147,6 +152,7 @@ export function createRacerAudio(): RacerAudio {
   let step = 0;
   let musicTier = 0; // 0..3, driven by score
   let wasShifting = false; // rising edge fires the clutch thump
+  let wasThrottle = false; // falling edge fires the overrun crackle
 
   const makeNoise = (c: AudioContext): AudioBufferSourceNode => {
     const len = c.sampleRate;
@@ -182,6 +188,17 @@ export function createRacerAudio(): RacerAudio {
     osc.stop(at + dur + 0.02);
   };
 
+  /** soft-clip curve for the exhaust growl — y = (1+k)x/(1+k|x|) */
+  const makeDistCurve = (k: number): Float32Array<ArrayBuffer> => {
+    const n = 256;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / (n - 1) - 1;
+      curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x));
+    }
+    return curve;
+  };
+
   /** soft clutch/gear thump: a short burst of heavily lowpassed noise */
   const clunk = () => {
     if (!ctx || !engineBus) return;
@@ -196,6 +213,29 @@ export function createRacerAudio(): RacerAudio {
     src.connect(f).connect(g).connect(engineBus);
     src.start(t);
     src.stop(t + 0.09);
+  };
+
+  /** overrun crackle: lifting off at revs pops a handful of bandpassed
+      noise bursts — the Warex pops of unburnt fuel hitting a hot exhaust */
+  const crackle = (r: number) => {
+    if (!ctx || !engineBus) return;
+    const t0 = ctx.currentTime;
+    const pops = 3 + Math.floor(r * 4);
+    let at = t0 + 0.02;
+    for (let i = 0; i < pops; i++) {
+      const src = makeNoise(ctx);
+      const f = ctx.createBiquadFilter();
+      f.type = "bandpass";
+      f.frequency.value = 700 + Math.random() * 500;
+      f.Q.value = 4;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.05 + Math.random() * 0.07, at);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.04);
+      src.connect(f).connect(g).connect(engineBus);
+      src.start(at);
+      src.stop(at + 0.06);
+      at += 0.03 + Math.random() * 0.06;
+    }
   };
 
   const scheduleStep = (s: number, at: number) => {
@@ -256,16 +296,26 @@ export function createRacerAudio(): RacerAudio {
         menuBus.gain.value = levelToGain(volumes.menu);
         menuBus.connect(master);
 
-        // engine voice chain: 3 harmonics of the firing pulse
+        // engine voice chain: 4 voices of the firing pulse through a
+        // resonant lowpass into a load-driven waveshaper
         engSub = ctx.createOscillator();
         engSub.type = "sine";
         engMain = ctx.createOscillator();
         engMain.type = "sawtooth";
         engHarm = ctx.createOscillator();
         engHarm.type = "sawtooth";
+        engFat = ctx.createOscillator();
+        engFat.type = "sawtooth";
+        engFat.detune.value = 10; // cents off the main saw — chorus fatness
         engFilter = ctx.createBiquadFilter();
         engFilter.type = "lowpass";
         engFilter.frequency.value = 400;
+        engFilter.Q.value = 2.2; // resonance at the cutoff adds the rasp
+        preDrive = ctx.createGain();
+        preDrive.gain.value = 0.7;
+        const shaper = ctx.createWaveShaper();
+        shaper.curve = makeDistCurve(3);
+        shaper.oversample = "2x";
         engGain = ctx.createGain();
         engGain.gain.value = 0;
         const mix = ctx.createGain();
@@ -274,13 +324,18 @@ export function createRacerAudio(): RacerAudio {
         subG.gain.value = 0.6;
         const harmG = ctx.createGain(); // the 2nd harmonic dominates real
         harmG.gain.value = 0.55; // exhaust recordings — keep it forward
+        const fatG = ctx.createGain();
+        fatG.gain.value = 0.45;
         engSub.connect(subG).connect(mix);
         engMain.connect(mix);
         engHarm.connect(harmG).connect(mix);
-        mix.connect(engFilter).connect(engGain).connect(engineBus);
+        engFat.connect(fatG).connect(mix);
+        mix.connect(engFilter).connect(preDrive);
+        preDrive.connect(shaper).connect(engGain).connect(engineBus);
         engSub.start();
         engMain.start();
         engHarm.start();
+        engFat.start();
 
         // exhaust rumble: noise under a deep lowpass, follows load
         const rumble = makeNoise(ctx);
@@ -381,7 +436,7 @@ export function createRacerAudio(): RacerAudio {
     },
 
     drive(p, throttle, braking, skid, rpm01, shifting, score) {
-      if (!ctx || !engSub || !engMain || !engHarm || !engFilter || !engGain)
+      if (!ctx || !engSub || !engMain || !engHarm || !engFat || !engFilter || !engGain)
         return;
       const t = ctx.currentTime;
       carSilent = false;
@@ -390,18 +445,32 @@ export function createRacerAudio(): RacerAudio {
       if (shifting && !wasShifting) clunk();
       wasShifting = shifting;
 
+      // rev limiter: pinned at the gear's top with the throttle down, the
+      // ignition cuts in a hard ~18 Hz bounce (5th pins at the 180 ceiling,
+      // gears 1-4 just kiss it before the upshift)
+      const r = Math.max(0, Math.min(1, rpm01));
+      const limited = r >= 0.97 && throttle && !shifting;
+
+      // lift-off edge at revs: overrun crackle (Warex pops)
+      if (!throttle && wasThrottle && r > 0.45 && !shifting) crackle(r);
+      wasThrottle = throttle;
+
       // throttle load drives loudness/brightness more than revs do — a
       // pinned throttle barks at any rpm, a lifted one goes soft and dark
       const loadTarget = shifting ? 0 : throttle ? 1 : 0.15;
       loadSmooth += (loadTarget - loadSmooth) * 0.18;
 
+      // waveshaper drive follows load — more gas, more growl
+      if (preDrive)
+        preDrive.gain.setTargetAtTime(0.7 + loadSmooth * 1.8, t, 0.08);
+
       // firing pulse: 850-6000 rpm → 28-200 Hz, with a faint idle wobble
-      const r = Math.max(0, Math.min(1, rpm01));
       const wobble = 1 + 0.01 * Math.sin(t * 12.7) * (1 - r * 0.8);
       const f0 = (IDLE_HZ + r * (REDLINE_HZ - IDLE_HZ)) * wobble;
       engSub.frequency.setTargetAtTime(f0, t, 0.03);
       engMain.frequency.setTargetAtTime(f0, t, 0.03);
       engHarm.frequency.setTargetAtTime(f0 * 2, t, 0.03);
+      engFat.frequency.setTargetAtTime(f0, t, 0.03);
       // cockpit: the cabin eats the highs and softens everything; the
       // low-end drone survives (real interior acoustics)
       const muffle = interior ? 0.42 : 1;
@@ -412,11 +481,9 @@ export function createRacerAudio(): RacerAudio {
         t,
         0.06,
       );
-      engGain.gain.setTargetAtTime(
-        (0.028 + loadSmooth * 0.055 + r * 0.015) * quiet,
-        t,
-        0.05,
-      );
+      let vol = (0.028 + loadSmooth * 0.055 + r * 0.015) * quiet;
+      if (limited) vol *= (t * 18) % 1 < 0.5 ? 1 : 0.25;
+      engGain.gain.setTargetAtTime(vol, t, limited ? 0.012 : 0.05);
       if (rumbleGain) {
         rumbleGain.gain.setTargetAtTime(
           loadSmooth * (0.02 + r * 0.05) * (interior ? 1.25 : 1),
