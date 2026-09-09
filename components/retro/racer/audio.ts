@@ -6,7 +6,9 @@
  * four-stroke exhaust firing frequency is RPM × cylinders / 120 = RPM / 30:
  * ~28 Hz at the 850 rpm idle, 200 Hz at the 6000 rpm redline. Harmonics of
  * that pulse (sub sine, main saw, the dominant 2nd harmonic, plus a
- * slightly detuned second saw for fatness) run through a resonant lowpass
+ * phase-locked sub-octave saw for fatness — a detuned unison would beat
+ * against the main saw at a rate that climbs with revs) run through a
+ * resonant lowpass
  * into a waveshaper whose drive follows throttle LOAD — a pinned throttle
  * growls, a lifted one goes soft. Lifting off at revs cracks off a burst
  * of overrun pops, and at the redline the rev limiter stutters the
@@ -307,18 +309,19 @@ export function createRacerAudio(): RacerAudio {
         engHarm.type = "sawtooth";
         engFat = ctx.createOscillator();
         engFat.type = "sawtooth";
-        engFat.detune.value = 5; // cents off the main saw — chorus fatness
-        // (10 cents beat against the main saw at a rate that climbed with
-        // revs and warbled at cruise)
+        // engFat plays the SUB-OCTAVE (f0/2), set in drive(): a detuned
+        // unison saw beats against the main saw at a rate that climbs with
+        // revs — that warble was audible at cruise. An octave below is
+        // phase-locked, so it fattens without ever beating.
         engFilter = ctx.createBiquadFilter();
         engFilter.type = "lowpass";
         engFilter.frequency.value = 400;
-        engFilter.Q.value = 2.2; // resonance at the cutoff adds the rasp
+        engFilter.Q.value = 1.8; // resonance at the cutoff adds the rasp
         preDrive = ctx.createGain();
         preDrive.gain.value = 0.7;
         const shaper = ctx.createWaveShaper();
         shaper.curve = makeDistCurve(3);
-        shaper.oversample = "2x";
+        shaper.oversample = "4x"; // push the clip aliasing above hearing
         engGain = ctx.createGain();
         engGain.gain.value = 0;
         const mix = ctx.createGain();
@@ -473,7 +476,7 @@ export function createRacerAudio(): RacerAudio {
       engSub.frequency.setTargetAtTime(f0, t, 0.03);
       engMain.frequency.setTargetAtTime(f0, t, 0.03);
       engHarm.frequency.setTargetAtTime(f0 * 2, t, 0.03);
-      engFat.frequency.setTargetAtTime(f0, t, 0.03);
+      engFat.frequency.setTargetAtTime(f0 / 2, t, 0.03);
       // cockpit: the cabin eats the highs and softens everything; the
       // low-end drone survives (real interior acoustics)
       const muffle = interior ? 0.42 : 1;
