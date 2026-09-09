@@ -484,15 +484,20 @@ export function TwingoRacer() {
       if (e && !pausedRef.current) {
         e.update(dt, keysRef.current);
         e.render(ctx);
-        audioRef.current?.drive(
-          e.state.speed / ENGINE_CONSTANTS.MAX_SPEED,
-          keysRef.current.gas,
-          keysRef.current.brake,
-          e.state.skid,
-          e.state.rpm01,
-          e.state.shiftT > 0,
-          e.state.score,
-        );
+        // after the tank ran dry the engine stays silent — gameOver()
+        // already faded it out; drive() would revive an idle drone
+        if (!gameOverRef.current) {
+          audioRef.current?.setPaused(false);
+          audioRef.current?.drive(
+            e.state.speed / ENGINE_CONSTANTS.MAX_SPEED,
+            keysRef.current.gas,
+            keysRef.current.brake,
+            e.state.skid,
+            e.state.rpm01,
+            e.state.shiftT > 0,
+            e.state.score,
+          );
+        }
         if (e.state.gameOver && !gameOverRef.current) {
           gameOverRef.current = true;
           audioRef.current?.gameOver();
@@ -507,6 +512,9 @@ export function TwingoRacer() {
             .then((d: { scores: ScoreEntry[] }) => setBoard(d.scores))
             .catch(() => setBoard(null));
         }
+      } else if (pausedRef.current) {
+        // frozen run: silence the car, leave the music playing
+        audioRef.current?.setPaused(true);
       }
       raf = requestAnimationFrame(frame);
     };

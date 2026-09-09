@@ -1374,11 +1374,12 @@ export function createEngine(opts: {
       state.gear = gear;
     }
     state.shiftT = Math.max(0, state.shiftT - dt);
-    const gearLo = state.gear > 1 ? GEAR_TOPS[state.gear - 2] : 0;
-    const gearHi = GEAR_TOPS[state.gear - 1];
+    // revs = wheel speed over the gear's top (every gear hits the redline
+    // at its band top) — an upshift drops the needle by the ratio gap on
+    // its own, a downshift kicks it up; no fake pitch dips needed
     state.rpm01 = Math.max(
       0,
-      Math.min(1, (kmhNow - gearLo) / (gearHi - gearLo)),
+      Math.min(1, kmhNow / GEAR_TOPS[state.gear - 1]),
     );
     state.braking = input.brake;
 
