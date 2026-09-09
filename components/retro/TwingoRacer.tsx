@@ -55,12 +55,13 @@ export function TwingoRacer() {
   const [boardError, setBoardError] = useState(false);
   const [intro, setIntro] = useState(false);
   const [paused, setPaused] = useState(false);
-  /* pause menu (ESC / ⏸): freezes the run and offers STATS / RESTART /
-     QUIT. Distinct from the plain auto-pause banner shown on tab blur */
+  /* pause menu (ESC / ⏸): freezes the run and offers RESUME / STATS /
+     SETTINGS / RESTART / QUIT. Distinct from the plain auto-pause banner
+     shown on tab blur */
   const [pauseMenu, setPauseMenu] = useState(false);
   const [pauseSel, setPauseSel] = useState<
-    "stats" | "settings" | "restart" | "quit"
-  >("stats");
+    "resume" | "stats" | "settings" | "restart" | "quit"
+  >("resume");
   /* STATS option expands the current run's numbers inside the menu */
   const [pauseStats, setPauseStats] = useState(false);
   const [coarse, setCoarse] = useState(false);
@@ -137,9 +138,9 @@ export function TwingoRacer() {
   /* mirrors for the engine-loop key handler — it closes over the first
      render's callbacks, so pause state must reach it through refs */
   const pauseMenuRef = useRef(false);
-  const pauseSelRef = useRef<"stats" | "settings" | "restart" | "quit">(
-    "stats",
-  );
+  const pauseSelRef = useRef<
+    "resume" | "stats" | "settings" | "restart" | "quit"
+  >("resume");
   /* settings panel mirrors for the engine-loop key handler (same stale-
      closure reason as pauseMenuRef above) */
   const pauseSettingsOpenRef = useRef(false);
@@ -289,7 +290,7 @@ export function TwingoRacer() {
     audioRef.current?.menuSelect();
     setPaused(true);
     setPauseMenu(true);
-    setPauseSel("stats");
+    setPauseSel("resume");
     setPauseSettingsOpen(false);
   }, []);
 
@@ -629,7 +630,13 @@ export function TwingoRacer() {
         }
         if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
           ev.preventDefault();
-          const order = ["stats", "settings", "restart", "quit"] as const;
+          const order = [
+            "resume",
+            "stats",
+            "settings",
+            "restart",
+            "quit",
+          ] as const;
           const i = order.indexOf(sel);
           const next =
             k === "arrowup" || k === "w"
@@ -641,7 +648,8 @@ export function TwingoRacer() {
         }
         if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
-          if (sel === "stats") {
+          if (sel === "resume") resumeFromPause();
+          else if (sel === "stats") {
             audioRef.current?.menuSelect();
             setPauseStats((s) => !s);
           } else if (sel === "settings") {
@@ -983,6 +991,20 @@ export function TwingoRacer() {
             type="button"
             role="menuitem"
             className={`racer-pausemenu-btn${
+              pauseSel === "resume" ? " racer-pausemenu-btn-sel" : ""
+            }`}
+            onClick={resumeFromPause}
+            onPointerEnter={() => {
+              audioRef.current?.menuMove();
+              setPauseSel("resume");
+            }}
+          >
+            RESUME
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`racer-pausemenu-btn${
               pauseSel === "stats" ? " racer-pausemenu-btn-sel" : ""
             }`}
             onClick={() => {
@@ -1068,7 +1090,9 @@ export function TwingoRacer() {
           )}
           {pauseSettingsOpen &&
             settingsPanel(() => setPauseSettingsOpen(false))}
-          <div className="racer-pausemenu-hint">ESC — RESUME</div>
+          {!coarse && (
+            <div className="racer-pausemenu-hint">ESC — RESUME</div>
+          )}
         </div>
       )}
       {gameOver && screen === "playing" && (
