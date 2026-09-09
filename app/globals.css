@@ -899,6 +899,30 @@ html.crt-boot::after {
   box-shadow: 0 0 8px rgba(146, 204, 65, 0.5);
 }
 
+/* touch mute: same chrome as the pause button, docked to its left */
+.racer-mute-touch {
+  position: absolute;
+  top: 10px;
+  right: 96px;
+  font-size: 12px;
+  color: #d7ff9e;
+  background: #1c1a16;
+  border: 2px solid #6e6650;
+  padding: 4px 10px;
+  cursor: pointer;
+  z-index: 3;
+}
+
+.racer-mute-touch-off {
+  color: rgba(215, 255, 158, 0.45);
+  text-decoration: line-through;
+}
+
+.racer-mute-touch:hover {
+  background: #2a2419;
+  box-shadow: 0 0 8px rgba(146, 204, 65, 0.5);
+}
+
 .racer-close {
   position: absolute;
   top: 10px;

@@ -15,12 +15,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScoreEntry } from "@/lib/highscore";
 import {
   createEngine,
+  ENGINE_CONSTANTS,
   RACER_HEIGHT,
   RACER_WIDTH,
   type RacerEngine,
   type RacerInput,
   type RacerView,
 } from "./racer/engine";
+import { createRacerAudio, type RacerAudio } from "./racer/audio";
 import {
   loadCarFrames,
   loadCockpit,
@@ -60,6 +62,16 @@ export function TwingoRacer() {
   /* STATS option expands the current run's numbers inside the menu */
   const [pauseStats, setPauseStats] = useState(false);
   const [coarse, setCoarse] = useState(false);
+  /* all game audio is synthesized (Web Audio, no assets); the context is
+     born on the START gesture. Mute persists across sessions */
+  const audioRef = useRef<RacerAudio | null>(null);
+  const [muted, setMuted] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      localStorage.getItem("twingo:muted") === "1",
+  );
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
   /* camera view: chase cam behind the car or first-person cockpit;
      toggle with V / the CAM touch button — every run starts on the
      chase cam, the choice is per-session only */
@@ -175,8 +187,19 @@ export function TwingoRacer() {
     }
   }, [initials, submitState, finalScore, finalTime]);
 
+  /* M key / speaker button: master mute, remembered across sessions */
+  const toggleMute = useCallback(() => {
+    setMuted((m) => {
+      const next = !m;
+      localStorage.setItem("twingo:muted", next ? "1" : "0");
+      audioRef.current?.setMuted(next);
+      return next;
+    });
+  }, []);
+
   /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly */
   const playAgain = useCallback(() => {
+    audioRef.current?.menuSelect();
     engineRef.current = null;
     gameOverRef.current = false;
     keysRef.current = { left: false, right: false, gas: false, brake: false };
@@ -188,6 +211,7 @@ export function TwingoRacer() {
   }, []);
 
   const close = useCallback(() => {
+    audioRef.current?.stop();
     setOpen(false);
     setPaused(false);
     setPauseMenu(false);
@@ -205,12 +229,14 @@ export function TwingoRacer() {
   /* ESC / ⏸ during a run: freeze the engine and open the pause menu */
   const openPauseMenu = useCallback(() => {
     keysRef.current = { left: false, right: false, gas: false, brake: false };
+    audioRef.current?.menuSelect();
     setPaused(true);
     setPauseMenu(true);
     setPauseSel("stats");
   }, []);
 
   const resumeFromPause = useCallback(() => {
+    audioRef.current?.menuSelect();
     setPauseMenu(false);
     setPaused(false);
   }, []);
@@ -221,6 +247,9 @@ export function TwingoRacer() {
     engineRef.current = null;
     gameOverRef.current = false;
     keysRef.current = { left: false, right: false, gas: false, brake: false };
+    // silence the engine hum; the music keeps playing over the title art
+    audioRef.current?.menuSelect();
+    audioRef.current?.drive(0, false, false);
     setGameOver(false);
     setPauseMenu(false);
     setPaused(false);
@@ -264,9 +293,15 @@ export function TwingoRacer() {
   }, []);
 
   /* the START buttons dispatch this event — the overlay opens on the
-     title screen, the engine boots only when START is pressed there */
+     title screen, the engine boots only when START is pressed there.
+     The click is a user gesture, so the audio context is born here */
   useEffect(() => {
     const onStart = () => {
+      if (!audioRef.current) {
+        audioRef.current = createRacerAudio();
+        audioRef.current.setMuted(mutedRef.current);
+      }
+      audioRef.current.start();
       setBuf(computeBuf());
       setOpen(true);
       setScreen("title");
@@ -302,20 +337,26 @@ export function TwingoRacer() {
       }
       if (titleBoard) return;
       const k = ev.key.toLowerCase();
+      if (k === "m") {
+        toggleMute();
+        return;
+      }
       if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
         ev.preventDefault();
+        audioRef.current?.menuMove();
         setTitleSel((s) => (s === "start" ? "board" : "start"));
         return;
       }
       if (ev.key === "Enter" || ev.key === " ") {
         ev.preventDefault();
+        audioRef.current?.menuSelect();
         if (titleSel === "start") startRun();
         else openTitleBoard();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, screen, titleBoard, titleSel, close, startRun, openTitleBoard]);
+  }, [open, screen, titleBoard, titleSel, close, startRun, openTitleBoard, toggleMute]);
 
   /* rotating the phone mid-run flips the buffer between the landscape and
      portrait shapes; the engine keeps its state and just re-fits (resize) */
@@ -349,8 +390,14 @@ export function TwingoRacer() {
       if (e && !pausedRef.current) {
         e.update(dt, keysRef.current);
         e.render(ctx);
+        audioRef.current?.drive(
+          e.state.speed / ENGINE_CONSTANTS.MAX_SPEED,
+          keysRef.current.gas,
+          keysRef.current.brake,
+        );
         if (e.state.gameOver && !gameOverRef.current) {
           gameOverRef.current = true;
+          audioRef.current?.gameOver();
           setFinalScore(Math.floor(e.state.score));
           setFinalTime(e.state.time);
           setGameOver(true);
@@ -395,6 +442,7 @@ export function TwingoRacer() {
           clusterTopLeft: window.matchMedia("(pointer: coarse)").matches,
           reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
+          onPickup: (big) => audioRef.current?.pickup(big),
         });
         setView(engineRef.current.state.view);
       } else {
@@ -434,6 +482,10 @@ export function TwingoRacer() {
       if (pauseMenuRef.current) {
         if (!down) return;
         const sel = pauseSelRef.current;
+        if (k === "m") {
+          toggleMute();
+          return;
+        }
         if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
           ev.preventDefault();
           const order = ["stats", "restart", "quit"] as const;
@@ -442,13 +494,16 @@ export function TwingoRacer() {
             k === "arrowup" || k === "w"
               ? order[(i + order.length - 1) % order.length]
               : order[(i + 1) % order.length];
+          audioRef.current?.menuMove();
           setPauseSel(next);
           return;
         }
         if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
-          if (sel === "stats") setPauseStats((s) => !s);
-          else if (sel === "restart") playAgain();
+          if (sel === "stats") {
+            audioRef.current?.menuSelect();
+            setPauseStats((s) => !s);
+          } else if (sel === "restart") playAgain();
           else quitToTitle();
         }
         return;
@@ -461,6 +516,11 @@ export function TwingoRacer() {
       // V flips between chase cam and first-person cockpit
       if (down && (k === "v" || ev.code === "KeyV")) {
         toggleView();
+        return;
+      }
+      // M toggles all game audio (music + engine + effects)
+      if (down && (k === "m" || ev.code === "KeyM")) {
+        toggleMute();
         return;
       }
       const input = map[k] ?? map[ev.code.toLowerCase()];
@@ -501,7 +561,7 @@ export function TwingoRacer() {
       // release any held keys so the car doesn't drive off on its own
       keysRef.current = { left: false, right: false, gas: false, brake: false };
     };
-  }, [open, screen, close, buf.w, buf.h, runId]);
+  }, [open, screen, close, buf.w, buf.h, runId, toggleMute]);
 
   const bindTouch = (key: keyof RacerInput) => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -690,8 +750,14 @@ export function TwingoRacer() {
             className={`racer-pausemenu-btn${
               pauseSel === "stats" ? " racer-pausemenu-btn-sel" : ""
             }`}
-            onClick={() => setPauseStats((s) => !s)}
-            onPointerEnter={() => setPauseSel("stats")}
+            onClick={() => {
+              audioRef.current?.menuSelect();
+              setPauseStats((s) => !s);
+            }}
+            onPointerEnter={() => {
+              audioRef.current?.menuMove();
+              setPauseSel("stats");
+            }}
           >
             STATS
           </button>
@@ -702,7 +768,10 @@ export function TwingoRacer() {
               pauseSel === "restart" ? " racer-pausemenu-btn-sel" : ""
             }`}
             onClick={playAgain}
-            onPointerEnter={() => setPauseSel("restart")}
+            onPointerEnter={() => {
+              audioRef.current?.menuMove();
+              setPauseSel("restart");
+            }}
           >
             RESTART
           </button>
@@ -713,7 +782,10 @@ export function TwingoRacer() {
               pauseSel === "quit" ? " racer-pausemenu-btn-sel" : ""
             }`}
             onClick={quitToTitle}
-            onPointerEnter={() => setPauseSel("quit")}
+            onPointerEnter={() => {
+              audioRef.current?.menuMove();
+              setPauseSel("quit");
+            }}
           >
             QUIT
           </button>
@@ -855,6 +927,9 @@ export function TwingoRacer() {
             <span className="racer-key">R</span> RESTART
           </div>
           <div className="racer-keys-row">
+            <span className="racer-key">M</span> SOUND
+          </div>
+          <div className="racer-keys-row">
             <span className="racer-key">ESC</span> MENU
           </div>
         </div>
@@ -868,6 +943,19 @@ export function TwingoRacer() {
           aria-label="Pause game"
         >
           ❚❚
+        </button>
+      )}
+
+      {/* touch mute: docks left of the pause button, mirrors its style —
+          a note glyph with a strike when muted */}
+      {screen === "playing" && coarse && (
+        <button
+          type="button"
+          className={`racer-mute-touch font-pixel${muted ? " racer-mute-touch-off" : ""}`}
+          onClick={toggleMute}
+          aria-label={muted ? "Unmute game audio" : "Mute game audio"}
+        >
+          ♪
         </button>
       )}
 

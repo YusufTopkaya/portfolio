@@ -1176,6 +1176,8 @@ export function createEngine(opts: {
   height?: number;
   /** touch devices: LCD cluster goes top-left so the pedals don't cover it */
   clusterTopLeft?: boolean;
+  /** fired when the car drives through a gas can (big = the 2-dot ones) */
+  onPickup?: (big: boolean) => void;
 }): RacerEngine {
   const { segments, extend, roadside, car, gasCan, reduceMotion } = opts;
   const cockpit = opts.cockpit ?? null;
@@ -1420,6 +1422,7 @@ export function createEngine(opts: {
         state.fuel = Math.min(FUEL_MAX, state.fuel + (pk.big ? 2 : 1));
         playerSegment.pickup = undefined;
         lastPickupAt = state.time;
+        opts.onPickup?.(pk.big ?? false);
       }
       // stranded way off the road, past the roadside trees: respawn on
       // the centre line at a standstill with a breathing fade-in
