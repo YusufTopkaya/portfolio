@@ -543,6 +543,11 @@ export function TwingoRacer() {
           onPickup: (big) => audioRef.current?.pickup(big),
         });
         setView(engineRef.current.state.view);
+        // dev-only handle for e2e probes (speed, gear, …)
+        if (process.env.NODE_ENV !== "production") {
+          (window as unknown as { __twingo?: RacerEngine }).__twingo =
+            engineRef.current;
+        }
       } else {
         // orientation flipped mid-run: keep the run, re-fit the renderer
         engineRef.current.resize(buf.w, buf.h);

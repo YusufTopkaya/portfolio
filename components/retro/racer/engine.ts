@@ -1361,17 +1361,15 @@ export function createEngine(opts: {
 
     state.skid = scrub;
 
-    // gearbox: find the band this speed belongs to and lift the throttle
-    // for a beat on every change — like a real shift, no drive while the
-    // clutch is in. rpm01 is revs inside the current band for the sound
+    // gearbox: upshift at the band top, downshift only 6 km/h below it —
+    // the hysteresis stops the box from hunting at a boundary (shift cut
+    // drops the speed under the band top, which must not immediately
+    // trigger a downshift and another cut). rpm01 is revs inside the
+    // current band for the sound
     const kmhNow = (state.speed / MAX_SPEED) * 180;
-    let gear = GEAR_TOPS.length;
-    for (let g = 0; g < GEAR_TOPS.length; g++) {
-      if (kmhNow <= GEAR_TOPS[g]) {
-        gear = g + 1;
-        break;
-      }
-    }
+    let gear = state.gear;
+    while (gear < GEAR_TOPS.length && kmhNow > GEAR_TOPS[gear - 1]) gear++;
+    while (gear > 1 && kmhNow < GEAR_TOPS[gear - 2] - 6) gear--;
     if (gear !== state.gear && kmhNow > 5) state.shiftT = SHIFT_TIME;
     state.gear = gear;
     state.shiftT = Math.max(0, state.shiftT - dt);
