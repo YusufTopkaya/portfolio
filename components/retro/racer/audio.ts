@@ -2,13 +2,14 @@
  * Procedural audio for the Twingo racer — pure Web Audio, zero assets.
  *
  * The engine voice is modeled on the real car, not an arcade whine: the
- * Twingo III has a 3-cylinder four-stroke, whose exhaust firing frequency
- * is RPM × cylinders / 120 = RPM / 40 — 22.5 Hz at the 900 rpm idle,
- * 150 Hz at the 6000 rpm redline. Three harmonics of that pulse (sub sine,
- * main saw, and the 2nd harmonic that dominates real exhaust recordings)
- * run through a lowpass whose cutoff follows throttle LOAD more than revs
- * — a nailed throttle is loud and bright at any rpm, a lifted one goes
- * soft and dark. A filtered-noise rumble sits under it for body.
+ * Mk1 Twingo has the D7F — a 1149 cc 8v inline-FOUR — whose four-stroke
+ * exhaust firing frequency is RPM × cylinders / 120 = RPM / 30: ~28 Hz
+ * at the 850 rpm idle, 200 Hz at the 6000 rpm redline. Three harmonics
+ * of that pulse (sub sine, main saw, and the 2nd harmonic that dominates
+ * real exhaust recordings) run through a lowpass whose cutoff follows
+ * throttle LOAD more than revs — a nailed throttle is loud and bright at
+ * any rpm, a lifted one goes soft and dark. A filtered-noise rumble sits
+ * under it for body.
  *
  * The gearbox does the rest for free: rpm01 is wheel-speed over the
  * current gear's top, so an upshift drops the revs by the ratio gap on
@@ -101,10 +102,10 @@ const TIER_LEAD = 25_000; // lead arpeggio opens up
 const TIER_OCTAVE = 60_000; // lead doubled an octave up
 const TIER_HATS = 100_000; // hats go double-time
 
-/* engine model: 3-cylinder four-stroke, 900 rpm idle, 6000 rpm redline —
-   firing frequency = RPM/40, so 22.5-150 Hz */
-const IDLE_HZ = 22.5;
-const REDLINE_HZ = 150;
+/* engine model: D7F 1149 cc inline-4 four-stroke, ~850 rpm idle, 6000 rpm
+   redline — firing frequency = RPM/30, so 28-200 Hz */
+const IDLE_HZ = 850 / 30;
+const REDLINE_HZ = 6000 / 30;
 
 /** 0-10 slider → gain, with a perceptual curve so 5 feels like "half" */
 const levelToGain = (level: number): number =>

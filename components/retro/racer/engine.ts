@@ -101,10 +101,12 @@ const FIELD_OF_VIEW = 100; // degrees
 const CAMERA_DEPTH = 1 / Math.tan(((FIELD_OF_VIEW / 2) * Math.PI) / 180);
 const PLAYER_Z = CAMERA_HEIGHT * CAMERA_DEPTH;
 const MAX_SPEED = SEGMENT_LENGTH * 60; // a segment per frame at 60fps
-// real Twingo pace, in km/h per second of throttle: 0-100 km/h in ~16 s,
-// 100-170 in another ~15 s, then it wheezes toward the 180 km/h ceiling
+// real Mk1 Twingo pace, in km/h per second of throttle: the D7F (58 hp)
+// does 0-100 km/h in ~13.4 s, needs another ~20 s for 100-150 (the real
+// car tops out at 151), then an arcade tail wheezes toward the 180 km/h
+// speedo ceiling
 const ACCEL_KMH = (kmh: number): number =>
-  kmh < 100 ? 100 / 16 : kmh < 170 ? 70 / 15 : Math.max(0, (180 - kmh) * 0.2);
+  kmh < 100 ? 100 / 13.4 : kmh < 150 ? 50 / 20 : Math.max(0, (180 - kmh) * 0.2);
 const BRAKING = -MAX_SPEED;
 // hill physics: gravity along the grade under the car, in km/h per second
 // per unit of grade (grade = dy per segment / SEGMENT_LENGTH). The grade
