@@ -36,6 +36,10 @@ export interface CarFrame {
   image: CanvasImageSource;
   w: number;
   h: number;
+  /** brake-lamp anchors as frame fractions [x, y, w, h] — the angled
+      left/right frames put the lamps in different spots than the
+      straight rear view, so each frame carries its own */
+  lamps?: [number, number, number, number][];
 }
 
 export interface CarFrames {
@@ -1879,11 +1883,12 @@ export function createEngine(opts: {
       );
       ctx.globalAlpha = 1;
 
-      // stop lamps: two taillights + the high-level LED strip on the
-      // roofline glow red while the brake pedal is down — like a real car
-      // they stay lit at a standstill. A soft halo under a brighter core
-      // sells the lamp bloom at sprite scale
-      if (state.braking && state.respawn <= 0) {
+      // stop lamps: taillights + the high-level LED strip on the roofline
+      // glow red while the brake pedal is down — like a real car they
+      // stay lit at a standstill. Anchors come from the frame itself:
+      // the angled left/right frames put the lamps in different spots.
+      // A soft halo under a brighter core sells the lamp bloom
+      if (state.braking && state.respawn <= 0 && frame.lamps) {
         const lamp = (fx: number, fy: number, fw: number, fh: number) => {
           const lx = carX + destW * fx;
           const ly = carY + destH * fy;
@@ -1896,9 +1901,7 @@ export function createEngine(opts: {
           ctx.fillStyle = "#ff5a4a";
           ctx.fillRect(lx, ly, lw, lh);
         };
-        lamp(0.05, 0.52, 0.1, 0.06); // left taillight
-        lamp(0.85, 0.52, 0.1, 0.06); // right taillight
-        lamp(0.36, 0.13, 0.28, 0.035); // high-level strip on the roofline
+        for (const [fx, fy, fw, fh] of frame.lamps) lamp(fx, fy, fw, fh);
         ctx.globalAlpha = 1;
       }
 

@@ -39,6 +39,41 @@ const FRAMES = {
   down: { x: 115, y: 98, w: 352, h: 270 },
 };
 
+/* brake-lamp anchor rects as frame fractions [x, y, w, h], measured on
+   the sheet art: the straight frame is a pure rear view (two round
+   taillights + the roofline strip over the rear window); the left/right
+   frames are rear-3/4 angles where the lamps sit at the angled rear
+   corners — one near-edge lamp, one smaller far-corner lamp, and the
+   strip above the angled window */
+const LAMPS: Record<
+  "straight" | "left" | "right",
+  [number, number, number, number][]
+> = {
+  straight: [
+    [0.06, 0.45, 0.1, 0.12], // left taillight
+    [0.84, 0.45, 0.1, 0.12], // right taillight
+    [0.4, 0.035, 0.21, 0.03], // roofline strip
+  ],
+  left: [
+    [0.45, 0.42, 0.06, 0.14], // far-corner taillight
+    [0.92, 0.37, 0.06, 0.17], // near-edge taillight
+    [0.565, 0.025, 0.095, 0.035], // roofline strip
+  ],
+  right: [
+    [0.02, 0.4, 0.06, 0.17], // near-edge taillight
+    [0.405, 0.44, 0.065, 0.15], // far-corner taillight
+    [0.235, 0.02, 0.11, 0.035], // roofline strip
+  ],
+};
+
+const withLamps = (
+  f: CarFrame,
+  lamps: [number, number, number, number][],
+): CarFrame => ({
+  ...f,
+  lamps: lamps.map((l) => [...l] as [number, number, number, number]),
+});
+
 function keyWhiteToAlpha(img: HTMLImageElement): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = img.naturalWidth;
@@ -327,11 +362,11 @@ export async function loadCarFrames(): Promise<CarFrames> {
         ? { left, right: scaleFrame(right, lh / rh) }
         : { left: scaleFrame(left, rh / lh), right };
     return {
-      straight: crop(sheet, FRAMES.straight),
-      left: matched.left,
-      right: matched.right,
-      up: crop(sheet, FRAMES.up),
-      down: crop(sheet, FRAMES.down),
+      straight: withLamps(crop(sheet, FRAMES.straight), LAMPS.straight),
+      left: withLamps(matched.left, LAMPS.left),
+      right: withLamps(matched.right, LAMPS.right),
+      up: withLamps(crop(sheet, FRAMES.up), LAMPS.straight),
+      down: withLamps(crop(sheet, FRAMES.down), LAMPS.straight),
       smoke,
     };
   } catch {
@@ -339,7 +374,12 @@ export async function loadCarFrames(): Promise<CarFrames> {
   }
   const f = (v: "straight" | "left" | "right" | "up" | "down"): CarFrame => {
     const image = drawPlaceholderCar(v);
-    return { image, w: image.width, h: image.height };
+    return {
+      image,
+      w: image.width,
+      h: image.height,
+      lamps: LAMPS.straight.map((l) => [...l] as [number, number, number, number]),
+    };
   };
   return {
     straight: f("straight"),
