@@ -9,9 +9,9 @@
  * slightly detuned second saw for fatness) run through a resonant lowpass
  * into a waveshaper whose drive follows throttle LOAD — a pinned throttle
  * growls, a lifted one goes soft. Lifting off at revs cracks off a burst
- * of overrun pops, and at the redline the rev limiter bounces the
- * ignition in a hard ~18 Hz gate. A filtered-noise rumble sits under it
- * all for body.
+ * of overrun pops, and at the redline the rev limiter stutters the
+ * ignition in an irregular cut pattern (a steady gate warbles). A
+ * filtered-noise rumble sits under it all for body.
  *
  * The gearbox does the rest for free: rpm01 is wheel-speed over the
  * current gear's top, so an upshift drops the revs by the ratio gap on
@@ -482,7 +482,12 @@ export function createRacerAudio(): RacerAudio {
         0.06,
       );
       let vol = (0.028 + loadSmooth * 0.055 + r * 0.015) * quiet;
-      if (limited) vol *= (t * 18) % 1 < 0.5 ? 1 : 0.25;
+      if (limited) {
+        // irregular ignition cut: two incommensurate sines gate single
+        // firing events, so a long pinned run stutters like a real limiter
+        // instead of ringing — a steady 18 Hz square gate warbles
+        if (Math.sin(t * 113.0) * Math.sin(t * 31.7) > 0.3) vol *= 0.3;
+      }
       engGain.gain.setTargetAtTime(vol, t, limited ? 0.012 : 0.05);
       if (rumbleGain) {
         rumbleGain.gain.setTargetAtTime(
