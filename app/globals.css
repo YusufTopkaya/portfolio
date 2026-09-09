@@ -1038,6 +1038,20 @@ html.crt-boot::after {
   box-shadow: 0 0 8px rgba(231, 110, 85, 0.5);
 }
 
+/* FPS counter: top-left chip, toggled with F (desktop) */
+.racer-fps {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 10px;
+  color: #d7ff9e;
+  background: #1c1a16;
+  border: 2px solid #6e6650;
+  padding: 4px 10px;
+  pointer-events: none;
+  z-index: 3;
+}
+
 /* key legend: small grey-translucent panel on the left edge, listing
    what each key does — desktop only (touch users get pedals) */
 .racer-keys {

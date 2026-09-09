@@ -65,6 +65,10 @@ export function TwingoRacer() {
   /* STATS option expands the current run's numbers inside the menu */
   const [pauseStats, setPauseStats] = useState(false);
   const [coarse, setCoarse] = useState(false);
+  /* FPS counter — F toggles it (in the desktop key legend); sampled 2×/s
+     so the overlay doesn't re-render every frame */
+  const [showFps, setShowFps] = useState(false);
+  const [fps, setFps] = useState(0);
   /* all game audio is synthesized (Web Audio, no assets); the context is
      born on the START gesture. Mute persists across sessions */
   const audioRef = useRef<RacerAudio | null>(null);
@@ -145,6 +149,7 @@ export function TwingoRacer() {
      closure reason as pauseMenuRef above) */
   const pauseSettingsOpenRef = useRef(false);
   const settingsRowRef = useRef(0);
+  const showFpsRef = useRef(false);
   pauseSettingsOpenRef.current = pauseSettingsOpen;
   settingsRowRef.current = settingsRow;
   /* single-use HMAC token for the current run's score submission;
@@ -165,6 +170,7 @@ export function TwingoRacer() {
   pausedRef.current = paused;
   pauseMenuRef.current = pauseMenu;
   pauseSelRef.current = pauseSel;
+  showFpsRef.current = showFps;
 
   /* each run gets a fresh single-use submit token; PLAY AGAIN re-issues.
      On failure the leaderboard UI stays hidden and the game just plays.
@@ -481,10 +487,20 @@ export function TwingoRacer() {
     let cancelled = false;
     let raf = 0;
     let last = performance.now();
+    let fpsFrames = 0;
+    let fpsLast = performance.now();
 
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 1 / 30);
       last = now;
+      // FPS overlay: average over 0.5 s windows, only setState when shown
+      fpsFrames++;
+      if (now - fpsLast >= 500) {
+        if (showFpsRef.current)
+          setFps(Math.round((fpsFrames * 1000) / (now - fpsLast)));
+        fpsFrames = 0;
+        fpsLast = now;
+      }
       const e = engineRef.current;
       if (e && !pausedRef.current) {
         e.update(dt, keysRef.current);
@@ -669,6 +685,11 @@ export function TwingoRacer() {
       // V flips between chase cam and first-person cockpit
       if (down && (k === "v" || ev.code === "KeyV")) {
         toggleView();
+        return;
+      }
+      // F toggles the FPS counter overlay
+      if (down && (k === "f" || ev.code === "KeyF")) {
+        setShowFps((s) => !s);
         return;
       }
       // M toggles all game audio (music + engine + effects)
@@ -1184,6 +1205,13 @@ export function TwingoRacer() {
         ✕
       </button>
 
+      {/* FPS counter — toggled with F */}
+      {screen === "playing" && showFps && (
+        <div className="racer-fps font-pixel" aria-hidden="true">
+          {fps} FPS
+        </div>
+      )}
+
       {/* key legend — desktop only, hidden once the run is over */}
       {screen === "playing" && !coarse && !gameOver && (
         <div className="racer-keys font-pixel" aria-hidden="true">
@@ -1204,6 +1232,9 @@ export function TwingoRacer() {
           )}
           <div className="racer-keys-row">
             <span className="racer-key">R</span> RESTART
+          </div>
+          <div className="racer-keys-row">
+            <span className="racer-key">F</span> FPS
           </div>
           <div className="racer-keys-row">
             <span className="racer-key">M</span> SOUND
