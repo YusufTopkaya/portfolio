@@ -1361,15 +1361,14 @@ export function createEngine(opts: {
 
     state.skid = scrub;
 
-    // gearbox: upshift at the band top, downshift only 6 km/h below it —
-    // the hysteresis stops the box from hunting at a boundary (shift cut
-    // drops the speed under the band top, which must not immediately
-    // trigger a downshift and another cut). rpm01 is revs inside the
-    // current band for the sound
+    // gearbox: upshift at the band top, downshift only well below it.
+    // Hysteresis is proportional (12% of the band top) because the shift
+    // cut bleeds speed through proportional roll drag — at 115 km/h a cut
+    // costs ~10 km/h, so a fixed margin would still hunt between gears
     const kmhNow = (state.speed / MAX_SPEED) * 180;
     let gear = state.gear;
     while (gear < GEAR_TOPS.length && kmhNow > GEAR_TOPS[gear - 1]) gear++;
-    while (gear > 1 && kmhNow < GEAR_TOPS[gear - 2] - 6) gear--;
+    while (gear > 1 && kmhNow < GEAR_TOPS[gear - 2] * 0.88) gear--;
     if (gear !== state.gear && kmhNow > 5) state.shiftT = SHIFT_TIME;
     state.gear = gear;
     state.shiftT = Math.max(0, state.shiftT - dt);
