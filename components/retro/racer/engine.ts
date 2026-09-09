@@ -1361,19 +1361,21 @@ export function createEngine(opts: {
 
     state.skid = scrub;
 
-    // gearbox: upshift at the band top, downshift only well below it.
-    // Hysteresis is proportional (12% of the band top) because the shift
-    // cut bleeds speed through proportional roll drag — at 115 km/h a cut
-    // costs ~10 km/h, so a fixed margin would still hunt between gears
+    // gearbox: upshift at the band top, downshift only well below it
+    // (12% hysteresis). The gear is COMMITTED for the whole shift — no
+    // re-evaluating mid-cut while the speed is falling, which is exactly
+    // what re-triggered a downshift and pinned the car at a boundary
     const kmhNow = (state.speed / MAX_SPEED) * 180;
-    let gear = state.gear;
-    while (gear < GEAR_TOPS.length && kmhNow > GEAR_TOPS[gear - 1]) gear++;
-    while (gear > 1 && kmhNow < GEAR_TOPS[gear - 2] * 0.88) gear--;
-    if (gear !== state.gear && kmhNow > 5) state.shiftT = SHIFT_TIME;
-    state.gear = gear;
+    if (state.shiftT <= 0) {
+      let gear = state.gear;
+      while (gear < GEAR_TOPS.length && kmhNow > GEAR_TOPS[gear - 1]) gear++;
+      while (gear > 1 && kmhNow < GEAR_TOPS[gear - 2] * 0.88) gear--;
+      if (gear !== state.gear && kmhNow > 5) state.shiftT = SHIFT_TIME;
+      state.gear = gear;
+    }
     state.shiftT = Math.max(0, state.shiftT - dt);
-    const gearLo = gear > 1 ? GEAR_TOPS[gear - 2] : 0;
-    const gearHi = GEAR_TOPS[gear - 1];
+    const gearLo = state.gear > 1 ? GEAR_TOPS[state.gear - 2] : 0;
+    const gearHi = GEAR_TOPS[state.gear - 1];
     state.rpm01 = Math.max(
       0,
       Math.min(1, (kmhNow - gearLo) / (gearHi - gearLo)),
@@ -1385,7 +1387,12 @@ export function createEngine(opts: {
       const kmh = (state.speed / MAX_SPEED) * 180;
       state.speed += (ACCEL_KMH(kmh) / 180) * MAX_SPEED * dt;
     } else if (input.brake) state.speed += BRAKING * dt;
-    else state.speed += -state.speed * ROLL_DRAG * dt;
+    // clutch in during a shift: the car coasts almost freely (aero only),
+    // none of the engine braking baked into ROLL_DRAG — a real shift
+    // costs a couple of km/h, not 10
+    else
+      state.speed +=
+        -state.speed * ROLL_DRAG * (state.shiftT > 0 ? 0.3 : 1) * dt;
     state.speed += hillForce * dt;
 
     state.offRoad = state.playerX < -1.1 || state.playerX > 1.1;
