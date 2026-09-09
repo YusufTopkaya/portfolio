@@ -254,6 +254,7 @@ export function TwingoRacer() {
   /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly */
   const playAgain = useCallback(() => {
     audioRef.current?.menuSelect();
+    audioRef.current?.setInterior(false);
     engineRef.current = null;
     gameOverRef.current = false;
     keysRef.current = { left: false, right: false, gas: false, brake: false };
@@ -306,6 +307,7 @@ export function TwingoRacer() {
     keysRef.current = { left: false, right: false, gas: false, brake: false };
     // silence the engine hum; the music keeps playing over the title art
     audioRef.current?.menuSelect();
+    audioRef.current?.setInterior(false);
     audioRef.current?.drive(0, false, false, 0, 0, false, 0);
     setGameOver(false);
     setPauseMenu(false);
@@ -347,6 +349,8 @@ export function TwingoRacer() {
     setView((v) => {
       const next: RacerView = v === "chase" ? "cockpit" : "chase";
       if (engineRef.current) engineRef.current.state.view = next;
+      // the cabin muffles the engine and the outside tire noise
+      audioRef.current?.setInterior(next === "cockpit");
       return next;
     });
   }, []);

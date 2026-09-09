@@ -40,6 +40,9 @@ export interface RacerAudio {
   setMuted(muted: boolean): void;
   /** pause menu: silence the car (music keeps playing) */
   setPaused(paused: boolean): void;
+  /** cockpit view: muffle the car — the cabin eats the highs and the
+      outside tire noise, the low-end drone comes through */
+  setInterior(interior: boolean): void;
   setVolumes(v: RacerVolumes): void;
   getVolumes(): RacerVolumes;
   /**
@@ -130,6 +133,7 @@ export function createRacerAudio(): RacerAudio {
   let rumbleGain: GainNode | null = null;
   let loadSmooth = 0; // throttle load, eased toward the target each frame
   let carSilent = false; // pause menu / game over: the car makes no sound
+  let interior = false; // cockpit view: muffled engine, quiet tires
 
   // brake screech / tire skid: looping noise through bandpasses, gain-gated
   let brakeGain: GainNode | null = null;
@@ -357,6 +361,10 @@ export function createRacerAudio(): RacerAudio {
       }
     },
 
+    setInterior(i) {
+      interior = i;
+    },
+
     setVolumes(v) {
       volumes = { ...v };
       if (!ctx) return;
@@ -387,41 +395,47 @@ export function createRacerAudio(): RacerAudio {
       const loadTarget = shifting ? 0 : throttle ? 1 : 0.15;
       loadSmooth += (loadTarget - loadSmooth) * 0.18;
 
-      // firing pulse: 900-6000 rpm → 22.5-150 Hz, with a faint idle wobble
+      // firing pulse: 850-6000 rpm → 28-200 Hz, with a faint idle wobble
       const r = Math.max(0, Math.min(1, rpm01));
       const wobble = 1 + 0.01 * Math.sin(t * 12.7) * (1 - r * 0.8);
       const f0 = (IDLE_HZ + r * (REDLINE_HZ - IDLE_HZ)) * wobble;
       engSub.frequency.setTargetAtTime(f0, t, 0.03);
       engMain.frequency.setTargetAtTime(f0, t, 0.03);
       engHarm.frequency.setTargetAtTime(f0 * 2, t, 0.03);
+      // cockpit: the cabin eats the highs and softens everything; the
+      // low-end drone survives (real interior acoustics)
+      const muffle = interior ? 0.42 : 1;
+      const quiet = interior ? 0.55 : 1;
+      const tireQuiet = interior ? 0.5 : 1;
       engFilter.frequency.setTargetAtTime(
-        260 + r * 1300 + loadSmooth * 700,
+        (260 + r * 1300 + loadSmooth * 700) * muffle,
         t,
         0.06,
       );
       engGain.gain.setTargetAtTime(
-        0.028 + loadSmooth * 0.055 + r * 0.015,
+        (0.028 + loadSmooth * 0.055 + r * 0.015) * quiet,
         t,
         0.05,
       );
       if (rumbleGain) {
         rumbleGain.gain.setTargetAtTime(
-          loadSmooth * (0.02 + r * 0.05),
+          loadSmooth * (0.02 + r * 0.05) * (interior ? 1.25 : 1),
           t,
           0.08,
         );
       }
       // tires only sing when the car is actually moving — brake screech is
-      // the high band, the corner skid is the lower, hollower one
+      // the high band, the corner skid is the lower, hollower one; both
+      // are outside the cabin in cockpit view
       if (brakeGain) {
         brakeGain.gain.setTargetAtTime(
-          braking && p > 0.15 ? 0.07 : 0,
+          braking && p > 0.15 ? 0.07 * tireQuiet : 0,
           t,
           0.04,
         );
       }
       if (skidGain) {
-        const s = p > 0.15 ? Math.min(0.12, skid * 0.12) : 0;
+        const s = p > 0.15 ? Math.min(0.12, skid * 0.12) * tireQuiet : 0;
         skidGain.gain.setTargetAtTime(s, t, 0.05);
       }
       // progressive music: the loop picks up layers as the score climbs
