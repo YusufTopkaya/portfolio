@@ -422,10 +422,16 @@ export function TwingoRacer() {
       } catch {}
       if (next) {
         tiltNeutralRef.current = null; // recalibrate on enable
-        const doe = DeviceOrientationEvent as unknown as {
-          requestPermission?: () => Promise<string>;
-        };
-        doe.requestPermission?.().catch(() => {});
+        // the whole API vanishes on insecure (plain HTTP) origins — the
+        // constructor itself is undefined there, so reach it defensively
+        const doe = (
+          globalThis as {
+            DeviceOrientationEvent?: {
+              requestPermission?: () => Promise<string>;
+            };
+          }
+        ).DeviceOrientationEvent;
+        doe?.requestPermission?.().catch(() => {});
       }
       return next;
     });
