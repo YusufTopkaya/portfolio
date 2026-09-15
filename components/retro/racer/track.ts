@@ -6,12 +6,13 @@
  * with enter/hold/leave lengths. Height transitions ease in and out
  * (Jake Gordon's addRoad).
  *
- * The track NEVER loops: sections are generated forever on demand — the
- * engine asks for ~2 minutes of flat-out driving to stay buffered ahead
- * and drops segments the car left behind. Geometric limits without a
- * wrap seam: curve sides strictly alternate (never two same-side bends
- * in a row) and hill choices are spring-biased toward sea level, so the
- * road's altitude stays bounded instead of drifting off.
+ * The track NEVER loops: sections are generated forever on demand into a
+ * fixed-capacity ring — the engine asks for ~10 seconds of flat-out
+ * driving to stay buffered ahead and old slots are simply overwritten.
+ * Geometric limits without a wrap seam: curve sides strictly alternate
+ * (never two same-side bends in a row) and hill choices are
+ * spring-biased toward sea level, so the road's altitude stays bounded
+ * instead of drifting off.
  */
 
 import {
@@ -42,16 +43,26 @@ const HILLS = { low: 20, medium: 40, high: 60 } as const; // × SEGMENT_LENGTH (
 const MAX_ALTITUDE = HILLS.high * SEGMENT_LENGTH;
 
 export interface TrackGenerator {
-  /** live window into the endless road — the engine splices off the
-      front as segments fall behind the car */
+  /** ring window into the endless road — absolute index i lives at slot
+      segments[i % segments.length]; valid indices are firstIndex() up to
+      generated()-1, older slots are silently overwritten */
   segments: Segment[];
   /** generate sections until the absolute segment index `upTo` exists */
   extend: (upTo: number) => void;
+  /** absolute index of the oldest segment still held in the ring */
+  firstIndex: () => number;
+  /** absolute count of segments generated so far */
+  generated: () => number;
 }
+
+// ring capacity: ~10 s of flat-out driving ahead (AHEAD_SEGMENTS) plus a
+// long tail for the rearview mirror — the engine renders only 180
+// segments ahead and mirrors 20 behind, everything else is cushion
+const CAPACITY = 1024;
 
 export function createTrackGenerator(seed = 427): TrackGenerator {
   const rng = mulberry32(seed);
-  const segments: Segment[] = [];
+  const segments: Segment[] = new Array(CAPACITY);
   let generated = 0; // absolute index of the next segment to create
 
   let lastY = 0;
@@ -84,12 +95,12 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
       }
     }
 
-    // gas cans on the tarmac: spaced ~8-15 s of driving apart, so a tank
+    // gas cans on the tarmac: spaced ~7-13 s of driving apart, so a tank
     // (the run's death clock) only stretches when the driver goes and
     // gets them. Every 10th can is BIG — worth 2 gauge dots, drawn
     // larger, and it resists scarcity hiding at half rate (see engine)
     if (i >= nextCanAt) {
-      nextCanAt = i + 240 + Math.floor(rng() * 210);
+      nextCanAt = i + 240 + Math.floor(rng() * 240);
       seg.pickup = {
         x: rng() * 1.4 - 0.7,
         big: canOrdinal % 10 === 9,
@@ -98,7 +109,7 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
       canOrdinal++;
     }
 
-    segments.push(seg);
+    segments[i % CAPACITY] = seg;
   };
 
   /** Jake Gordon's addRoad: height eases in over `enter`, holds, eases out.
@@ -204,5 +215,10 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
     while (generated < upTo) addSection();
   };
 
-  return { segments, extend };
+  return {
+    segments,
+    extend,
+    firstIndex: () => Math.max(0, generated - CAPACITY),
+    generated: () => generated,
+  };
 }

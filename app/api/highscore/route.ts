@@ -1,11 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { getSalt, issueToken, listScores, submitScore } from "@/lib/highscore";
+import { getSalt, issueToken, listScores, type ScorePeriod, submitScore } from "@/lib/highscore";
 import { getClientIP, rateLimit } from "@/lib/rate-limit";
 import { withSecurity } from "@/lib/security-wrapper";
 
-// Tighter limit for submissions on top of the wrapper's global one.
+// Limit for FAILED submissions only; a valid single-use token is the anti-spam proof.
 const SUBMIT_LIMIT = 10;
 const SUBMIT_WINDOW_MS = 15 * 60 * 1000;
+// Generous GET budget on top of the wrapper's global one (shared bucket behind proxies).
+const GET_LIMIT = 600;
+const GET_WINDOW_MS = 15 * 60 * 1000;
+
+const PERIODS = new Set<ScorePeriod>(["all", "daily", "weekly", "monthly"]);
 
 function noStore(response: NextResponse): NextResponse {
   response.headers.set("Cache-Control", "no-store");
@@ -21,9 +26,15 @@ function saltMissing(): NextResponse {
   );
 }
 
-async function getHandler(_request: NextRequest) {
+async function getHandler(request: NextRequest) {
   if (!getSalt()) return saltMissing();
-  const scores = await listScores();
+  const ip = getClientIP(request);
+  if (!rateLimit(`highscore-get:${ip}`, GET_LIMIT, GET_WINDOW_MS)) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+  const raw = request.nextUrl.searchParams.get("period") ?? "all";
+  const period = PERIODS.has(raw as ScorePeriod) ? (raw as ScorePeriod) : "all";
+  const scores = await listScores(period);
   return noStore(NextResponse.json({ scores }));
 }
 
@@ -46,12 +57,6 @@ async function postHandler(request: NextRequest) {
 
   if (action === "submit") {
     const ip = getClientIP(request);
-    if (!rateLimit(`highscore:${ip}`, SUBMIT_LIMIT, SUBMIT_WINDOW_MS)) {
-      console.error(
-        `[highscore] submit rejected ip=${ip} status=429 reason="Too many requests"`,
-      );
-      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-    }
     const { token, name, score, durationSec } = body as Record<string, unknown>;
     if (
       typeof token !== "string" ||
@@ -75,6 +80,13 @@ async function postHandler(request: NextRequest) {
     }
     const result = await submitScore(salt, { token, name, score, durationSec });
     if (!result.ok) {
+      // Only failed submissions count against the IP limit.
+      if (!rateLimit(`highscore:${ip}`, SUBMIT_LIMIT, SUBMIT_WINDOW_MS)) {
+        console.error(
+          `[highscore] submit rejected ip=${ip} status=429 reason="Too many requests"`,
+        );
+        return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+      }
       const status = result.error === "invalid_token" ? 403 : 422;
       console.error(
         `[highscore] submit rejected ip=${ip} status=${status} reason="${result.message}"`,

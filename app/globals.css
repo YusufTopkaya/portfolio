@@ -925,6 +925,13 @@ html.crt-boot::after {
   gap: 3px;
 }
 
+/* TILT row: ON/OFF text sits where the segment bar would be */
+.racer-settings-tilt {
+  min-width: 40px;
+  text-align: center;
+  color: #d7ff9e;
+}
+
 .racer-settings-seg {
   width: 8px;
   height: 12px;
@@ -1125,16 +1132,30 @@ html.crt-boot::after {
   transform: translateY(2px);
 }
 
-.racer-cam-btn {
-  width: 52px;
-  height: 44px;
-  font-size: 8px;
-  align-self: flex-end;
+/* touch camera toggle: same chrome as the pause/mute buttons, docked to
+   their left in the top bar (kept off the touch pads so it never covers
+   the car) */
+.racer-cam-touch {
+  position: absolute;
+  top: 10px;
+  right: 140px;
+  font-size: 10px;
+  color: #d7ff9e;
+  background: #1c1a16;
+  border: 2px solid #6e6650;
+  padding: 4px 10px;
+  cursor: pointer;
+  z-index: 3;
 }
 
-.racer-cam-btn.racer-cam-on {
+.racer-cam-touch.racer-cam-on {
   background: rgba(146, 204, 65, 0.45);
   border-color: #d7ff9e;
+}
+
+.racer-cam-touch:hover {
+  background: #2a2419;
+  box-shadow: 0 0 8px rgba(146, 204, 65, 0.5);
 }
 
 .racer-gameover {
@@ -1176,6 +1197,32 @@ html.crt-boot::after {
 .racer-playagain:hover {
   background: #d7ff9e;
   box-shadow: 0 0 10px rgba(146, 204, 65, 0.7);
+}
+
+/* period tabs above the leaderboard: ALL / 30D / 7D / 24H */
+.racer-lb-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.racer-lb-tab {
+  font-size: 8px;
+  color: #d7ff9e;
+  background: #1c1a16;
+  border: 2px solid #6e6650;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.racer-lb-tab:hover {
+  background: #2a2419;
+}
+
+.racer-lb-tab-sel,
+.racer-lb-tab-sel:hover {
+  background: rgba(146, 204, 65, 0.45);
+  border-color: #d7ff9e;
 }
 
 /* leaderboard on the game-over overlay */

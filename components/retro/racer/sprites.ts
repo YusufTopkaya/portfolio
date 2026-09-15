@@ -50,19 +50,19 @@ const LAMPS: Record<
   [number, number, number, number][]
 > = {
   straight: [
-    [0.06, 0.45, 0.1, 0.12], // left taillight
-    [0.84, 0.45, 0.1, 0.12], // right taillight
-    [0.4, 0.035, 0.21, 0.03], // roofline strip
+    [0.07, 0.38, 0.09, 0.17], // left taillight
+    [0.84, 0.38, 0.09, 0.17], // right taillight
+    [0.385, 0.008, 0.3, 0.03], // roofline strip
   ],
   left: [
-    [0.45, 0.42, 0.06, 0.14], // far-corner taillight
-    [0.92, 0.37, 0.06, 0.17], // near-edge taillight
-    [0.565, 0.025, 0.095, 0.035], // roofline strip
+    [0.45, 0.39, 0.11, 0.19], // far-corner taillight
+    [0.94, 0.405, 0.055, 0.16], // near-edge taillight
+    [0.65, 0.008, 0.125, 0.03], // roofline strip
   ],
   right: [
-    [0.02, 0.4, 0.06, 0.17], // near-edge taillight
-    [0.405, 0.44, 0.065, 0.15], // far-corner taillight
-    [0.235, 0.02, 0.11, 0.035], // roofline strip
+    [0.045, 0.365, 0.055, 0.15], // near-edge taillight
+    [0.476, 0.364, 0.113, 0.2], // far-corner taillight
+    [0.327, 0.008, 0.15, 0.032], // roofline strip
   ],
 };
 

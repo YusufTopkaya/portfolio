@@ -30,6 +30,8 @@ export interface RacerInput {
   right: boolean;
   gas: boolean;
   brake: boolean;
+  /** analog steering (-1..1) from tilt controls — overrides left/right */
+  steer?: number;
 }
 
 export interface CarFrame {
@@ -111,7 +113,9 @@ const MAX_SPEED = SEGMENT_LENGTH * 60; // a segment per frame at 60fps
 // speedo ceiling
 const ACCEL_KMH = (kmh: number): number =>
   kmh < 100 ? 100 / 13.4 : kmh < 150 ? 50 / 20 : Math.max(0, (180 - kmh) * 0.2);
-const BRAKING = -MAX_SPEED;
+// ~1 g of braking, like a real road car: 180 km/h to a standstill
+// takes ~5 s (36 km/h per second) instead of an instant stop
+const BRAKING = -MAX_SPEED * 0.2;
 // hill physics: gravity along the grade under the car, in km/h per second
 // per unit of grade (grade = dy per segment / SEGMENT_LENGTH). The grade
 // is capped at 0.6 so a standstill start on the steepest eased crest can
@@ -136,16 +140,23 @@ const GEAR_TOPS = [45, 80, 115, 150, 180];
 const SHIFT_TIME = 0.28;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
-// the tank drains quadratically with speed: full throttle burns a dot
-// in ~5 s, gentle cruising in ~14 s. Idle burn is non-trivial on purpose —
-// standing still must never be a viable fuel-saving strategy; the tank is
-// the run's death clock (~70-115 s depending on pace, cans buy more time)
-const FUEL_DRAIN_IDLE = 0.06; // gauge dots per second at a standstill
+// the tank is the run's death clock, OutRun-style: the drain is (nearly)
+// FLAT per second, so fuel-per-km falls monotonically with speed —
+// flat out is ALWAYS the most economical pace and crawling at 60 km/h
+// is the fastest way to die (km cost = 1.8/p + 0.8p, best at p≈1.5).
+// A small quadratic term stays for flavour; it never creates a
+// low-speed economy optimum
+const FUEL_DRAIN_IDLE = 0.09; // gauge dots per second, the clock itself
 // extra dots per second at full speed — applied quadratically
-// (speedPercent²). Kept shallow so the fuel-economy optimum sits near
-// ~118 km/h instead of a crawl: (IDLE+SPEED·p²)/p is minimized at
-// p = sqrt(IDLE/SPEED)
-const FUEL_DRAIN_SPEED = 0.14;
+// (speedPercent²), deliberately too weak to bend the economy curve
+const FUEL_DRAIN_SPEED = 0.04;
+// overflow fuel (a can grabbed with a near-full tank) burns off as BOOST
+// instead of going to waste: 2 s per wasted dot, top speed 180 → ~202 km/h
+// with a harder pull — full-tank can chains stay worth steering for
+const BOOST_TOP = 1.12;
+const BOOST_ACCEL = 1.3;
+const BOOST_PER_DOT = 2;
+const BOOST_MAX_T = 6;
 // km driven per difficulty level — every step sharpens curves, steepens
 // hills and pushes the gas cans wider (see curveGain/hillGain/canSpread)
 const LEVEL_EVERY_KM = 2;
@@ -197,6 +208,8 @@ export interface EngineState {
   respawn: number;
   /** fuel left, in gauge dots (0..8). 0 = engine dead, coasting to a stop */
   fuel: number;
+  /** seconds of BOOST left — overflow fuel burning as extra top speed */
+  boostT: number;
   /** fuel ran dry and the car rolled to a standstill */
   gameOver: boolean;
   offRoad: boolean;
@@ -379,27 +392,75 @@ function renderSegment(
 
 /* ── background: pre-rendered sky gradient + two parallax mountain bands ── */
 
-function makeSky(width: number, height: number): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = width;
-  c.height = height;
-  const ctx = c.getContext("2d");
-  if (!ctx) return c;
-  const g = ctx.createLinearGradient(0, 0, 0, height);
-  g.addColorStop(0, "#1a1c3f");
-  g.addColorStop(0.55, "#7a3b69");
-  g.addColorStop(0.8, "#e2703a");
-  g.addColorStop(1, "#f7b32b");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, width, height);
-  // a low pixel sun
-  ctx.fillStyle = "#ffd75e";
-  const sunR = Math.round(width * 0.05);
-  const sunX = Math.round(width * 0.68);
-  const sunY = Math.round(height * 0.62);
-  ctx.fillRect(sunX - sunR, sunY - sunR, sunR * 2, sunR * 2);
-  return c;
+/* day/night cycle: a full day every DAY_LENGTH seconds of engine time.
+   The sky is drawn procedurally each frame — gradient lerped between
+   the keyframes below — so the sun can set, the moon can rise and the
+   stars can come out. Clouds and mountains stay prebuilt and are dimmed
+   by the ambient overlay in render(). */
+const DAY_LENGTH = 300; // seconds per full day/night cycle
+const SKY_KEYS = [
+  { t: 0.0, c: ["#4a90d9", "#8fc7e8", "#d8ecd8", "#ffe9a8"], night: 0 }, // day
+  { t: 0.45, c: ["#1a1c3f", "#7a3b69", "#e2703a", "#f7b32b"], night: 0 }, // sunset (the classic look)
+  { t: 0.62, c: ["#05060f", "#0d1030", "#1a1c3f", "#2a2050"], night: 1 }, // night falls
+  { t: 0.88, c: ["#05060f", "#0d1030", "#1a1c3f", "#2a2050"], night: 1 }, // night holds
+  { t: 1.0, c: ["#4a90d9", "#8fc7e8", "#d8ecd8", "#ffe9a8"], night: 0 }, // sunrise back to day
+] as const;
+
+type Rgb = [number, number, number];
+const hexRgb = (hex: string): Rgb => [
+  Number.parseInt(hex.slice(1, 3), 16),
+  Number.parseInt(hex.slice(3, 5), 16),
+  Number.parseInt(hex.slice(5, 7), 16),
+];
+const SKY_KEYS_RGB = SKY_KEYS.map((k) => ({
+  t: k.t,
+  c: k.c.map(hexRgb) as Rgb[],
+  night: k.night,
+}));
+const rgb = (c: Rgb) =>
+  `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
+
+interface SkyState {
+  stops: Rgb[];
+  night: number; // 0 day … 1 deep night — drives stars + ambient dim
 }
+
+// sky state at cycle position t (0..1): lerped gradient stops, eased so
+// dawn and dusk blend instead of snapping
+function skyAt(t: number): SkyState {
+  let k = 0;
+  while (k < SKY_KEYS_RGB.length - 2 && t >= SKY_KEYS_RGB[k + 1].t) k++;
+  const a = SKY_KEYS_RGB[k];
+  const b = SKY_KEYS_RGB[k + 1];
+  const f = Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t)));
+  const s = f * f * (3 - 2 * f); // smoothstep
+  return {
+    stops: a.c.map((ac, i) => {
+      const bc = b.c[i];
+      return [ac[0] + (bc[0] - ac[0]) * s, ac[1] + (bc[1] - ac[1]) * s, ac[2] + (bc[2] - ac[2]) * s];
+    }),
+    night: a.night + (b.night - a.night) * s,
+  };
+}
+
+// quantized cache — the cycle moves slowly, so the lerped state and the
+// gradient built from it are only recomputed ~8x per second
+const SKY_QUANT = 480;
+let skyStateKey = -1;
+let skyStateCache: SkyState = skyAt(0);
+function skyStateAt(t: number): SkyState {
+  const key = Math.round(t * SKY_QUANT);
+  if (key !== skyStateKey) {
+    skyStateKey = key;
+    skyStateCache = skyAt(t);
+  }
+  return skyStateCache;
+}
+
+const starHash = (n: number) => {
+  const r = Math.sin(n * 127.1) * 43758.5453;
+  return r - Math.floor(r);
+};
 
 function makeMountains(
   width: number,
@@ -847,7 +908,7 @@ function renderSpeedLines(
 ) {
   if (speedPercent < 0.4) return;
   const intensity = (speedPercent - 0.4) / 0.6;
-  const count = Math.round(4 + 8 * intensity);
+  const count = Math.round(4 + 6 * intensity);
   ctx.lineCap = "round";
   for (let i = 0; i < count; i++) {
     // deterministic per-line randomness, re-rolled a few times a second
@@ -855,15 +916,21 @@ function renderSpeedLines(
     const rand = Math.sin(seed * 127.1) * 43758.5453;
     const r = rand - Math.floor(rand);
     const side = i % 2 === 0 ? -1 : 1;
-    const t0 = (r + time * (1.2 + 2.5 * intensity)) % 1;
-    const t1 = Math.min(1, t0 + 0.05 + 0.12 * intensity);
+    // keep the stroke in the OUTER band of its path: the road only reads
+    // straight near the camera, so a stroke that reaches back toward the
+    // vanishing point cuts diagonally across the lanes in every bend and
+    // looks like a rendering glitch. Short stubs near the road edges still
+    // sell the speed without crossing the tarmac
+    const tt = (r + time * (1.2 + 2.5 * intensity)) % 1;
+    const t0 = 0.45 + 0.55 * tt;
+    const t1 = Math.min(1, t0 + 0.04 + 0.08 * intensity);
     const bx = roadNearX + side * roadNearW * (1.06 + r * 0.25);
     const by = height + 4;
     const vx = vanishX + side * width * 0.015;
     const vy = horizonY;
     const e0 = t0 * t0;
     const e1 = t1 * t1;
-    ctx.strokeStyle = `rgba(255,255,255,${(0.1 + 0.18 * intensity) * (0.35 + 0.65 * t0)})`;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.1 + 0.18 * intensity) * (t0 * t0)})`;
     ctx.lineWidth = Math.max(1, (1 + 3 * t0) * (height / 270));
     ctx.beginPath();
     ctx.moveTo(vx + (bx - vx) * e0, vy + (by - vy) * e0);
@@ -900,6 +967,8 @@ function renderMirror(
   /** lap difficulty multipliers — the mirrored world must match the real one */
   curveGain: number,
   hillGain: number,
+  /** absolute index of the oldest segment still held in the ring */
+  firstIdx: number,
 ) {
   ctx.save();
   // keep the scene inside the rounded mirror glass
@@ -925,9 +994,9 @@ function renderMirror(
   ctx.fillStyle = "#377934";
   ctx.fillRect(x, horizon, w, bottom - horizon);
 
-  // windowed view of the endless track: segments[0].index is the absolute
-  // index of the oldest segment still alive (the engine drops the rest)
-  const base = segments[0].index;
+  // ring view of the endless track: slots are absolute index % capacity,
+  // valid back to firstIdx (older slots have been overwritten)
+  const ringSeg = (absIdx: number) => segments[absIdx % segments.length];
   const DD = 20; // segments of road behind shown in the glass
   const segIdx = Math.floor(position / SEGMENT_LENGTH);
   const frac = (position % SEGMENT_LENGTH) / SEGMENT_LENGTH;
@@ -940,15 +1009,14 @@ function renderMirror(
   const ringY: number[] = [0];
   let hdx = 0;
   for (let k = 1; k <= DD; k++) {
-    const i = segIdx - k - base;
-    if (i < 0) {
-      // the window edge — only reachable in the run's first seconds:
-      // hold the last known ring flat instead of wrapping around
+    if (segIdx - k < firstIdx) {
+      // the ring's edge — only reachable in the run's first seconds:
+      // hold the last known ring flat instead of reading overwritten slots
       ringX.push(ringX[k - 1]);
       ringY.push(0);
       continue;
     }
-    const seg = segments[i];
+    const seg = ringSeg(segIdx - k);
     hdx -= seg.curve * curveGain;
     ringX.push(ringX[k - 1] - hdx);
     ringY.push(seg.p1.world.y * hillGain - carY);
@@ -1001,7 +1069,7 @@ function renderMirror(
       rx: cx + (r0.rx - cx) / r0.persp,
     };
     if (apron.ry > r0.ry) {
-      const seg = segments[Math.max(0, segIdx - base)];
+      const seg = ringSeg(Math.max(firstIdx, segIdx));
       polygon(
         ctx,
         apron.rx - apron.rw,
@@ -1047,7 +1115,7 @@ function renderMirror(
     const near = ringAt(n);
     const far = ringAt(n + 1);
     if (far.ry >= near.ry || far.ry >= maxY) continue;
-    const seg = segments[Math.max(0, segIdx - n - base)];
+    const seg = ringSeg(Math.max(firstIdx, segIdx - n));
     // road strip, alternating shades like the main road
     polygon(
       ctx,
@@ -1099,7 +1167,7 @@ function renderMirror(
   };
   for (let k = DD; k >= 1; k--) {
     if (!vis[k]) continue; // hidden behind a crest
-    const seed = Math.max(0, segIdx - k - base) * 3;
+    const seed = Math.max(0, segIdx - k) * 3;
     const r1 = hash01(seed + 1);
     if (r1 > 0.55) continue; // ~55% of segments carry an object
     const ring = ringAt(k);
@@ -1187,14 +1255,21 @@ export interface RacerEngine {
       game state is kept, only the prebuilt backdrop layers are rebuilt */
   resize(width: number, height: number): void;
   state: EngineState;
+  /** dev-only (e2e probes): the next active gas can ahead of the car,
+      with its effective lateral position after the level spread */
+  debugNextPickup?: () => { absIndex: number; x: number; big: boolean } | null;
 }
 
 export function createEngine(opts: {
   segments: Segment[];
-  /** the track never loops: the generator appends sections on demand so
-      at least `upToAbsIndex` absolute segments exist. The engine splices
-      off segments the car has left far behind */
+  /** the track never loops: the generator appends sections on demand
+      into a ring so at least `upToAbsIndex` absolute segments exist;
+      absolute index i lives at segments[i % segments.length] */
   extend: (upToAbsIndex: number) => void;
+  /** absolute index of the oldest segment still held in the ring */
+  firstIndex: () => number;
+  /** absolute count of segments generated so far */
+  generated: () => number;
   roadside: RoadsideSprite[];
   car: CarFrames;
   gasCan: CarFrame;
@@ -1212,19 +1287,26 @@ export function createEngine(opts: {
   /** fired when the car drives through a gas can (big = the 2-dot ones) */
   onPickup?: (big: boolean) => void;
 }): RacerEngine {
-  const { segments, extend, roadside, car, gasCan, reduceMotion } = opts;
+  const {
+    segments,
+    extend,
+    firstIndex,
+    generated: generatedCount,
+    roadside,
+    car,
+    gasCan,
+    reduceMotion,
+  } = opts;
   const cockpit = opts.cockpit ?? null;
   // mutable so resize() can re-fit the renderer when the device rotates
   let width = opts.width ?? RACER_WIDTH;
   let height = opts.height ?? RACER_HEIGHT;
-  // rolling window over the infinite track: ~2 minutes of flat-out
-  // driving stays generated ahead; behind the car a short tail survives
-  // (the rearview mirror walks 20 segments back). baseIndex = absolute
-  // index of segments[0]
-  const AHEAD_SEGMENTS = 120 * 60;
-  const BEHIND_SEGMENTS = 240;
-  let baseIndex = 0;
-  // the generator starts empty — buffer the first ~2 minutes up front so
+  // ring window over the infinite track: ~10 s of flat-out driving stays
+  // generated ahead, old slots are overwritten by the generator (render
+  // reads 180 ahead, the rearview mirror walks 20 behind — ample cushion)
+  const AHEAD_SEGMENTS = 600;
+  const ringSlot = (absIdx: number) => absIdx % segments.length;
+  // the generator starts empty — buffer the first stretch up front so
   // the very first update/render already has road under the car
   extend(AHEAD_SEGMENTS);
 
@@ -1238,6 +1320,7 @@ export function createEngine(opts: {
     multiplier: 1,
     respawn: 0,
     fuel: FUEL_MAX,
+    boostT: 0,
     gameOver: false,
     offRoad: false,
     gear: 1,
@@ -1265,16 +1348,38 @@ export function createEngine(opts: {
   // generated track's stored values — the data never changes. The gains
   // are capped so high levels stay drivable; the level counter is not.
   // Gas cans keep their count (no extra scarcity) but drift toward the
-  // road edges, so refuelling costs a wider line
+  // road edges, so refuelling costs a wider line. drainGain is OutRun's
+  // shrinking stage bonus: each level burns the tank ~5% faster (capped
+  // ×1.4), soft enough that a clean can chain survives deep into the
+  // levels — and below 2 dots the mercy can covers a dry stretch
   let curveGain = 1;
   let hillGain = 1;
   let canSpread = 1;
+  let drainGain = 1;
   let levelUpAt = -10; // engine time of the last level-up (banner)
+  // per-level report card, shown on the LEVEL X banner: how fast the
+  // level just finished went — time, average pace, fuel burn, average
+  // multiplier. Accumulators reset at every level-up
+  let lvlStartAt = 0;
+  let lvlStartKm = 0;
+  let lvlFuelAcc = 0;
+  let lvlMultAcc = 0;
+  let lastLevelStats: {
+    secs: number;
+    avgKmh: number;
+    dotsPerMin: number;
+    avgMult: number;
+  } | null = null;
+  // engine time of the last pickup that produced BOOST (popup variant)
+  let lastBoostAt = -10;
+  // mercy can: one rescue can per dry spell, injected by update() when
+  // the tank runs below 2 dots with nothing collectible ahead
+  let mercyUsed = false;
   // engine time of the last gas-can pickup — drives the collect feedback
   // (sparkle burst at the car, gauge flash, rising "+1")
   let lastPickupAt = -10;
-  // scarcity ramps with score: every 1500 points hides another 1% of the
-  // track's cans (capped at 75% so the track never fully dries out).
+  // scarcity ramps with score: every 4000 points hides another 1% of the
+  // track's cans (capped at 50% so the track never fully dries out).
   // Big cans (every 10th) resist at half the rate — the relief valve must
   // survive into the late game. Cans are hidden in golden-ratio order
   // over their ordinal, so the hidden ones stay evenly spread instead of
@@ -1283,7 +1388,8 @@ export function createEngine(opts: {
   const pickupActive = (seg: Segment): boolean => {
     const pk = seg.pickup;
     if (!pk) return true;
-    const hidden = Math.min(0.75, Math.floor(state.score / 1500) * 0.01);
+    if (pk.ordinal < 0) return true; // mercy can: never scarcity-hidden
+    const hidden = Math.min(0.5, Math.floor(state.score / 4000) * 0.01);
     if (hidden <= 0) return true;
     return (
       (pk.ordinal * 0.6180339887498949) % 1 >= (pk.big ? hidden / 2 : hidden)
@@ -1302,13 +1408,15 @@ export function createEngine(opts: {
   let airDur = 0; // total airtime of the current hop
   let landT = 0; // landing squash timer
 
-  // prebuilt backdrop layers — rebuilt by resize() after a rotation
-  let sky: HTMLCanvasElement;
+  // prebuilt backdrop layers — rebuilt by resize() after a rotation.
+  // The sky itself is NOT prebuilt: it is drawn procedurally every frame
+  // so the day/night cycle can move the sun, moon and stars
   let clouds: HTMLCanvasElement;
   let hillsFar: HTMLCanvasElement;
   let hillsNear: HTMLCanvasElement;
+  let skyGrad: CanvasGradient | null = null;
+  let skyGradKey = "";
   const buildBackdrop = () => {
-    sky = makeSky(width, Math.round(height * 0.62));
     clouds = makeClouds(width, Math.round(height * 0.34), 21);
     hillsFar = makeMountains(
       width,
@@ -1337,31 +1445,39 @@ export function createEngine(opts: {
   }
 
   function findSegment(z: number): Segment {
-    const i = Math.floor(z / SEGMENT_LENGTH) - baseIndex;
-    return segments[Math.max(0, Math.min(segments.length - 1, i))];
+    const i = Math.floor(z / SEGMENT_LENGTH);
+    const c = Math.max(firstIndex(), Math.min(generatedCount() - 1, i));
+    return segments[ringSlot(c)];
   }
 
   function update(dt: number, input: RacerInput) {
     if (state.gameOver) return;
-    pendingSteer = input.left ? -1 : input.right ? 1 : 0;
+    pendingSteer =
+      input.steer !== undefined
+        ? Math.max(-1, Math.min(1, input.steer))
+        : input.left
+          ? -1
+          : input.right
+            ? 1
+            : 0;
     const playerSegment = findSegment(state.position + PLAYER_Z);
     const speedPercent = state.speed / MAX_SPEED;
     // steering authority scales with speed — no spinning out at standstill
     const dx = dt * 2.2 * speedPercent;
 
     state.time += dt;
+    // segments the car's pickup point crosses this frame — at full speed
+    // a slow frame can span 2+ segments, and a can sitting on a skipped
+    // one would be driven through without registering
+    const prevPickupSeg = Math.floor((state.position + PLAYER_Z) / SEGMENT_LENGTH);
     state.position += state.speed * dt;
+    const nextPickupSeg = Math.floor((state.position + PLAYER_Z) / SEGMENT_LENGTH);
     // display km at the same scale as the 180 km/h top speed
     state.distanceKm += speedPercent * 180 * (dt / 3600);
-    // rolling window over the endless track: keep ~2 minutes of flat-out
-    // road generated ahead, drop what the car left far behind
+    // ring window: keep the road buffered ahead; the generator overwrites
+    // what the car left behind
     const absIndex = Math.floor(state.position / SEGMENT_LENGTH);
     extend(absIndex + AHEAD_SEGMENTS);
-    const drop = absIndex - BEHIND_SEGMENTS - baseIndex;
-    if (drop > 0) {
-      segments.splice(0, drop);
-      baseIndex += drop;
-    }
 
     // distance difficulty: every LEVEL_EVERY_KM bumps the level — turn
     // the heat up (gains capped, level is not)
@@ -1371,11 +1487,29 @@ export function createEngine(opts: {
       curveGain = Math.min(1.6, 1 + 0.08 * (state.level - 1));
       hillGain = Math.min(1.5, 1 + 0.07 * (state.level - 1));
       canSpread = Math.min(1.35, 1 + 0.05 * (state.level - 1));
+      // OutRun's shrinking stage bonus, kept soft: +5%/level capped at
+      // ×1.4, so a clean can chain stays sustainable well past level 5 —
+      // a missed can is a setback, not a guaranteed death sentence
+      drainGain = Math.min(1.4, 1 + 0.05 * (state.level - 1));
       levelUpAt = state.time;
+      // wrap up the finished level's report card for the banner
+      const lvlSecs = state.time - lvlStartAt;
+      lastLevelStats = {
+        secs: lvlSecs,
+        avgKmh:
+          lvlSecs > 0.5
+            ? (state.distanceKm - lvlStartKm) / (lvlSecs / 3600)
+            : 0,
+        dotsPerMin: lvlSecs > 1 ? (lvlFuelAcc / lvlSecs) * 60 : 0,
+        avgMult: lvlSecs > 0.5 ? lvlMultAcc / lvlSecs : 1,
+      };
+      lvlStartAt = state.time;
+      lvlStartKm = state.distanceKm;
+      lvlFuelAcc = 0;
+      lvlMultAcc = 0;
     }
 
-    if (input.left) state.playerX -= dx;
-    if (input.right) state.playerX += dx;
+    state.playerX += dx * pendingSteer;
     // centrifugal push on curves (Jake Gordon), tuned so every bend has a
     // real grip-limited corner speed — the balance p·curve·CENTRIFUGAL = 1
     // gives easy ≈ flat-out, medium ≈ 125 km/h, hard ≈ 85 km/h. Above the
@@ -1425,9 +1559,17 @@ export function createEngine(opts: {
     state.braking = input.brake;
 
     if (input.gas && state.fuel > 0 && state.shiftT <= 0) {
-      // throttle follows the measured km/h curve of the real car
+      // throttle follows the measured km/h curve of the real car; BOOST
+      // lifts the ceiling from 180 to ~202 km/h with a harder pull
       const kmh = (state.speed / MAX_SPEED) * 180;
-      state.speed += (ACCEL_KMH(kmh) / 180) * MAX_SPEED * dt;
+      const accel =
+        state.boostT > 0
+          ? Math.max(ACCEL_KMH(kmh), (180 * BOOST_TOP - kmh) * 0.4)
+          : ACCEL_KMH(kmh);
+      state.speed +=
+        ((accel * (state.boostT > 0 ? BOOST_ACCEL : 1)) / 180) *
+        MAX_SPEED *
+        dt;
     } else if (input.brake) state.speed += BRAKING * dt;
     // clutch in during a shift: the car coasts almost freely (aero only),
     // none of the engine braking baked into ROLL_DRAG — a real shift
@@ -1443,7 +1585,10 @@ export function createEngine(opts: {
     }
 
     state.playerX = Math.max(-2.2, Math.min(2.2, state.playerX));
-    state.speed = Math.max(0, Math.min(MAX_SPEED, state.speed));
+    state.speed = Math.max(
+      0,
+      Math.min(MAX_SPEED * (state.boostT > 0 ? BOOST_TOP : 1), state.speed),
+    );
 
     // crest hop: the road falling away steeply right after a steep climb
     // means the car just cleared a hilltop at speed — give it a short
@@ -1487,13 +1632,16 @@ export function createEngine(opts: {
       state.speed = 0;
     }
 
-    // the tank drains quadratically with speed — cruising fast burns
-    // noticeably more fuel; at zero the engine dies and the car coasts
-    state.fuel = Math.max(
-      0,
-      state.fuel -
-        dt * (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent),
-    );
+    // the tank is a clock that ticks a little faster every level; at
+    // zero the engine dies and the car coasts — a can grabbed while
+    // coasting still revives it (OutRun's coast-over-checkpoint mercy)
+    const fuelDrain =
+      dt *
+      (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent) *
+      drainGain;
+    lvlFuelAcc += fuelDrain;
+    state.fuel = Math.max(0, state.fuel - fuelDrain);
+    state.boostT = Math.max(0, state.boostT - dt);
     if (state.fuel <= 0 && state.speed <= 0) state.gameOver = true;
 
     if (state.respawn > 0) {
@@ -1501,18 +1649,62 @@ export function createEngine(opts: {
     } else {
       // gas cans: drive through one to light gauge dots (+2 for the big
       // ones). A taken can is gone for good — the road behind is never
-      // revisited on an endless track
-      const pk = playerSegment.pickup;
-      if (
-        pk &&
-        pickupActive(playerSegment) &&
-        Math.abs(state.playerX - pk.x * canSpread) < 0.24 &&
-        state.speed > MAX_SPEED * 0.02
-      ) {
-        state.fuel = Math.min(FUEL_MAX, state.fuel + (pk.big ? 2 : 1));
-        playerSegment.pickup = undefined;
-        lastPickupAt = state.time;
-        opts.onPickup?.(pk.big ?? false);
+      // revisited on an endless track. Scan EVERY segment crossed this
+      // frame: at full speed a slow frame spans 2+ segments and a can on
+      // a skipped one would be tunnelled through without a sound
+      for (let si = prevPickupSeg; si <= nextPickupSeg; si++) {
+        const seg = segments[ringSlot(si)];
+        const pk = seg.pickup;
+        if (
+          pk &&
+          pickupActive(seg) &&
+          Math.abs(state.playerX - pk.x * canSpread) < 0.24 &&
+          state.speed > MAX_SPEED * 0.02
+        ) {
+          const amount = pk.big ? 2 : 1;
+          // a can grabbed with a near-full tank doesn't go to waste:
+          // the overflow burns off as BOOST seconds instead
+          const overflow = state.fuel + amount - FUEL_MAX;
+          if (overflow > 0) {
+            state.boostT = Math.min(
+              BOOST_MAX_T,
+              state.boostT + overflow * BOOST_PER_DOT,
+            );
+            lastBoostAt = state.time;
+          }
+          state.fuel = Math.min(FUEL_MAX, state.fuel + amount);
+          seg.pickup = undefined;
+          lastPickupAt = state.time;
+          opts.onPickup?.(pk.big ?? false);
+        }
+      }
+      // mercy can: below 2 dots with nothing collectible in the next ~90
+      // segments, one can materialises on a reachable line ~60 segments
+      // out — once per dry spell. A missed can at high level becomes a
+      // setback you can fight back from, not a guaranteed death sentence
+      if (state.fuel >= 2.5) mercyUsed = false;
+      if (state.fuel < 2 && !mercyUsed && state.speed > 0) {
+        const playerSegIdx = Math.floor(
+          (state.position + PLAYER_Z) / SEGMENT_LENGTH,
+        );
+        let canAhead = false;
+        for (let si = playerSegIdx; si < playerSegIdx + 90; si++) {
+          const seg = segments[ringSlot(si)];
+          if (seg.index === si && seg.pickup && pickupActive(seg)) {
+            canAhead = true;
+            break;
+          }
+        }
+        if (!canAhead) {
+          const spot = segments[ringSlot(playerSegIdx + 60)];
+          if (spot.index === playerSegIdx + 60 && !spot.pickup) {
+            spot.pickup = {
+              x: Math.max(-0.7, Math.min(0.7, state.playerX)) / canSpread,
+              ordinal: -1,
+            };
+            mercyUsed = true;
+          }
+        }
       }
       // stranded way off the road, past the roadside trees: respawn on
       // the centre line at a standstill with a breathing fade-in — and a
@@ -1541,6 +1733,7 @@ export function createEngine(opts: {
               ? 2
               : 1;
     state.score += ((kmh * dt) / 3.6) * state.multiplier;
+    lvlMultAcc += state.multiplier * dt;
 
     // horizon drifts opposite the current curve, faster with speed
     // (rates eased 30% down from Jake's 2.5/5 — gentler mountain parallax)
@@ -1593,13 +1786,65 @@ export function createEngine(opts: {
     const skyShiftY = resolution * 0.001 * playerY;
     const cloudShiftY = resolution * 0.0015 * playerY;
     const farShiftY = resolution * 0.002 * playerY;
-    // downhill peeks a strip of void above the sky image — fill it with
-    // the sky's own top colour
+    const horizonY = Math.round(height / 2 - farShiftY) + yShift;
+
+    // ── day/night sky: procedural gradient + sun, moon and stars ──
+    const dayT = (state.time / DAY_LENGTH) % 1;
+    const skySt = skyStateAt(dayT);
+    const skyH = Math.round(height * 0.62);
+    const topColor = rgb(skySt.stops[0]);
+    // downhill peeks a strip of void above the sky — fill it with the
+    // sky's own top colour
     if (skyShiftY > 0) {
-      ctx.fillStyle = "#1a1c3f";
+      ctx.fillStyle = topColor;
       ctx.fillRect(0, 0, width, Math.ceil(skyShiftY));
     }
-    ctx.drawImage(sky, 0, -skyShiftY);
+    if (skyGradKey !== `${skyStateKey}:${height}`) {
+      skyGradKey = `${skyStateKey}:${height}`;
+      const g = ctx.createLinearGradient(0, 0, 0, skyH);
+      g.addColorStop(0, topColor);
+      g.addColorStop(0.55, rgb(skySt.stops[1]));
+      g.addColorStop(0.8, rgb(skySt.stops[2]));
+      g.addColorStop(1, rgb(skySt.stops[3]));
+      skyGrad = g;
+    }
+    ctx.fillStyle = skyGrad as CanvasGradient;
+    ctx.fillRect(0, Math.round(-skyShiftY), width, skyH);
+
+    // sun arcs over the day half of the cycle, the moon over the night
+    // half — pixel squares to match the art direction; both sink to the
+    // horizon line at the edges of their window
+    const celestial = (s: number, color: string, r: number) => {
+      const cxC = Math.round(width * (0.2 + 0.6 * s));
+      const cyC = Math.round(horizonY - Math.sin(s * Math.PI) * height * 0.32);
+      ctx.fillStyle = color;
+      ctx.fillRect(cxC - r, cyC - r, r * 2, r * 2);
+      return [cxC, cyC];
+    };
+    if (dayT < 0.55) {
+      celestial(dayT / 0.55, "#ffd75e", Math.max(3, Math.round(width * 0.045)));
+    } else if (dayT > 0.58) {
+      const r = Math.max(2, Math.round(width * 0.03));
+      const [mx, my] = celestial((dayT - 0.58) / 0.42, "#e8ecff", r);
+      // crescent: a bite of sky colour bitten out of the moon's corner
+      ctx.fillStyle = rgb(skySt.stops[2]);
+      ctx.fillRect(mx - r + Math.round(r * 0.8), my - r + Math.round(r * 0.2), r * 2, r * 2);
+    }
+    // stars fade in and twinkle with the depth of the night
+    if (skySt.night > 0.05) {
+      ctx.fillStyle = "#dfe6ff";
+      for (let i = 0; i < 48; i++) {
+        const tw = 0.5 + 0.5 * Math.sin(state.time * 2.5 + i * 1.7);
+        ctx.globalAlpha = skySt.night * (0.25 + 0.75 * tw);
+        ctx.fillRect(
+          Math.round(starHash(i * 2) * width),
+          Math.round(starHash(i * 2 + 1) * Math.max(8, horizonY - 8)),
+          1,
+          1,
+        );
+      }
+      ctx.globalAlpha = 1;
+    }
 
     const drawBand = (
       img: HTMLCanvasElement,
@@ -1610,7 +1855,6 @@ export function createEngine(opts: {
       ctx.drawImage(img, x, yBase);
       ctx.drawImage(img, x + width, yBase);
     };
-    const horizonY = Math.round(height / 2 - farShiftY) + yShift;
     // clouds: the farthest layer — slowest curve parallax of all, plus a
     // gentle autonomous drift so the sunset sky is never static
     const cloudDrift = skyOffset * width * 0.05 + state.time * width * 0.006;
@@ -1634,7 +1878,7 @@ export function createEngine(opts: {
     let roadNearW = width * 0.45;
 
     for (let n = 0; n < DRAW_DISTANCE; n++) {
-      const segment = segments[baseSegment.index + n - baseIndex];
+      const segment = segments[ringSlot(baseSegment.index + n)];
       segment.clip = maxY;
 
       const camZ = cameraZBase;
@@ -1688,7 +1932,7 @@ export function createEngine(opts: {
     // ── roadside sprites, far to near (painter's algorithm; Lou: keep
     //    them sorted by z and scale by the line's projection factor) ──
     for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
-      const segment = segments[baseSegment.index + n - baseIndex];
+      const segment = segments[ringSlot(baseSegment.index + n)];
       const pk = segment.pickup;
       if (!pk && segment.sprites.length === 0) continue;
 
@@ -1839,7 +2083,7 @@ export function createEngine(opts: {
       if (reduceMotion) return;
       // swing only with the car's own turning — straight car, straight
       // streaks, no matter how the road bends ahead
-      vanishX += (width / 2 + pendingSteer * width * 0.06 - vanishX) * 0.12;
+      vanishX += (width / 2 + pendingSteer * width * 0.045 - vanishX) * 0.12;
       renderSpeedLines(
         ctx,
         width,
@@ -1868,9 +2112,10 @@ export function createEngine(opts: {
       if (dy > SEGMENT_LENGTH * 0.35) frame = car.up;
       else if (dy < -SEGMENT_LENGTH * 0.35) frame = car.down;
       if (steer) {
-        // actual steering intent wins over slope
-        if (pendingSteer < -0.1) frame = car.left;
-        else if (pendingSteer > 0.1) frame = car.right;
+        // actual steering intent wins over slope — the tilt input is
+        // analog, so the lean frames wait for a real turn of the wheel
+        if (pendingSteer < -0.35) frame = car.left;
+        else if (pendingSteer > 0.35) frame = car.right;
       }
 
       const scale = CAMERA_DEPTH / PLAYER_Z;
@@ -1935,9 +2180,9 @@ export function createEngine(opts: {
           const ly = carY + destH * fy;
           const lw = destW * fw;
           const lh = destH * fh;
-          ctx.globalAlpha = carAlpha * 0.45;
+          ctx.globalAlpha = carAlpha * 0.3;
           ctx.fillStyle = "#ff2020";
-          ctx.fillRect(lx - lw * 0.35, ly - lh * 0.5, lw * 1.7, lh * 2);
+          ctx.fillRect(lx - lw * 0.15, ly - lh * 0.2, lw * 1.3, lh * 1.4);
           ctx.globalAlpha = carAlpha;
           ctx.fillStyle = "#ff5a4a";
           ctx.fillRect(lx, ly, lw, lh);
@@ -2083,9 +2328,22 @@ export function createEngine(opts: {
         mirrorSway,
         curveGain,
         hillGain,
+        firstIndex(),
       );
 
       dashGeom = { x: dashX, y: dashY, w: dashW, h: dashH };
+    }
+    // day/night ambient: the whole world (and the dash) dims at night and
+    // warms at sunset — instruments, popups and banners drawn after this
+    // stay bright, so the LCD glows in the dark like the real thing
+    if (skySt.night > 0.01) {
+      ctx.fillStyle = `rgba(8,10,36,${(0.38 * skySt.night).toFixed(3)})`;
+      ctx.fillRect(0, 0, width, height);
+    }
+    const sunsetGlow = Math.max(0, 1 - Math.abs(dayT - 0.45) / 0.12);
+    if (sunsetGlow > 0.01) {
+      ctx.fillStyle = `rgba(226,112,58,${(0.07 * sunsetGlow).toFixed(3)})`;
+      ctx.fillRect(0, 0, width, height);
     }
     // pickup feedback window — sparkle burst + gauge flash + rising "+1"
     const fxAge = state.time - lastPickupAt;
@@ -2140,17 +2398,34 @@ export function createEngine(opts: {
         }
       }
       // "+1" floats up off the fuel gauge — dark outline so it reads
-      // against both the light LCD panel and the dark road behind it
+      // against both the light LCD panel and the dark road behind it.
+      // A pickup that overflowed the tank shows BOOST instead
+      const boostFx = lastBoostAt === lastPickupAt;
+      const fxText = boostFx ? "BOOST" : "+1";
       const p = fxAge / 0.8;
       const tx = Math.round(gaugePos.x);
       const ty = Math.round(gaugePos.y - 4 * ui - p * 14 * ui);
       ctx.globalAlpha = 1 - p;
       ctx.font = `bold ${Math.round(9 * ui)}px monospace`;
       ctx.fillStyle = "#141611";
-      ctx.fillText("+1", tx + 1, ty + 1);
-      ctx.fillStyle = "#d7ff9e";
-      ctx.fillText("+1", tx, ty);
+      ctx.fillText(fxText, tx + 1, ty + 1);
+      ctx.fillStyle = boostFx ? "#e2703a" : "#d7ff9e";
+      ctx.fillText(fxText, tx, ty);
       ctx.globalAlpha = 1;
+    }
+
+    // BOOST active: blinking tag above the gauge dots until it burns out
+    if (state.boostT > 0 && !state.gameOver) {
+      const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      if (Math.floor(state.time * 3) % 2 === 0) {
+        ctx.font = `bold ${Math.round(7 * ui)}px monospace`;
+        const bx = Math.round(gaugePos.x);
+        const by = Math.round(gaugePos.y - 8 * ui);
+        ctx.fillStyle = "#141611";
+        ctx.fillText("BOOST", bx + 1, by + 1);
+        ctx.fillStyle = "#e2703a";
+        ctx.fillText("BOOST", bx, by);
+      }
     }
 
     // fuel warnings — an empty tank kills the engine and the car coasts
@@ -2187,9 +2462,10 @@ export function createEngine(opts: {
     }
 
     // level banner: a brief LEVEL X flash when a new distance level turns
-    // the heat up — quick fade in, hold, fade out
+    // the heat up, with the finished level's report card underneath —
+    // time, average pace, fuel burn and average multiplier
     const lvlAge = state.time - levelUpAt;
-    if (state.level > 1 && lvlAge < 2.2 && !state.gameOver) {
+    if (state.level > 1 && lvlAge < 3.2 && !state.gameOver) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
       const msg = `LEVEL ${state.level}`;
       ctx.font = `bold ${Math.round(11 * ui)}px monospace`;
@@ -2198,17 +2474,50 @@ export function createEngine(opts: {
       const ty = Math.round(height * 0.3);
       ctx.globalAlpha = Math.max(
         0,
-        Math.min(1, Math.min(lvlAge / 0.2, (2.2 - lvlAge) / 0.5)),
+        Math.min(1, Math.min(lvlAge / 0.2, (3.2 - lvlAge) / 0.5)),
       );
       ctx.fillStyle = "#141611";
       ctx.fillText(msg, tx + 2, ty + 2);
       ctx.fillStyle = "#d7ff9e";
       ctx.fillText(msg, tx, ty);
+      if (lastLevelStats) {
+        const s = lastLevelStats;
+        const sub =
+          `${Math.round(s.secs)}S · AVG ${Math.round(s.avgKmh)} KM/H · ` +
+          `${s.dotsPerMin.toFixed(1)} DOT/MIN · x${s.avgMult.toFixed(1)} AVG`;
+        ctx.font = `bold ${Math.round(6 * ui)}px monospace`;
+        const sw = ctx.measureText(sub).width;
+        const sx = Math.round(width / 2 - sw / 2);
+        const sy = ty + Math.round(12 * ui);
+        ctx.fillStyle = "#141611";
+        ctx.fillText(sub, sx + 1, sy + 1);
+        ctx.fillStyle = "#d7ff9e";
+        ctx.fillText(sub, sx, sy);
+      }
       ctx.globalAlpha = 1;
     }
   }
 
-  return { update, render, resize, state };
+  const debugNextPickup =
+    process.env.NODE_ENV === "production"
+      ? undefined
+      : () => {
+          const from = Math.floor((state.position + PLAYER_Z) / SEGMENT_LENGTH);
+          for (let si = from; si < from + AHEAD_SEGMENTS; si++) {
+            const seg = segments[ringSlot(si)];
+            if (seg.index !== si) break; // generator hasn't reached this slot
+            if (seg.pickup && pickupActive(seg)) {
+              return {
+                absIndex: si,
+                x: seg.pickup.x * canSpread,
+                big: !!seg.pickup.big,
+              };
+            }
+          }
+          return null;
+        };
+
+  return { update, render, resize, state, debugNextPickup };
 }
 
 export const ENGINE_CONSTANTS = {

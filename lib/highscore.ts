@@ -11,11 +11,15 @@ export interface ScoreEntry {
 }
 
 interface StoreFile {
+  version: number;
   scores: ScoreEntry[];
   nonces: Record<string, number>; // hmacHex -> issuedAt ms (single-use)
 }
 
+const STORE_VERSION = 2;
 const MAX_SCORES = 50;
+const MAX_STORED = 300; // hard cap on the file, incl. entries kept for period boards
+const RETENTION_MS = 40 * 24 * 60 * 60 * 1000; // keep recent entries for period boards
 const NONCE_TTL_MS = 30 * 60 * 1000;
 const MAX_SCORE_PER_SEC = 300; // generous plausibility bound: 200/s flat out
 // at the x4 multiplier, plus crest-hop bonuses on top
@@ -41,20 +45,23 @@ function withLock<T>(fn: () => Promise<T>): Promise<T> {
 async function readStore(): Promise<StoreFile> {
   try {
     const raw = await readFile(STORE_PATH, "utf8");
-    const parsed = JSON.parse(raw) as StoreFile;
+    const parsed = JSON.parse(raw) as Partial<StoreFile>;
+    // Version bump wipes pre-existing scores (retention policy changed); nonces survive.
+    const stale = parsed.version !== STORE_VERSION;
     return {
-      scores: Array.isArray(parsed.scores) ? parsed.scores : [],
+      version: STORE_VERSION,
+      scores: !stale && Array.isArray(parsed.scores) ? parsed.scores : [],
       nonces: parsed.nonces && typeof parsed.nonces === "object" ? parsed.nonces : {},
     };
   } catch {
-    return { scores: [], nonces: {} };
+    return { version: STORE_VERSION, scores: [], nonces: {} };
   }
 }
 
 async function writeStore(store: StoreFile): Promise<void> {
   await mkdir(path.dirname(STORE_PATH), { recursive: true });
   const tmp = `${STORE_PATH}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(store), "utf8");
+  await writeFile(tmp, JSON.stringify({ ...store, version: STORE_VERSION }), "utf8");
   await rename(tmp, STORE_PATH);
 }
 
@@ -149,9 +156,20 @@ export async function submitScore(
       at: new Date().toISOString(),
     };
     store.scores.push(entry);
-    // Sort: score desc, older entry wins ties. Keep top 50.
+    // Sort: score desc, older entry wins ties.
     store.scores.sort((x, y) => y.score - x.score || x.at.localeCompare(y.at));
-    store.scores = store.scores.slice(0, MAX_SCORES);
+    // Retention: keep the all-time top 50 plus everything from the last 40 days
+    // (period boards need recent history). Hard cap at MAX_STORED — the all-time
+    // top 50 are never dropped; the oldest recent entries go first.
+    const top = store.scores.slice(0, MAX_SCORES);
+    const topSet = new Set(top);
+    const cutoff = Date.now() - RETENTION_MS;
+    const recent = store.scores
+      .filter((e) => !topSet.has(e) && Date.parse(e.at) >= cutoff)
+      .sort((x, y) => y.at.localeCompare(x.at))
+      .slice(0, MAX_STORED - top.length);
+    const keep = new Set([...top, ...recent]);
+    store.scores = store.scores.filter((e) => keep.has(e));
     await writeStore(store);
 
     const rank = store.scores.indexOf(entry) + 1;
@@ -159,11 +177,20 @@ export async function submitScore(
   });
 }
 
-/** Public top-10 listing. */
-export async function listScores(): Promise<ScoreEntry[]> {
+export type ScorePeriod = "all" | "daily" | "weekly" | "monthly";
+
+const PERIOD_WINDOWS_MS: Record<Exclude<ScorePeriod, "all">, number> = {
+  daily: 24 * 60 * 60 * 1000,
+  weekly: 7 * 24 * 60 * 60 * 1000,
+  monthly: 30 * 24 * 60 * 60 * 1000,
+};
+
+/** Public top-10 listing; rolling windows for period boards. */
+export async function listScores(period: ScorePeriod = "all"): Promise<ScoreEntry[]> {
   const store = await readStore();
+  const cutoff = period === "all" ? 0 : Date.now() - PERIOD_WINDOWS_MS[period];
   return store.scores
-    .slice()
+    .filter((e) => Date.parse(e.at) >= cutoff)
     .sort((x, y) => y.score - x.score || x.at.localeCompare(y.at))
     .slice(0, 10);
 }

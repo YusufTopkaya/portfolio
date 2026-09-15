@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ScoreEntry } from "@/lib/highscore";
+import type { ScoreEntry, ScorePeriod } from "@/lib/highscore";
 import {
   createEngine,
   ENGINE_CONSTANTS,
@@ -111,6 +111,18 @@ export function TwingoRacer() {
      toggle with V / the CAM touch button — every run starts on the
      chase cam, the choice is per-session only */
   const [view, setView] = useState<RacerView>("chase");
+  /* tilt steering (mobile option in SETTINGS): the phone becomes the
+     wheel — the deviceorientation stream feeds an analog steer value
+     into the input bag. Persisted across sessions; OFF by default */
+  const [tilt, setTilt] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      localStorage.getItem("twingo:tilt") === "1",
+  );
+  const tiltRef = useRef(tilt);
+  tiltRef.current = tilt;
+  const steerRef = useRef(0);
+  const tiltNeutralRef = useRef<number | null>(null);
   /* cockpit sprites loaded — without them the toggle stays hidden */
   const [cockpitReady, setCockpitReady] =
     useState(
@@ -123,6 +135,18 @@ export function TwingoRacer() {
   const [finalTime, setFinalTime] = useState(0);
   /* leaderboard: top-10 list, initials form state, rank after submit */
   const [board, setBoard] = useState<ScoreEntry[] | null>(null);
+  /* period tabs on the leaderboard: all-time vs rolling 30d/7d/24h
+     windows — persisted so the panel reopens on the last-used tab */
+  const [boardPeriod, setBoardPeriod] = useState<ScorePeriod>(() => {
+    if (typeof window !== "undefined") {
+      const p = localStorage.getItem("twingo:board-period");
+      if (p === "daily" || p === "weekly" || p === "monthly" || p === "all")
+        return p;
+    }
+    return "all";
+  });
+  const boardPeriodRef = useRef(boardPeriod);
+  boardPeriodRef.current = boardPeriod;
   const [initials, setInitials] = useState("");
   const [submitState, setSubmitState] = useState<
     "idle" | "sending" | "done" | "error"
@@ -150,6 +174,10 @@ export function TwingoRacer() {
   const pauseSettingsOpenRef = useRef(false);
   const settingsRowRef = useRef(0);
   const showFpsRef = useRef(false);
+  /* mirror of `coarse` for the engine-loop key handler (same stale-
+     closure reason as pauseMenuRef above) */
+  const coarseRef = useRef(false);
+  coarseRef.current = coarse;
   pauseSettingsOpenRef.current = pauseSettingsOpen;
   settingsRowRef.current = settingsRow;
   /* single-use HMAC token for the current run's score submission;
@@ -225,6 +253,9 @@ export function TwingoRacer() {
       if (!r.ok) throw new Error(d?.error ?? String(r.status));
       tokenRef.current = null; // consumed — no resubmits
       setMyRank(d.rank);
+      // the submit response carries the all-time top-10 and the rank is
+      // an all-time rank — pin the visible tab to ALL so they line up
+      setBoardPeriod("all");
       setBoard(d.scores);
       setSubmitState("done");
     } catch {
@@ -336,19 +367,36 @@ export function TwingoRacer() {
     setIntro(true);
   }, [playAgain]);
 
-  /* LEADERBOARD on the title screen: read-only top-10 panel — no token
-     needed to look, only to submit after a run */
-  const openTitleBoard = useCallback(() => {
-    setTitleBoard(true);
+  /* leaderboard fetch for the visible period tab; the game-over overlay
+     and the title panel share it */
+  const fetchBoard = useCallback((period: ScorePeriod) => {
     setBoard(null);
     setBoardError(false);
-    fetch("/api/highscore")
+    fetch(`/api/highscore?period=${period}`)
       .then((r) =>
         r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
       )
       .then((d: { scores: ScoreEntry[] }) => setBoard(d.scores))
       .catch(() => setBoardError(true));
   }, []);
+
+  const selectPeriod = useCallback(
+    (p: ScorePeriod) => {
+      setBoardPeriod(p);
+      try {
+        localStorage.setItem("twingo:board-period", p);
+      } catch {}
+      fetchBoard(p);
+    },
+    [fetchBoard],
+  );
+
+  /* LEADERBOARD on the title screen: read-only top-10 panel — no token
+     needed to look, only to submit after a run */
+  const openTitleBoard = useCallback(() => {
+    setTitleBoard(true);
+    fetchBoard(boardPeriod);
+  }, [fetchBoard, boardPeriod]);
 
   /* V key / CAM button: flip between chase cam and cockpit */
   const toggleView = useCallback(() => {
@@ -361,6 +409,59 @@ export function TwingoRacer() {
       return next;
     });
   }, []);
+
+  /* TILT setting (touch devices): the phone becomes the steering wheel.
+     iOS 13+ gates the sensor behind a per-gesture permission prompt, so
+     the request has to happen right inside the toggle click */
+  const toggleTilt = useCallback(() => {
+    audioRef.current?.menuMove();
+    setTilt((t) => {
+      const next = !t;
+      try {
+        localStorage.setItem("twingo:tilt", next ? "1" : "0");
+      } catch {}
+      if (next) {
+        tiltNeutralRef.current = null; // recalibrate on enable
+        const doe = DeviceOrientationEvent as unknown as {
+          requestPermission?: () => Promise<string>;
+        };
+        doe.requestPermission?.().catch(() => {});
+      }
+      return next;
+    });
+  }, []);
+
+  /* tilt stream: the first sample after enabling is the neutral pose;
+     past a 5° deadzone, 30° of lean = full lock. Portrait steers on
+     gamma, landscape on beta (the axes swap when the phone turns), with
+     the sign flipped on the 270° side so "lean right" always steers
+     right. Output is smoothed and written to steerRef; the game loop
+     injects it into the input bag each frame */
+  useEffect(() => {
+    if (!open || !tilt) return;
+    const onOrient = (ev: DeviceOrientationEvent) => {
+      const angle =
+        (window.screen.orientation?.angle ??
+          (window as unknown as { orientation?: number }).orientation ??
+          0) % 360;
+      const raw =
+        angle === 0 || angle === 180
+          ? (ev.gamma ?? 0)
+          : angle === 90
+            ? (ev.beta ?? 0)
+            : -(ev.beta ?? 0);
+      if (tiltNeutralRef.current === null) tiltNeutralRef.current = raw;
+      const rel = raw - tiltNeutralRef.current;
+      const mag = Math.max(0, Math.abs(rel) - 5) / 25;
+      const target = Math.sign(rel) * Math.min(1, mag);
+      steerRef.current += (target - steerRef.current) * 0.25;
+    };
+    window.addEventListener("deviceorientation", onOrient);
+    return () => {
+      window.removeEventListener("deviceorientation", onOrient);
+      steerRef.current = 0;
+    };
+  }, [open, tilt]);
 
   /* the START buttons dispatch this event — the overlay opens on the
      title screen, the engine boots only when START is pressed there.
@@ -412,20 +513,24 @@ export function TwingoRacer() {
       if (titleBoard) return;
       const k = ev.key.toLowerCase();
       if (titleSettingsOpen) {
+        // touch devices get a 4th row: TILT steering on/off
+        const rows = coarse ? 4 : 3;
         if (k === "arrowup" || k === "w") {
           ev.preventDefault();
           audioRef.current?.menuMove();
-          setSettingsRow((r) => (r + 2) % 3);
+          setSettingsRow((r) => (r + rows - 1) % rows);
         } else if (k === "arrowdown" || k === "s") {
           ev.preventDefault();
           audioRef.current?.menuMove();
-          setSettingsRow((r) => (r + 1) % 3);
+          setSettingsRow((r) => (r + 1) % rows);
         } else if (k === "arrowleft" || k === "a") {
           ev.preventDefault();
-          adjustVol(settingsRow, -1);
+          if (settingsRow === 3) toggleTilt();
+          else adjustVol(settingsRow, -1);
         } else if (k === "arrowright" || k === "d") {
           ev.preventDefault();
-          adjustVol(settingsRow, 1);
+          if (settingsRow === 3) toggleTilt();
+          else adjustVol(settingsRow, 1);
         } else if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
           audioRef.current?.menuSelect();
@@ -461,7 +566,7 @@ export function TwingoRacer() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, screen, titleBoard, titleSel, titleSettingsOpen, settingsRow, close, startRun, openTitleBoard, toggleMute, adjustVol]);
+  }, [open, screen, titleBoard, titleSel, titleSettingsOpen, settingsRow, coarse, close, startRun, openTitleBoard, toggleMute, adjustVol, toggleTilt]);
 
   /* rotating the phone mid-run flips the buffer between the landscape and
      portrait shapes; the engine keeps its state and just re-fits (resize) */
@@ -503,6 +608,10 @@ export function TwingoRacer() {
       }
       const e = engineRef.current;
       if (e && !pausedRef.current) {
+        // tilt steering: inject the smoothed analog value; it overrides
+        // the digital left/right flags inside the engine
+        if (tiltRef.current) keysRef.current.steer = steerRef.current;
+        else delete keysRef.current.steer;
         e.update(dt, keysRef.current);
         e.render(ctx);
         // after the tank ran dry the engine stays silent — gameOver()
@@ -525,13 +634,8 @@ export function TwingoRacer() {
           setFinalScore(Math.floor(e.state.score));
           setFinalTime(e.state.time);
           setGameOver(true);
-          // fetch the current top-10 alongside the overlay
-          fetch("/api/highscore")
-            .then((r) =>
-              r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
-            )
-            .then((d: { scores: ScoreEntry[] }) => setBoard(d.scores))
-            .catch(() => setBoard(null));
+          // fetch the current period's top-10 alongside the overlay
+          fetchBoard(boardPeriodRef.current);
         }
       } else if (pausedRef.current) {
         // frozen run: silence the car, leave the music playing
@@ -550,15 +654,17 @@ export function TwingoRacer() {
         if (cancelled) return;
         cockpitReadyRef.current = cockpit !== null;
         setCockpitReady(cockpit !== null);
-        // fresh random layout every run — the seeded generator deals
-        // sections forever under its geometric limits (alternating curve
-        // sides, sea-level-sprung hills); the track never loops
-        const { segments, extend } = createTrackGenerator(
-          Math.floor(Math.random() * 2 ** 31),
-        );
+        // daily seed: everyone races the same layout on the same UTC day,
+        // so same-day highscores are comparable — a fresh track every day.
+        // The seeded generator deals sections forever under its geometric
+        // limits (alternating curve sides, sea-level-sprung hills)
+        const { segments, extend, firstIndex, generated } =
+          createTrackGenerator(Math.floor(Date.now() / 86400000));
         engineRef.current = createEngine({
           segments,
           extend,
+          firstIndex,
+          generated,
           roadside: makeRoadside(),
           car,
           gasCan,
@@ -589,7 +695,7 @@ export function TwingoRacer() {
       // map on both ev.key and the layout-independent physical ev.code —
       // some keyboards drop ev.key repeats under multi-key ghosting while
       // the physical code still comes through
-      const map: Record<string, keyof RacerInput> = {
+      const map: Record<string, "left" | "right" | "gas" | "brake"> = {
         arrowleft: "left",
         a: "left",
         keya: "left",
@@ -617,22 +723,26 @@ export function TwingoRacer() {
         if (!down) return;
         const sel = pauseSelRef.current;
         if (pauseSettingsOpenRef.current) {
-          // settings panel owns the keys while open: ↑/↓ picks a channel,
-          // ←/→ steps its level, Enter closes back to the menu
+          // settings panel owns the keys while open: ↑/↓ picks a row,
+          // ←/→ adjusts it (volume step, or TILT on/off on touch), Enter
+          // closes back to the menu
+          const rows = coarseRef.current ? 4 : 3;
           if (k === "arrowup" || k === "w") {
             ev.preventDefault();
             audioRef.current?.menuMove();
-            setSettingsRow((r) => (r + 2) % 3);
+            setSettingsRow((r) => (r + rows - 1) % rows);
           } else if (k === "arrowdown" || k === "s") {
             ev.preventDefault();
             audioRef.current?.menuMove();
-            setSettingsRow((r) => (r + 1) % 3);
+            setSettingsRow((r) => (r + 1) % rows);
           } else if (k === "arrowleft" || k === "a") {
             ev.preventDefault();
-            adjustVol(settingsRowRef.current, -1);
+            if (settingsRowRef.current === 3) toggleTilt();
+            else adjustVol(settingsRowRef.current, -1);
           } else if (k === "arrowright" || k === "d") {
             ev.preventDefault();
-            adjustVol(settingsRowRef.current, 1);
+            if (settingsRowRef.current === 3) toggleTilt();
+            else adjustVol(settingsRowRef.current, 1);
           } else if (ev.key === "Enter" || ev.key === " ") {
             ev.preventDefault();
             audioRef.current?.menuSelect();
@@ -735,9 +845,9 @@ export function TwingoRacer() {
       // release any held keys so the car doesn't drive off on its own
       keysRef.current = { left: false, right: false, gas: false, brake: false };
     };
-  }, [open, screen, close, buf.w, buf.h, runId, toggleMute, adjustVol]);
+  }, [open, screen, close, buf.w, buf.h, runId, toggleMute, adjustVol, toggleTilt, fetchBoard]);
 
-  const bindTouch = (key: keyof RacerInput) => ({
+  const bindTouch = (key: "left" | "right" | "gas" | "brake") => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault();
       // can throw for synthetic/legacy pointers — capture is only a
@@ -759,7 +869,8 @@ export function TwingoRacer() {
   if (!open) return null;
 
   /* sound settings panel — shared by the title screen and the pause menu.
-     Three channels, ten steps each; ◀ ▶ buttons keep it playable on touch */
+     Three volume channels (ten steps each) plus a touch-only TILT row;
+     ◀ ▶ buttons keep it playable on touch */
   const settingsPanel = (onBack: () => void) => (
     <div
       className="racer-settings font-pixel"
@@ -813,6 +924,46 @@ export function TwingoRacer() {
           </button>
         </div>
       ))}
+      {/* touch-only 4th row: TILT steering on/off — the phone becomes
+          the wheel, so the ◀ ▶ pads can be dropped while it's on */}
+      {coarse && (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard control lives on the overlay's window-level handler
+        <div
+          className={`racer-settings-row${
+            settingsRow === 3 ? " racer-settings-row-sel" : ""
+          }`}
+          onClick={() => setSettingsRow(3)}
+        >
+          <button
+            type="button"
+            className="racer-settings-step font-pixel"
+            aria-label="Toggle tilt steering"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSettingsRow(3);
+              toggleTilt();
+            }}
+          >
+            ◀
+          </button>
+          <span className="racer-settings-label">TILT</span>
+          <span className="racer-settings-bar" aria-hidden="true">
+            <span className="racer-settings-tilt">{tilt ? "ON" : "OFF"}</span>
+          </span>
+          <button
+            type="button"
+            className="racer-settings-step font-pixel"
+            aria-label="Toggle tilt steering"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSettingsRow(3);
+              toggleTilt();
+            }}
+          >
+            ▶
+          </button>
+        </div>
+      )}
       <button
         type="button"
         className="racer-playagain font-pixel"
@@ -823,7 +974,35 @@ export function TwingoRacer() {
       >
         BACK
       </button>
-      <div className="racer-pausemenu-hint">↑↓ CHANNEL ◀▶ LEVEL</div>
+      <div className="racer-pausemenu-hint">↑↓ ROW ◀▶ ADJUST</div>
+    </div>
+  );
+
+  /* period tabs shared by the title leaderboard panel and the game-over
+     overlay: all-time plus rolling 30d / 7d / 24h windows */
+  const boardTabs = (
+    <div className="racer-lb-tabs" role="tablist" aria-label="Score period">
+      {(
+        [
+          ["all", "ALL"],
+          ["monthly", "30D"],
+          ["weekly", "7D"],
+          ["daily", "24H"],
+        ] as const
+      ).map(([p, label]) => (
+        <button
+          key={p}
+          type="button"
+          role="tab"
+          aria-selected={boardPeriod === p}
+          className={`racer-lb-tab font-pixel${
+            boardPeriod === p ? " racer-lb-tab-sel" : ""
+          }`}
+          onClick={() => selectPeriod(p)}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   );
 
@@ -928,6 +1107,7 @@ export function TwingoRacer() {
               aria-label="Leaderboard"
             >
               <div className="racer-gameover-title">LEADERBOARD</div>
+              {boardTabs}
               {board && board.length > 0 && (
                 <ol className="racer-leaderboard">
                   {board.map((s, i) => (
@@ -1125,6 +1305,8 @@ export function TwingoRacer() {
             <div className="racer-leaderboard-rank">RANK #{myRank}</div>
           )}
 
+          {boardTabs}
+
           {board && board.length > 0 && (
             <ol className="racer-leaderboard">
               {board.map((s, i) => (
@@ -1269,32 +1451,39 @@ export function TwingoRacer() {
         </button>
       )}
 
+      {/* touch camera toggle: docks left of the mute button with the same
+          chrome — it used to sit between the bottom touch pads, right on
+          top of the car on phones */}
+      {screen === "playing" && coarse && !gameOver && cockpitReady && (
+        <button
+          type="button"
+          className={`racer-cam-touch font-pixel${view === "cockpit" ? " racer-cam-on" : ""}`}
+          onClick={toggleView}
+          aria-label="Toggle camera view"
+        >
+          CAM
+        </button>
+      )}
+
       {screen === "playing" && coarse && (
         <div className="racer-touch" aria-hidden="true">
-          <div className="racer-touch-group">
-            <button
-              type="button"
-              className="racer-touch-btn font-pixel"
-              {...bindTouch("left")}
-            >
-              ◀
-            </button>
-            <button
-              type="button"
-              className="racer-touch-btn font-pixel"
-              {...bindTouch("right")}
-            >
-              ▶
-            </button>
-          </div>
-          {cockpitReady && (
-            <div className="racer-touch-group racer-touch-cam">
+          {/* steering pads drop out while TILT is on — the phone's lean
+              is the wheel then */}
+          {!tilt && (
+            <div className="racer-touch-group">
               <button
                 type="button"
-                className={`racer-touch-btn racer-cam-btn font-pixel${view === "cockpit" ? " racer-cam-on" : ""}`}
-                onClick={toggleView}
+                className="racer-touch-btn font-pixel"
+                {...bindTouch("left")}
               >
-                CAM
+                ◀
+              </button>
+              <button
+                type="button"
+                className="racer-touch-btn font-pixel"
+                {...bindTouch("right")}
+              >
+                ▶
               </button>
             </div>
           )}
