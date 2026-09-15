@@ -854,7 +854,9 @@ export function TwingoRacer() {
 
     // auto-pause when the tab loses focus/visibility — and drop every
     // held key, so a keyup lost while unfocused can't leave the
-    // throttle stuck on (or silently off) when the tab returns
+    // throttle stuck on (or silently off) when the tab returns. A hidden
+    // tab also suspends the whole AudioContext: the pause menu only
+    // silences the car by design, but a locked phone must go FULLY quiet
     const autoPause = () => {
       if (document.hidden || !document.hasFocus()) {
         keysRef.current = {
@@ -865,6 +867,7 @@ export function TwingoRacer() {
         };
         setPaused(true);
       }
+      audioRef.current?.setHidden(document.hidden);
     };
     document.addEventListener("visibilitychange", autoPause);
     window.addEventListener("blur", autoPause);

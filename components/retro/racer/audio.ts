@@ -44,6 +44,9 @@ export interface RacerAudio {
   setMuted(muted: boolean): void;
   /** pause menu: silence the car (music keeps playing) */
   setPaused(paused: boolean): void;
+  /** tab hidden / screen locked: suspend the whole context so NOTHING
+      plays while the user can't see the game; resume on return */
+  setHidden(hidden: boolean): void;
   /** cockpit view: muffle the car — the cabin eats the highs and the
       outside tire noise, the low-end drone comes through */
   setInterior(interior: boolean): void;
@@ -420,6 +423,16 @@ export function createRacerAudio(): RacerAudio {
         if (brakeGain) brakeGain.gain.setTargetAtTime(0, t, 0.03);
         if (skidGain) skidGain.gain.setTargetAtTime(0, t, 0.03);
       }
+    },
+
+    setHidden(h) {
+      if (!ctx) return;
+      // suspended contexts freeze currentTime, so the music scheduler's
+      // 0.6 s lookahead just waits — resume continues seamlessly. A
+      // gesture-unlocked context may be resumed programmatically
+      if (h) void ctx.suspend();
+      else void ctx.resume(); // muted = master gain 0 anyway; a stopped
+      // context has no scheduled sources, so this is always safe
     },
 
     setInterior(i) {

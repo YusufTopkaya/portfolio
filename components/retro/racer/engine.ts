@@ -160,7 +160,7 @@ const BOOST_MAX_T = 6;
 // km driven per difficulty level — every step sharpens curves, steepens
 // hills and pushes the gas cans wider (see curveGain/hillGain/canSpread)
 const LEVEL_EVERY_KM = 2;
-const FAR_OFFROAD = 2.0; // |playerX| at/above this = stranded past the trees
+const FAR_OFFROAD = 2.5; // |playerX| at/above this = stranded past the trees (2.5, not 2.0: a run-off window so a slide can be caught before the respawn teleport)
 const LANES = 3;
 
 const COLORS = {
@@ -1353,6 +1353,11 @@ export function createEngine(opts: {
   // ×1.4), soft enough that a clean can chain survives deep into the
   // levels — and below 2 dots the mercy can covers a dry stretch
   let curveGain = 1;
+  // physics-only grip gain: the world RENDERS with curveGain, but the
+  // centrifugal push uses this softer curve so a hard bend's hold speed
+  // bottoms out near ~64 km/h (cap 1.3) instead of an unmakeable ~52 —
+  // sharp look, fair grip
+  let curveGrip = 1;
   let hillGain = 1;
   let canSpread = 1;
   let drainGain = 1;
@@ -1485,6 +1490,7 @@ export function createEngine(opts: {
     if (newLevel > state.level) {
       state.level = newLevel;
       curveGain = Math.min(1.6, 1 + 0.08 * (state.level - 1));
+      curveGrip = Math.min(1.3, 1 + 0.04 * (state.level - 1));
       hillGain = Math.min(1.5, 1 + 0.07 * (state.level - 1));
       canSpread = Math.min(1.35, 1 + 0.05 * (state.level - 1));
       // OutRun's shrinking stage bonus, kept soft: +5%/level capped at
@@ -1511,13 +1517,21 @@ export function createEngine(opts: {
 
     state.playerX += dx * pendingSteer;
     // centrifugal push on curves (Jake Gordon), tuned so every bend has a
-    // real grip-limited corner speed — the balance p·curve·CENTRIFUGAL = 1
-    // gives easy ≈ flat-out, medium ≈ 125 km/h, hard ≈ 85 km/h. Above the
-    // limit the tires scrub: speed bleeds even while you stay on the
+    // real grip-limited corner speed — the balance p·curve·grip·CENTRIFUGAL
+    // = 1 gives easy ≈ flat-out, medium ≈ 125→96 km/h, hard ≈ 85→64 km/h
+    // as curveGrip ramps to its 1.3 cap (the world keeps looking sharper
+    // via curveGain, but the slide stays makeable with braking). Above
+    // the limit the tires scrub: speed bleeds even while you stay on the
     // tarmac, so 180 km/h through a bend is never free
-    const lateral = speedPercent * playerSegment.curve * curveGain * CENTRIFUGAL;
+    const lateralRaw =
+      speedPercent * playerSegment.curve * curveGrip * CENTRIFUGAL;
+    // slide-speed cap: a blown corner drifts the car out over ~a second
+    // (net 1.3 units/s against full lock) — enough time to feel it and
+    // catch the slide, never an instant eject past the trees. The scrub
+    // keeps using the raw force so the speed bleed stays honest
+    const lateral = Math.max(-1.6, Math.min(1.6, lateralRaw));
     state.playerX -= dx * lateral;
-    const scrub = Math.max(0, Math.abs(lateral) - 1);
+    const scrub = Math.max(0, Math.abs(lateralRaw) - 1);
     if (scrub > 0 && state.speed > 0) {
       state.speed -= scrub * TIRE_SCRUB * MAX_SPEED * dt;
     }
@@ -1632,13 +1646,17 @@ export function createEngine(opts: {
       state.speed = 0;
     }
 
-    // the tank is a clock that ticks a little faster every level; at
-    // zero the engine dies and the car coasts — a can grabbed while
-    // coasting still revives it (OutRun's coast-over-checkpoint mercy)
+    // the tank is a clock that ticks a little faster every level: nearly
+    // flat per second, so pace beats crawling. At zero the engine dies
+    // and the car coasts — a can grabbed while coasting still revives it
+    // (OutRun's coast-over-checkpoint mercy). BOOST burns the overflow,
+    // not the tank — a reward, not a tax
     const fuelDrain =
-      dt *
-      (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent) *
-      drainGain;
+      state.boostT > 0
+        ? 0
+        : dt *
+          (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent) *
+          drainGain;
     lvlFuelAcc += fuelDrain;
     state.fuel = Math.max(0, state.fuel - fuelDrain);
     state.boostT = Math.max(0, state.boostT - dt);
