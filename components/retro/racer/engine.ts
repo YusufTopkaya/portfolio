@@ -1666,9 +1666,12 @@ export function createEngine(opts: {
           // the overflow burns off as BOOST seconds instead
           const overflow = state.fuel + amount - FUEL_MAX;
           if (overflow > 0) {
+            // floor at half a second: a can grabbed at 7.01 dots only
+            // overflows 0.01, but the steer still cost something — a
+            // 0.02 s boost would be an insult, not a reward
             state.boostT = Math.min(
               BOOST_MAX_T,
-              state.boostT + overflow * BOOST_PER_DOT,
+              state.boostT + Math.max(overflow * BOOST_PER_DOT, 0.5),
             );
             lastBoostAt = state.time;
           }
@@ -1870,6 +1873,20 @@ export function createEngine(opts: {
     // grass colour of the farthest line drawn — the crest gap-fill must
     // continue exactly the shade the ground ended with
     let farGrass = COLORS.dark.grass;
+    // the nearest line that actually got painted: on steep descents every
+    // closer segment is skipped (the road falls away below the viewport),
+    // so the strip below the first painted line would keep stale pixels
+    // from previous frames — the near gap-fill below continues it
+    let nearLine: {
+      x1: number;
+      y1: number;
+      w1: number;
+      x2: number;
+      y2: number;
+      w2: number;
+      grass: string;
+      road: string;
+    } | null = null;
     let x = 0;
     let dx = -(baseSegment.curve * curveGain * basePercent);
     const cameraZBase = state.position;
@@ -1915,6 +1932,18 @@ export function createEngine(opts: {
       );
       maxY = segment.p2.screen.y;
       farGrass = segment.color.grass;
+      if (!nearLine) {
+        nearLine = {
+          x1: segment.p1.screen.x,
+          y1: segment.p1.screen.y,
+          w1: segment.p1.screen.w,
+          x2: segment.p2.screen.x,
+          y2: segment.p2.screen.y,
+          w2: segment.p2.screen.w,
+          grass: segment.color.grass,
+          road: segment.color.road,
+        };
+      }
 
       if (n === 0) {
         roadNearX = segment.p2.screen.x;
@@ -1930,6 +1959,28 @@ export function createEngine(opts: {
     if (maxY > groundTop) {
       ctx.fillStyle = farGrass;
       ctx.fillRect(0, groundTop, width, maxY - groundTop);
+    }
+
+    // near gap-fill: the descent mirror of the crest fill above. Diving
+    // into a valley, every segment closer than the valley floor fails the
+    // p2 >= p1 visibility test, so the nearest painted line can hang
+    // above the buffer's bottom edge for a few frames — an unpainted
+    // strip there keeps stale pixels (ghost car parts, old sparkle
+    // frames). Continue the ground and extrapolate the road edges down.
+    if (nearLine && nearLine.y1 < height) {
+      ctx.fillStyle = nearLine.grass;
+      ctx.fillRect(0, nearLine.y1, width, height - nearLine.y1);
+      const t = (height - nearLine.y1) / Math.max(1, nearLine.y1 - nearLine.y2);
+      const ex = nearLine.x1 + (nearLine.x1 - nearLine.x2) * t;
+      const ew = nearLine.w1 + (nearLine.w1 - nearLine.w2) * t;
+      ctx.fillStyle = nearLine.road;
+      ctx.beginPath();
+      ctx.moveTo(nearLine.x1 - nearLine.w1, nearLine.y1);
+      ctx.lineTo(nearLine.x1 + nearLine.w1, nearLine.y1);
+      ctx.lineTo(ex + ew, height);
+      ctx.lineTo(ex - ew, height);
+      ctx.closePath();
+      ctx.fill();
     }
 
     // ── roadside sprites, far to near (painter's algorithm; Lou: keep
@@ -2467,32 +2518,48 @@ export function createEngine(opts: {
 
     // level banner: a brief LEVEL X flash when a new distance level turns
     // the heat up, with the finished level's report card underneath —
-    // time, average pace, fuel burn and average multiplier
+    // time, average pace, fuel burn and average multiplier. Both lines
+    // float over busy sky/mountain art, so they sit on a translucent
+    // dark band: the tiny stats line was unreadable without it
     const lvlAge = state.time - levelUpAt;
     if (state.level > 1 && lvlAge < 3.2 && !state.gameOver) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
-      const msg = `LEVEL ${state.level}`;
-      ctx.font = `bold ${Math.round(11 * ui)}px monospace`;
-      const tw = ctx.measureText(msg).width;
-      const tx = Math.round(width / 2 - tw / 2);
-      const ty = Math.round(height * 0.3);
-      ctx.globalAlpha = Math.max(
+      const fade = Math.max(
         0,
         Math.min(1, Math.min(lvlAge / 0.2, (3.2 - lvlAge) / 0.5)),
       );
+      const msg = `LEVEL ${state.level}`;
+      ctx.font = `bold ${Math.round(11 * ui)}px monospace`;
+      const tw = ctx.measureText(msg).width;
+      const sub = lastLevelStats
+        ? `${Math.round(lastLevelStats.secs)}S · AVG ${Math.round(lastLevelStats.avgKmh)} KM/H · ` +
+          `${lastLevelStats.dotsPerMin.toFixed(1)} DOT/MIN · x${lastLevelStats.avgMult.toFixed(1)} AVG`
+        : null;
+      let sw = 0;
+      if (sub) {
+        ctx.font = `bold ${Math.round(7 * ui)}px monospace`;
+        sw = ctx.measureText(sub).width;
+      }
+      const tx = Math.round(width / 2 - tw / 2);
+      const ty = Math.round(height * 0.3);
+      // backing band
+      const bandW = Math.max(tw, sw) + 10 * ui;
+      ctx.globalAlpha = fade * 0.6;
+      ctx.fillStyle = "#0d1f0a";
+      ctx.fillRect(
+        Math.round(width / 2 - bandW / 2),
+        Math.round(ty - 13 * ui),
+        Math.round(bandW),
+        Math.round((sub ? 30 : 17) * ui),
+      );
+      ctx.globalAlpha = fade;
       ctx.fillStyle = "#141611";
       ctx.fillText(msg, tx + 2, ty + 2);
       ctx.fillStyle = "#d7ff9e";
       ctx.fillText(msg, tx, ty);
-      if (lastLevelStats) {
-        const s = lastLevelStats;
-        const sub =
-          `${Math.round(s.secs)}S · AVG ${Math.round(s.avgKmh)} KM/H · ` +
-          `${s.dotsPerMin.toFixed(1)} DOT/MIN · x${s.avgMult.toFixed(1)} AVG`;
-        ctx.font = `bold ${Math.round(6 * ui)}px monospace`;
-        const sw = ctx.measureText(sub).width;
+      if (sub) {
         const sx = Math.round(width / 2 - sw / 2);
-        const sy = ty + Math.round(12 * ui);
+        const sy = ty + Math.round(13 * ui);
         ctx.fillStyle = "#141611";
         ctx.fillText(sub, sx + 1, sy + 1);
         ctx.fillStyle = "#d7ff9e";
