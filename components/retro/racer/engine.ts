@@ -1258,6 +1258,34 @@ export interface RacerEngine {
   /** dev-only (e2e probes): the next active gas can ahead of the car,
       with its effective lateral position after the level spread */
   debugNextPickup?: () => { absIndex: number; x: number; big: boolean } | null;
+  /** dev-only (e2e probes): last render's road-fill diagnostics — how far
+      above the buffer bottom the nearest painted road line sat (a large
+      gap means the near gap-fill painted a big fake road) plus cull counts */
+  probe?: {
+    nearGap: number;
+    firstPainted: number;
+    culledBehind: number;
+    culledBackface: number;
+    culledMaxY: number;
+    respawn: number;
+    offRoad: boolean;
+    baseIndex: number;
+    position: number;
+    firstIdx: number;
+    genCount: number;
+    yAhead: number[];
+    profile: number[];
+    segDiag: {
+      n: number;
+      p1z: number;
+      p1camY: number;
+      p1sy: number;
+      p2camY: number;
+      p2sy: number;
+      wy: number;
+      culled: string;
+    }[];
+  };
 }
 
 export function createEngine(opts: {
@@ -1286,6 +1314,9 @@ export function createEngine(opts: {
   clusterTopLeft?: boolean;
   /** fired when the car drives through a gas can (big = the 2-dot ones) */
   onPickup?: (big: boolean) => void;
+  /** dev-only (e2e probes): collect per-render road diagnostics into
+      `probe` — off in production so the game ships zero per-frame garbage */
+  debug?: boolean;
 }): RacerEngine {
   const {
     segments,
@@ -1296,6 +1327,7 @@ export function createEngine(opts: {
     car,
     gasCan,
     reduceMotion,
+    debug = false,
   } = opts;
   const cockpit = opts.cockpit ?? null;
   // mutable so resize() can re-fit the renderer when the device rotates
@@ -1362,19 +1394,6 @@ export function createEngine(opts: {
   let canSpread = 1;
   let drainGain = 1;
   let levelUpAt = -10; // engine time of the last level-up (banner)
-  // per-level report card, shown on the LEVEL X banner: how fast the
-  // level just finished went — time, average pace, fuel burn, average
-  // multiplier. Accumulators reset at every level-up
-  let lvlStartAt = 0;
-  let lvlStartKm = 0;
-  let lvlFuelAcc = 0;
-  let lvlMultAcc = 0;
-  let lastLevelStats: {
-    secs: number;
-    avgKmh: number;
-    dotsPerMin: number;
-    avgMult: number;
-  } | null = null;
   // engine time of the last pickup that produced BOOST (popup variant)
   let lastBoostAt = -10;
   // mercy can: one rescue can per dry spell, injected by update() when
@@ -1383,6 +1402,23 @@ export function createEngine(opts: {
   // engine time of the last gas-can pickup — drives the collect feedback
   // (sparkle burst at the car, gauge flash, rising "+1")
   let lastPickupAt = -10;
+  // dev-only render diagnostics, refreshed every render (see RacerEngine.probe)
+  let probe: NonNullable<RacerEngine["probe"]> = {
+    nearGap: 0,
+    firstPainted: -1,
+    culledBehind: 0,
+    culledBackface: 0,
+    culledMaxY: 0,
+    respawn: 0,
+    offRoad: false,
+    baseIndex: -1,
+    position: 0,
+    firstIdx: 0,
+    genCount: 0,
+    yAhead: [],
+    profile: [],
+    segDiag: [],
+  };
   // scarcity ramps with score: every 4000 points hides another 1% of the
   // track's cans (capped at 50% so the track never fully dries out).
   // Big cans (every 10th) resist at half the rate — the relief valve must
@@ -1498,21 +1534,6 @@ export function createEngine(opts: {
       // a missed can is a setback, not a guaranteed death sentence
       drainGain = Math.min(1.4, 1 + 0.05 * (state.level - 1));
       levelUpAt = state.time;
-      // wrap up the finished level's report card for the banner
-      const lvlSecs = state.time - lvlStartAt;
-      lastLevelStats = {
-        secs: lvlSecs,
-        avgKmh:
-          lvlSecs > 0.5
-            ? (state.distanceKm - lvlStartKm) / (lvlSecs / 3600)
-            : 0,
-        dotsPerMin: lvlSecs > 1 ? (lvlFuelAcc / lvlSecs) * 60 : 0,
-        avgMult: lvlSecs > 0.5 ? lvlMultAcc / lvlSecs : 1,
-      };
-      lvlStartAt = state.time;
-      lvlStartKm = state.distanceKm;
-      lvlFuelAcc = 0;
-      lvlMultAcc = 0;
     }
 
     state.playerX += dx * pendingSteer;
@@ -1657,7 +1678,6 @@ export function createEngine(opts: {
         : dt *
           (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent) *
           drainGain;
-    lvlFuelAcc += fuelDrain;
     state.fuel = Math.max(0, state.fuel - fuelDrain);
     state.boostT = Math.max(0, state.boostT - dt);
     if (state.fuel <= 0 && state.speed <= 0) state.gameOver = true;
@@ -1754,7 +1774,6 @@ export function createEngine(opts: {
               ? 2
               : 1;
     state.score += ((kmh * dt) / 3.6) * state.multiplier;
-    lvlMultAcc += state.multiplier * dt;
 
     // horizon drifts opposite the current curve, faster with speed
     // (rates eased 30% down from Jake's 2.5/5 — gentler mountain parallax)
@@ -1908,6 +1927,23 @@ export function createEngine(opts: {
     let x = 0;
     let dx = -(baseSegment.curve * curveGain * basePercent);
     const cameraZBase = state.position;
+    // dev-only render diagnostics for the e2e road-fill probes
+    let firstPainted = -1;
+    let culledBehind = 0;
+    let culledBackface = 0;
+    let culledMaxY = 0;
+    // ground truth for the first 12 slots: same-pass projection values, so
+    // a probe can distinguish real backface culls from stale reads
+    let segDiag: {
+      n: number;
+      p1z: number;
+      p1camY: number;
+      p1sy: number;
+      p2camY: number;
+      p2sy: number;
+      wy: number;
+      culled: string;
+    }[] = [];
     // near-edge road geometry, captured for the road-parallel wind streaks
     let roadNearX = width / 2;
     let roadNearW = width * 0.45;
@@ -1929,13 +1965,37 @@ export function createEngine(opts: {
       dx += segment.curve * curveGain;
 
       // behind the camera, climbing past the previous line, or hidden by a hill
+      let cullReason = "";
       if (
         segment.p1.camera.z <= CAMERA_DEPTH ||
         segment.p2.screen.y >= segment.p1.screen.y ||
         segment.p2.screen.y >= maxY
       ) {
-        continue;
+        if (segment.p1.camera.z <= CAMERA_DEPTH) {
+          culledBehind++;
+          cullReason = "behind";
+        } else if (segment.p2.screen.y >= segment.p1.screen.y) {
+          culledBackface++;
+          cullReason = "backface";
+        } else {
+          culledMaxY++;
+          cullReason = "maxY";
+        }
       }
+      if (debug && n < 12) {
+        segDiag.push({
+          n,
+          p1z: Math.round(segment.p1.camera.z),
+          p1camY: Math.round(segment.p1.camera.y),
+          p1sy: segment.p1.screen.y,
+          p2camY: Math.round(segment.p2.camera.y),
+          p2sy: segment.p2.screen.y,
+          wy: Math.round(segment.p2.world.y),
+          culled: cullReason,
+        });
+      }
+      if (cullReason) continue;
+      if (firstPainted < 0) firstPainted = n;
 
       renderSegment(
         ctx,
@@ -1985,6 +2045,39 @@ export function createEngine(opts: {
     // above the buffer's bottom edge for a few frames — an unpainted
     // strip there keeps stale pixels (ghost car parts, old sparkle
     // frames). Continue the ground and extrapolate the road edges down.
+    const nearGap = nearLine ? height - nearLine.y1 : 0;
+    if (debug) {
+      // dev-only: the projected y of a few sample segments ahead + the
+      // elevation profile, so e2e probes can see WHY segments got culled
+      const sampleIdx = [1, 2, 4, 8, 16, 40, 90, 150] as const;
+      const yAhead = sampleIdx.map((n) => {
+        const s = segments[ringSlot(baseSegment.index + n)];
+        return s.index === baseSegment.index + n ? s.p2.screen.y : -1;
+      });
+      const wyBase = segments[ringSlot(baseSegment.index)].p1.world.y;
+      const profile = sampleIdx.map((n) => {
+        const s = segments[ringSlot(baseSegment.index + n)];
+        return s.index === baseSegment.index + n
+          ? Math.round(s.p2.world.y - wyBase)
+          : -99999;
+      });
+      probe = {
+        nearGap,
+        firstPainted,
+        culledBehind,
+        culledBackface,
+        culledMaxY,
+        respawn: state.respawn,
+        offRoad: state.offRoad,
+        baseIndex: baseSegment.index,
+        position: Math.round(state.position),
+        firstIdx: firstIndex(),
+        genCount: generatedCount(),
+        yAhead,
+        profile,
+        segDiag,
+      };
+    }
     if (nearLine && nearLine.y1 < height) {
       ctx.fillStyle = nearLine.grass;
       ctx.fillRect(0, nearLine.y1, width, height - nearLine.y1);
@@ -2535,54 +2628,23 @@ export function createEngine(opts: {
     }
 
     // level banner: a brief LEVEL X flash when a new distance level turns
-    // the heat up, with the finished level's report card underneath —
-    // time, average pace, fuel burn and average multiplier. Both lines
-    // float over busy sky/mountain art, so they sit on a translucent
-    // dark band: the tiny stats line was unreadable without it
+    // the heat up — quick fade in, hold, fade out
     const lvlAge = state.time - levelUpAt;
-    if (state.level > 1 && lvlAge < 3.2 && !state.gameOver) {
+    if (state.level > 1 && lvlAge < 2.2 && !state.gameOver) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
-      const fade = Math.max(
-        0,
-        Math.min(1, Math.min(lvlAge / 0.2, (3.2 - lvlAge) / 0.5)),
-      );
       const msg = `LEVEL ${state.level}`;
       ctx.font = `bold ${Math.round(11 * ui)}px monospace`;
       const tw = ctx.measureText(msg).width;
-      const sub = lastLevelStats
-        ? `${Math.round(lastLevelStats.secs)}S · AVG ${Math.round(lastLevelStats.avgKmh)} KM/H · ` +
-          `${lastLevelStats.dotsPerMin.toFixed(1)} DOT/MIN · x${lastLevelStats.avgMult.toFixed(1)} AVG`
-        : null;
-      let sw = 0;
-      if (sub) {
-        ctx.font = `bold ${Math.round(7 * ui)}px monospace`;
-        sw = ctx.measureText(sub).width;
-      }
       const tx = Math.round(width / 2 - tw / 2);
       const ty = Math.round(height * 0.3);
-      // backing band
-      const bandW = Math.max(tw, sw) + 10 * ui;
-      ctx.globalAlpha = fade * 0.6;
-      ctx.fillStyle = "#0d1f0a";
-      ctx.fillRect(
-        Math.round(width / 2 - bandW / 2),
-        Math.round(ty - 13 * ui),
-        Math.round(bandW),
-        Math.round((sub ? 30 : 17) * ui),
+      ctx.globalAlpha = Math.max(
+        0,
+        Math.min(1, Math.min(lvlAge / 0.2, (2.2 - lvlAge) / 0.5)),
       );
-      ctx.globalAlpha = fade;
       ctx.fillStyle = "#141611";
       ctx.fillText(msg, tx + 2, ty + 2);
       ctx.fillStyle = "#d7ff9e";
       ctx.fillText(msg, tx, ty);
-      if (sub) {
-        const sx = Math.round(width / 2 - sw / 2);
-        const sy = ty + Math.round(13 * ui);
-        ctx.fillStyle = "#141611";
-        ctx.fillText(sub, sx + 1, sy + 1);
-        ctx.fillStyle = "#d7ff9e";
-        ctx.fillText(sub, sx, sy);
-      }
       ctx.globalAlpha = 1;
     }
   }
@@ -2606,7 +2668,7 @@ export function createEngine(opts: {
           return null;
         };
 
-  return { update, render, resize, state, debugNextPickup };
+  return { update, render, resize, state, debugNextPickup, get probe() { return probe; } };
 }
 
 export const ENGINE_CONSTANTS = {

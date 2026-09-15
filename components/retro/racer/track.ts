@@ -55,10 +55,15 @@ export interface TrackGenerator {
   generated: () => number;
 }
 
-// ring capacity: ~10 s of flat-out driving ahead (AHEAD_SEGMENTS) plus a
-// long tail for the rearview mirror — the engine renders only 180
-// segments ahead and mirrors 20 behind, everything else is cushion
-const CAPACITY = 1024;
+// ring capacity: ~10 s of flat-out driving ahead (AHEAD_SEGMENTS) plus the
+// longest single section the generator can deal (a grade-capped rolling-
+// hills run is ~540 segments and extend() fills whole sections, so it can
+// overshoot its target by that much) plus a long tail for the rearview
+// mirror — the engine renders 180 ahead and mirrors 20 behind, everything
+// else is cushion. The window must NEVER start ahead of the car: findSegment
+// clamps to the oldest segment and would render the world from a wrong
+// offset (the road "teleport" glitch), so the margin below is load-bearing.
+const CAPACITY = 2048;
 
 export function createTrackGenerator(seed = 427): TrackGenerator {
   const rng = mulberry32(seed);
@@ -114,7 +119,17 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
 
   /** Jake Gordon's addRoad: height eases in over `enter`, holds, eases out.
       dy is in segmentLength units, exactly like the reference:
-      endY = startY + y * segmentLength (LOW/MEDIUM/HIGH = 20/40/60) */
+      endY = startY + y * segmentLength (LOW/MEDIUM/HIGH = 20/40/60).
+
+      Steepness cap: the cosine easing peaks at ~π/2 × the average grade, and
+      past ~0.35 the pseudo-3D math breaks visibly — on a descent the road
+      compresses into a marking-less sliver at the screen edge, and from
+      grade ~1.2 up the whole far side fails the backface test and the road
+      simply VANISHES behind the crest (the "yol boşalıyor" glitch). hillGain
+      (≤1.5) multiplies projected heights, so the stored grade is capped at
+      0.35 to keep the effective grade ≤ ~0.5. The cap stretches the section
+      (longer hill, same amplitude), never flattens the hill itself. */
+  const MAX_GRADE = 0.35;
   const addRoad = (
     enter: number,
     hold: number,
@@ -125,19 +140,23 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
     const startY = lastY;
     const endY = startY + dy * SEGMENT_LENGTH;
     const total = enter + hold + leave;
-    for (let n = 0; n < enter; n++) {
-      addSegment(
-        easeIn(0, curve, n / enter),
-        easeInOut(startY, endY, n / total),
-      );
+    // cosine easeInOut peaks at (π/2)·avg → need total ≥ (π/2)·|dy| / MAX_GRADE
+    const minTotal = Math.ceil(((Math.PI / 2) * Math.abs(dy)) / MAX_GRADE);
+    const stretch = Math.max(1, minTotal / total);
+    const e = Math.max(1, Math.round(enter * stretch));
+    const h = Math.max(1, Math.round(hold * stretch));
+    const l = Math.max(1, Math.round(leave * stretch));
+    const span = e + h + l;
+    for (let n = 0; n < e; n++) {
+      addSegment(easeIn(0, curve, n / e), easeInOut(startY, endY, n / span));
     }
-    for (let n = 0; n < hold; n++) {
-      addSegment(curve, easeInOut(startY, endY, (enter + n) / total));
+    for (let n = 0; n < h; n++) {
+      addSegment(curve, easeInOut(startY, endY, (e + n) / span));
     }
-    for (let n = 0; n < leave; n++) {
+    for (let n = 0; n < l; n++) {
       addSegment(
-        easeInOut(curve, 0, n / leave),
-        easeInOut(startY, endY, (enter + hold + n) / total),
+        easeInOut(curve, 0, n / l),
+        easeInOut(startY, endY, (e + h + n) / span),
       );
     }
     lastY = endY;

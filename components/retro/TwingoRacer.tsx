@@ -709,6 +709,7 @@ export function TwingoRacer() {
           reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
           onPickup: (big) => audioRef.current?.pickup(big),
+          debug: process.env.NODE_ENV !== "production",
         });
         setView(engineRef.current.state.view);
         // dev-only handle for e2e probes (speed, gear, …)
