@@ -123,6 +123,17 @@ export function TwingoRacer() {
   tiltRef.current = tilt;
   const steerRef = useRef(0);
   const tiltNeutralRef = useRef<number | null>(null);
+  /* tilt sensitivity, 1-10 (persisted): maps to the full-lock lean angle,
+     ~42° at 1 down to ~15° at 10 — higher = sharper response */
+  const [tiltSens, setTiltSens] = useState(() => {
+    if (typeof window !== "undefined") {
+      const n = Number(localStorage.getItem("twingo:tilt-sens"));
+      if (n >= 1 && n <= 10) return Math.round(n);
+    }
+    return 5;
+  });
+  const tiltSensRef = useRef(tiltSens);
+  tiltSensRef.current = tiltSens;
   /* cockpit sprites loaded — without them the toggle stays hidden */
   const [cockpitReady, setCockpitReady] =
     useState(
@@ -437,12 +448,25 @@ export function TwingoRacer() {
     });
   }, []);
 
+  /* tilt sensitivity slider (SETTINGS row, 1-10): step the full-lock
+     angle by ±3° per notch */
+  const adjustTiltSens = useCallback((delta: number) => {
+    audioRef.current?.menuMove();
+    setTiltSens((s) => {
+      const next = Math.max(1, Math.min(10, s + delta));
+      try {
+        localStorage.setItem("twingo:tilt-sens", String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
   /* tilt stream: the first sample after enabling is the neutral pose;
-     past a 5° deadzone, 30° of lean = full lock. Portrait steers on
-     gamma, landscape on beta (the axes swap when the phone turns), with
-     the sign flipped on the 270° side so "lean right" always steers
-     right. Output is smoothed and written to steerRef; the game loop
-     injects it into the input bag each frame */
+     past a 5° deadzone, lean up to the full-lock angle (sensitivity) =
+     full lock. Portrait steers on gamma, landscape on beta (the axes
+     swap when the phone turns), with the sign flipped on the 270° side
+     so "lean right" always steers right. Output is smoothed and written
+     to steerRef; the game loop injects it into the input bag each frame */
   useEffect(() => {
     if (!open || !tilt) return;
     const onOrient = (ev: DeviceOrientationEvent) => {
@@ -458,7 +482,8 @@ export function TwingoRacer() {
             : -(ev.beta ?? 0);
       if (tiltNeutralRef.current === null) tiltNeutralRef.current = raw;
       const rel = raw - tiltNeutralRef.current;
-      const mag = Math.max(0, Math.abs(rel) - 5) / 25;
+      const fullLock = 45 - tiltSensRef.current * 3;
+      const mag = Math.max(0, Math.abs(rel) - 5) / (fullLock - 5);
       const target = Math.sign(rel) * Math.min(1, mag);
       steerRef.current += (target - steerRef.current) * 0.25;
     };
@@ -519,8 +544,8 @@ export function TwingoRacer() {
       if (titleBoard) return;
       const k = ev.key.toLowerCase();
       if (titleSettingsOpen) {
-        // touch devices get a 4th row: TILT steering on/off
-        const rows = coarse ? 4 : 3;
+        // touch devices get two extra rows: TILT on/off + SENS slider
+        const rows = coarse ? 5 : 3;
         if (k === "arrowup" || k === "w") {
           ev.preventDefault();
           audioRef.current?.menuMove();
@@ -532,10 +557,12 @@ export function TwingoRacer() {
         } else if (k === "arrowleft" || k === "a") {
           ev.preventDefault();
           if (settingsRow === 3) toggleTilt();
+          else if (settingsRow === 4) adjustTiltSens(-1);
           else adjustVol(settingsRow, -1);
         } else if (k === "arrowright" || k === "d") {
           ev.preventDefault();
           if (settingsRow === 3) toggleTilt();
+          else if (settingsRow === 4) adjustTiltSens(1);
           else adjustVol(settingsRow, 1);
         } else if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
@@ -572,7 +599,7 @@ export function TwingoRacer() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, screen, titleBoard, titleSel, titleSettingsOpen, settingsRow, coarse, close, startRun, openTitleBoard, toggleMute, adjustVol, toggleTilt]);
+  }, [open, screen, titleBoard, titleSel, titleSettingsOpen, settingsRow, coarse, close, startRun, openTitleBoard, toggleMute, adjustVol, toggleTilt, adjustTiltSens]);
 
   /* rotating the phone mid-run flips the buffer between the landscape and
      portrait shapes; the engine keeps its state and just re-fits (resize) */
@@ -730,9 +757,9 @@ export function TwingoRacer() {
         const sel = pauseSelRef.current;
         if (pauseSettingsOpenRef.current) {
           // settings panel owns the keys while open: ↑/↓ picks a row,
-          // ←/→ adjusts it (volume step, or TILT on/off on touch), Enter
-          // closes back to the menu
-          const rows = coarseRef.current ? 4 : 3;
+          // ←/→ adjusts it (volume step, TILT on/off, SENS slider on
+          // touch), Enter closes back to the menu
+          const rows = coarseRef.current ? 5 : 3;
           if (k === "arrowup" || k === "w") {
             ev.preventDefault();
             audioRef.current?.menuMove();
@@ -744,10 +771,12 @@ export function TwingoRacer() {
           } else if (k === "arrowleft" || k === "a") {
             ev.preventDefault();
             if (settingsRowRef.current === 3) toggleTilt();
+            else if (settingsRowRef.current === 4) adjustTiltSens(-1);
             else adjustVol(settingsRowRef.current, -1);
           } else if (k === "arrowright" || k === "d") {
             ev.preventDefault();
             if (settingsRowRef.current === 3) toggleTilt();
+            else if (settingsRowRef.current === 4) adjustTiltSens(1);
             else adjustVol(settingsRowRef.current, 1);
           } else if (ev.key === "Enter" || ev.key === " ") {
             ev.preventDefault();
@@ -851,7 +880,7 @@ export function TwingoRacer() {
       // release any held keys so the car doesn't drive off on its own
       keysRef.current = { left: false, right: false, gas: false, brake: false };
     };
-  }, [open, screen, close, buf.w, buf.h, runId, toggleMute, adjustVol, toggleTilt, fetchBoard]);
+  }, [open, screen, close, buf.w, buf.h, runId, toggleMute, adjustVol, toggleTilt, adjustTiltSens, fetchBoard]);
 
   const bindTouch = (key: "left" | "right" | "gas" | "brake") => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -964,6 +993,53 @@ export function TwingoRacer() {
               e.stopPropagation();
               setSettingsRow(3);
               toggleTilt();
+            }}
+          >
+            ▶
+          </button>
+        </div>
+      )}
+      {/* touch-only 5th row: tilt sensitivity — how far the phone must
+          lean for full lock */}
+      {coarse && (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard control lives on the overlay's window-level handler
+        <div
+          className={`racer-settings-row${
+            settingsRow === 4 ? " racer-settings-row-sel" : ""
+          }`}
+          onClick={() => setSettingsRow(4)}
+        >
+          <button
+            type="button"
+            className="racer-settings-step font-pixel"
+            aria-label="Tilt sensitivity down"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSettingsRow(4);
+              adjustTiltSens(-1);
+            }}
+          >
+            ◀
+          </button>
+          <span className="racer-settings-label">SENS</span>
+          <span className="racer-settings-bar" aria-hidden="true">
+            {Array.from({ length: 10 }, (_, s) => (
+              <span
+                key={s}
+                className={`racer-settings-seg${
+                  s < tiltSens ? " racer-settings-seg-on" : ""
+                }`}
+              />
+            ))}
+          </span>
+          <button
+            type="button"
+            className="racer-settings-step font-pixel"
+            aria-label="Tilt sensitivity up"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSettingsRow(4);
+              adjustTiltSens(1);
             }}
           >
             ▶
@@ -1473,9 +1549,22 @@ export function TwingoRacer() {
 
       {screen === "playing" && coarse && (
         <div className="racer-touch" aria-hidden="true">
-          {/* steering pads drop out while TILT is on — the phone's lean
-              is the wheel then */}
-          {!tilt && (
+          {/* two-thumb corners: with TILT the phone is the wheel, so the
+              pads become brake (left thumb) and gas (right thumb) at the
+              far corners — a single remaining group would collapse to
+              the left under space-between and both pedals would end up
+              under one thumb. Without TILT: steer left, pedals right */}
+          {tilt ? (
+            <div className="racer-touch-group">
+              <button
+                type="button"
+                className="racer-touch-btn font-pixel"
+                {...bindTouch("brake")}
+              >
+                ▼
+              </button>
+            </div>
+          ) : (
             <div className="racer-touch-group">
               <button
                 type="button"
@@ -1493,22 +1582,34 @@ export function TwingoRacer() {
               </button>
             </div>
           )}
-          <div className="racer-touch-group">
-            <button
-              type="button"
-              className="racer-touch-btn font-pixel"
-              {...bindTouch("gas")}
-            >
-              ▲
-            </button>
-            <button
-              type="button"
-              className="racer-touch-btn font-pixel"
-              {...bindTouch("brake")}
-            >
-              ▼
-            </button>
-          </div>
+          {tilt ? (
+            <div className="racer-touch-group">
+              <button
+                type="button"
+                className="racer-touch-btn font-pixel"
+                {...bindTouch("gas")}
+              >
+                ▲
+              </button>
+            </div>
+          ) : (
+            <div className="racer-touch-group">
+              <button
+                type="button"
+                className="racer-touch-btn font-pixel"
+                {...bindTouch("gas")}
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                className="racer-touch-btn font-pixel"
+                {...bindTouch("brake")}
+              >
+                ▼
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

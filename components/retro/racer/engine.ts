@@ -1879,6 +1879,9 @@ export function createEngine(opts: {
 
     for (let n = 0; n < DRAW_DISTANCE; n++) {
       const segment = segments[ringSlot(baseSegment.index + n)];
+      // never paint stale ring data: if the generator hasn't reached this
+      // slot it still holds an overwritten segment from 1024 indices back
+      if (segment.index !== baseSegment.index + n) break;
       segment.clip = maxY;
 
       const camZ = cameraZBase;
@@ -1933,6 +1936,7 @@ export function createEngine(opts: {
     //    them sorted by z and scale by the line's projection factor) ──
     for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
       const segment = segments[ringSlot(baseSegment.index + n)];
+      if (segment.index !== baseSegment.index + n) continue; // stale ring slot
       const pk = segment.pickup;
       if (!pk && segment.sprites.length === 0) continue;
 

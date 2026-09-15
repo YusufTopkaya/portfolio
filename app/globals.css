@@ -666,10 +666,15 @@ html.crt-boot::after {
 }
 
 /* the curved glass: proportional corner radii keep the tube look at any
-   screen size, inner shadow sells the depth of the curved corners */
+   screen size, inner shadow sells the depth of the curved corners.
+   isolation: the border-radius + overflow clip wraps a canvas that
+   repaints 60×/s — on Android Chrome that layer combo can composite
+   stale offsets (duplicated/smeared frame); a dedicated stacking
+   context keeps the clip local to fresh content */
 .racer-screen {
   position: relative;
   overflow: hidden;
+  isolation: isolate;
   border-radius: 4% / 5.5%;
   background: #000;
   box-shadow:
