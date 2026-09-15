@@ -1934,7 +1934,7 @@ export function createEngine(opts: {
     let culledMaxY = 0;
     // ground truth for the first 12 slots: same-pass projection values, so
     // a probe can distinguish real backface culls from stale reads
-    let segDiag: {
+    const segDiag: {
       n: number;
       p1z: number;
       p1camY: number;
