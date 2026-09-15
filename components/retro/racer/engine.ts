@@ -139,6 +139,7 @@ const TIRE_SCRUB = 0.23;
 const GEAR_TOPS = [45, 80, 115, 150, 180];
 const SHIFT_TIME = 0.28;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
+const PICKUP_GRACE_T = 0.5; // fuel burns free for this long after a can grab
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank is the run's death clock, OutRun-style: the drain is (nearly)
 // FLAT per second, so fuel-per-km falls monotonically with speed —
@@ -1402,6 +1403,10 @@ export function createEngine(opts: {
   // engine time of the last gas-can pickup — drives the collect feedback
   // (sparkle burst at the car, gauge flash, rising "+1")
   let lastPickupAt = -10;
+  // fuel sip grace right after a pickup: the gauge just lit up, so the
+  // first 0.5 s of the new tank burn for free — grabbing a can at a hot
+  // level no longer feels like the drain instantly eating the reward
+  let pickupGrace = 0;
   // dev-only render diagnostics, refreshed every render (see RacerEngine.probe)
   let probe: NonNullable<RacerEngine["probe"]> = {
     nearGap: 0,
@@ -1673,13 +1678,14 @@ export function createEngine(opts: {
     // (OutRun's coast-over-checkpoint mercy). BOOST burns the overflow,
     // not the tank — a reward, not a tax
     const fuelDrain =
-      state.boostT > 0
+      state.boostT > 0 || pickupGrace > 0
         ? 0
         : dt *
           (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent) *
           drainGain;
     state.fuel = Math.max(0, state.fuel - fuelDrain);
     state.boostT = Math.max(0, state.boostT - dt);
+    pickupGrace = Math.max(0, pickupGrace - dt);
     if (state.fuel <= 0 && state.speed <= 0) state.gameOver = true;
 
     if (state.respawn > 0) {
@@ -1716,6 +1722,7 @@ export function createEngine(opts: {
           state.fuel = Math.min(FUEL_MAX, state.fuel + amount);
           seg.pickup = undefined;
           lastPickupAt = state.time;
+          pickupGrace = PICKUP_GRACE_T;
           opts.onPickup?.(pk.big ?? false);
         }
       }
@@ -2628,7 +2635,9 @@ export function createEngine(opts: {
     }
 
     // level banner: a brief LEVEL X flash when a new distance level turns
-    // the heat up — quick fade in, hold, fade out
+    // the heat up — quick fade in, hold, fade out. Under it, the level's
+    // fuel-consumption multiplier in the same face but the accent orange:
+    // the number that tells you how much hungrier this stage runs
     const lvlAge = state.time - levelUpAt;
     if (state.level > 1 && lvlAge < 2.2 && !state.gameOver) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
@@ -2645,6 +2654,14 @@ export function createEngine(opts: {
       ctx.fillText(msg, tx + 2, ty + 2);
       ctx.fillStyle = "#d7ff9e";
       ctx.fillText(msg, tx, ty);
+      const sub = `FUEL x${drainGain.toFixed(2)}`;
+      const sw = ctx.measureText(sub).width;
+      const sx = Math.round(width / 2 - sw / 2);
+      const sy = ty + Math.round(14 * ui);
+      ctx.fillStyle = "#141611";
+      ctx.fillText(sub, sx + 2, sy + 2);
+      ctx.fillStyle = "#e2703a";
+      ctx.fillText(sub, sx, sy);
       ctx.globalAlpha = 1;
     }
   }
