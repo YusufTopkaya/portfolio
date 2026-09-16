@@ -87,10 +87,11 @@ export interface Segment {
   p2: SegmentPoint;
   sprites: SegmentSprite[];
   /** collectible gas can on the tarmac, x in road half-width units
-      (±1 = edge). big: every 10th can — worth 2 gauge dots, drawn larger,
-      and resists scarcity hiding at half rate. ordinal: position in the
-      can sequence, drives the golden-ratio hiding pattern */
-  pickup?: { x: number; big?: boolean; ordinal: number };
+      (±1 = edge). big: every 10th can — worth 3 gauge dots, drawn larger,
+      and resists scarcity hiding at half rate. golden: rare (~3%) regular
+      can — 3 dots + 1 s BOOST, never scarcity-hidden. ordinal: position
+      in the can sequence, drives the golden-ratio hiding pattern */
+  pickup?: { x: number; big?: boolean; golden?: boolean; ordinal: number };
   color: typeof COLORS.light | typeof COLORS.dark;
   clip: number;
 }
@@ -152,26 +153,45 @@ const FUEL_DRAIN_IDLE = 0.09; // gauge dots per second, the clock itself
 // (speedPercent²), deliberately too weak to bend the economy curve
 const FUEL_DRAIN_SPEED = 0.04;
 // overflow fuel (a can grabbed with a near-full tank) burns off as BOOST
-// instead of going to waste: 2 s per wasted dot, top speed 180 → ~202 km/h
+// instead of going to waste: 1.25 s per wasted dot, top speed 180 → ~194 km/h
 // with a harder pull — full-tank can chains stay worth steering for
-const BOOST_TOP = 1.12;
+const BOOST_TOP = 1.08;
 const BOOST_ACCEL = 1.3;
-const BOOST_PER_DOT = 2;
-// streak rewards pay up to +8 s on their own, so the shared pool tops at 10
-const BOOST_MAX_T = 10;
-// fuel-chain streak ladder, repeating every 10 cans: +1.5 s at 3, +3 s at
-// 5, +5 s at each multiple of 10 (10/20/30…). A full clean lap pays 9.5 s,
-// which beats the 8 s a player earns by DELIBERATELY breaking a chain
-// after 10 and re-farming 3/5 (4.5 s per 5 cans) — staying clean always
-// wins, so there's never an incentive to drop a combo on purpose
+const BOOST_PER_DOT = 1.25;
+// streak rewards pay up to +3.5 s on their own, so the shared pool tops at 7
+const BOOST_MAX_T = 7;
+// golden can: 3 dots + a flat 1 s of BOOST — a small sweet bonus that
+// doesn't overshadow the streak ladder
+const GOLDEN_BOOST_T = 1;
+// fuel-chain streak ladder, repeating every 10 cans: +1 s at 3, +2 s at
+// 5, +3.5 s at each multiple of 10 (10/20/30…). A full clean lap pays 6.5 s,
+// which beats the 6 s a player earns by DELIBERATELY breaking a chain
+// after 10 and re-farming 3/5 (3 s per 5 cans) — staying clean always
+// wins, so there's never an incentive to drop a combo on purpose.
+// On top of the seconds, a completed lap pays +2 fuel dots (LAP_FUEL):
+// the deep-game economy is calibrated so a PERFECT chain is sustainable
+// forever while even a 1-in-10 miss rate slowly bleeds out — and the lap
+// bonus is exactly the margin a misser never earns, since a single miss
+// resets the streak before the lap completes
+const LAP_FUEL = 2;
 const streakReward = (streak: number): number => {
   const lap = streak % 10 === 0 ? 10 : streak % 10; // position in the ladder
-  return lap === 10 ? 5 : lap === 5 ? 3 : lap === 3 ? 1.5 : 0;
+  return lap === 10 ? 3.5 : lap === 5 ? 2 : lap === 3 ? 1 : 0;
 };
-// km driven per difficulty level — a tight ladder: the drain multiplier
-// hits its cap by ~12 km (~4 min flat out) instead of stretching a soft
-// early game, so runs stay arcade-short and scores can't balloon
+// km driven per difficulty level — a tight ladder: the ×1.5 knee arrives
+// by ~12 km and the drain multiplier then keeps creeping +2.5%/level to
+// its ×1.9 cap near L45 (~64 km), so the early game stays arcade-punchy
+// while the deep game quietly closes its fist (see drainGain at level-up)
 const LEVEL_EVERY_KM = 1.5;
+// the mercy can is training wheels, not a lifeline: past this level the
+// economy must carry the run on its own (see the sustainability math on
+// LAP_FUEL above — a perfect chain never needs mercy anyway)
+const MERCY_MAX_LEVEL = 5;
+// touch HUD: the top-left LCD cluster sits this far (in ui units) below
+// the canvas top — 8 was flush against the edge on full-bleed phones,
+// where the browser chrome already crowds the glass. The streak HUD
+// anchors off TOUCH_CLUSTER_TOP + 52 (the cluster's bottom edge)
+const TOUCH_CLUSTER_TOP = 16;
 const FAR_OFFROAD = 2.5; // |playerX| at/above this = stranded past the trees (2.5, not 2.0: a run-off window so a slide can be caught before the respawn teleport)
 const LANES = 3;
 
@@ -452,7 +472,11 @@ function skyAt(t: number): SkyState {
   return {
     stops: a.c.map((ac, i) => {
       const bc = b.c[i];
-      return [ac[0] + (bc[0] - ac[0]) * s, ac[1] + (bc[1] - ac[1]) * s, ac[2] + (bc[2] - ac[2]) * s];
+      return [
+        ac[0] + (bc[0] - ac[0]) * s,
+        ac[1] + (bc[1] - ac[1]) * s,
+        ac[2] + (bc[2] - ac[2]) * s,
+      ];
     }),
     night: a.night + (b.night - a.night) * s,
   };
@@ -745,7 +769,9 @@ function renderCluster(
   // bottom-right on desktop; top-left on touch devices so the on-screen
   // pedals (bottom corners) never cover the readout
   const x0 = topLeft ? Math.round(8 * ui) : width - pw - Math.round(8 * ui);
-  const y0 = topLeft ? Math.round(8 * ui) : height - ph - Math.round(8 * ui);
+  const y0 = topLeft
+    ? Math.round(TOUCH_CLUSTER_TOP * ui)
+    : height - ph - Math.round(8 * ui);
   const pad = Math.round(3 * ui);
   const segColor = "#243320";
   const ghostColor = "rgba(36,51,32,0.10)";
@@ -1076,9 +1102,7 @@ function renderMirror(
     const persp = (0.7 * SEGMENT_LENGTH) / z;
     return {
       persp,
-      ry:
-        horizon +
-        (bottom - horizon) * persp * (1 - ringY[k] / MIRROR_CAM_H),
+      ry: horizon + (bottom - horizon) * persp * (1 - ringY[k] / MIRROR_CAM_H),
       rw: w * 0.5 * persp,
       rx:
         cx +
@@ -1290,9 +1314,17 @@ export interface RacerEngine {
       game state is kept, only the prebuilt backdrop layers are rebuilt */
   resize(width: number, height: number): void;
   state: EngineState;
+  /** leaderboard top scores to chase this run (ascending, deduped) —
+      crossing one fires the centre "NEW <label> RECORD!" banner once */
+  setRecordTargets(targets: { score: number; label: string }[]): void;
   /** dev-only (e2e probes): the next active gas can ahead of the car,
       with its effective lateral position after the level spread */
-  debugNextPickup?: () => { absIndex: number; x: number; big: boolean } | null;
+  debugNextPickup?: () => {
+    absIndex: number;
+    x: number;
+    big: boolean;
+    golden: boolean;
+  } | null;
   /** dev-only (e2e probes): last render's road-fill diagnostics — how far
       above the buffer bottom the nearest painted road line sat (a large
       gap means the near gap-fill painted a big fake road) plus cull counts */
@@ -1336,6 +1368,8 @@ export function createEngine(opts: {
   roadside: RoadsideSprite[];
   car: CarFrames;
   gasCan: CarFrame;
+  /** gold-tinted copy of the gas can sprite, for the rare golden pickups */
+  gasCanGolden?: CarFrame;
   /** cockpit overlay sprites — null when the assets are missing (chase-only) */
   cockpit?: CockpitSprites | null;
   /** initial camera; forced to "chase" when no cockpit sprites are loaded */
@@ -1347,9 +1381,10 @@ export function createEngine(opts: {
   height?: number;
   /** touch devices: LCD cluster goes top-left so the pedals don't cover it */
   clusterTopLeft?: boolean;
-  /** fired when the car drives through a gas can (big = the 2-dot ones) */
-  onPickup?: (big: boolean) => void;
-  /** fired when a streak ladder step is crossed (+2/+4/+8 s at 3/5/each
+  /** fired when the car drives through a gas can (big = the 3-dot every-
+      10th ones, golden = the rare 3-dot + boost ones) */
+  onPickup?: (big: boolean, golden?: boolean) => void;
+  /** fired when a streak ladder step is crossed (+1/+2/+3.5 s at 3/5/each
       multiple of 10 — the ladder repeats every 10 cans) */
   onStreak?: (streak: number) => void;
   /** dev-only (e2e probes): collect per-render road diagnostics into
@@ -1364,6 +1399,7 @@ export function createEngine(opts: {
     roadside,
     car,
     gasCan,
+    gasCanGolden,
     reduceMotion,
     debug = false,
   } = opts;
@@ -1420,9 +1456,11 @@ export function createEngine(opts: {
   // are capped so high levels stay drivable; the level counter is not.
   // Gas cans keep their count (no extra scarcity) but drift toward the
   // road edges, so refuelling costs a wider line. drainGain is OutRun's
-  // shrinking stage bonus: each level burns the tank ~5% faster (capped
-  // ×1.4), soft enough that a clean can chain survives deep into the
-  // levels — and below 2 dots the mercy can covers a dry stretch
+  // shrinking stage bonus with a deep-game squeeze: ~6%/level to ×1.5 by
+  // L9, then +2.5%/level to a ×1.9 cap (~L45) so the sustainable can-miss
+  // rate keeps tightening into the Challenger depths — and below 1.5 dots
+  // the mercy can covers a dry stretch in the early game (level ≤
+  // MERCY_MAX_LEVEL)
   let curveGain = 1;
   // physics-only grip gain: the world RENDERS with curveGain, but the
   // centrifugal push uses this softer curve so a hard bend's hold speed
@@ -1433,8 +1471,6 @@ export function createEngine(opts: {
   let canSpread = 1;
   let drainGain = 1;
   let levelUpAt = -10; // engine time of the last level-up (banner)
-  // engine time of the last OVERFLOW pickup — its popup names the reason
-  let lastOverflowAt = -10;
   // engine time / tier / seconds of the last streak reward (popup variant)
   let lastStreakAt = -10;
   let lastStreakTier = 0;
@@ -1442,11 +1478,20 @@ export function createEngine(opts: {
   // engine time of the last broken chain — drives the burn-out animation
   let lastStreakLostAt = -10;
   // mercy can: one rescue can per dry spell, injected by update() when
-  // the tank runs below 2 dots with nothing collectible ahead
+  // the tank runs below 1.5 dots with nothing collectible ahead
   let mercyUsed = false;
+  // record chase: the leaderboard tops to beat this run (ascending) —
+  // crossing one fires the centre "NEW <label> RECORD!" banner once
+  let recordTargets: { score: number; label: string }[] = [];
+  let recordBannerAt = -10;
+  let recordBannerLabel = "";
   // engine time of the last gas-can pickup — drives the collect feedback
   // (sparkle burst at the car, gauge flash, rising "+1")
   let lastPickupAt = -10;
+  // what the last pickup was worth / whether it was golden — the rising
+  // popup reads these ("+1" green vs "+3" gold)
+  let lastPickupAmt = 1;
+  let lastPickupGolden = false;
   // fuel sip grace right after a pickup: the gauge just lit up, so the
   // first 0.3 s of the new tank burn for free — grabbing a can at a hot
   // level no longer feels like the drain instantly eating the reward
@@ -1455,6 +1500,9 @@ export function createEngine(opts: {
   // and bleeds back to 1 over ~a second when it ends — no snap from 202
   // to 180 in a single frame
   let boostTop = 1;
+  // what paid for the current boost — the centre countdown names it
+  // ("STREAK BOOST 2.1s" vs "OVERFLOW BOOST 1.4s" vs "GOLDEN BOOST")
+  let lastBoostSource: "streak" | "overflow" | "golden" = "overflow";
   // dev-only render diagnostics, refreshed every render (see RacerEngine.probe)
   let probe: NonNullable<RacerEngine["probe"]> = {
     nearGap: 0,
@@ -1472,8 +1520,10 @@ export function createEngine(opts: {
     profile: [],
     segDiag: [],
   };
-  // scarcity ramps with score: every 4000 points hides another 1% of the
-  // track's cans (capped at 50% so the track never fully dries out).
+  // scarcity ramps with score: every 3000 points hides another 1% of the
+  // track's cans (capped at 40% — the cap is calibrated with the drain
+  // cap so a PERFECT chain stays sustainable in the deep game while a
+  // 1-in-10 miss rate slowly bleeds out; see LAP_FUEL).
   // Big cans (every 10th) resist at half the rate — the relief valve must
   // survive into the late game. Cans are hidden in golden-ratio order
   // over their ordinal, so the hidden ones stay evenly spread instead of
@@ -1483,7 +1533,8 @@ export function createEngine(opts: {
     const pk = seg.pickup;
     if (!pk) return true;
     if (pk.ordinal < 0) return true; // mercy can: never scarcity-hidden
-    const hidden = Math.min(0.5, Math.floor(state.score / 4000) * 0.01);
+    if (pk.golden) return true; // golden can: a gift is never hidden
+    const hidden = Math.min(0.4, Math.floor(state.score / 3000) * 0.01);
     if (hidden <= 0) return true;
     return (
       (pk.ordinal * 0.6180339887498949) % 1 >= (pk.big ? hidden / 2 : hidden)
@@ -1512,13 +1563,7 @@ export function createEngine(opts: {
   let skyGradKey = "";
   const buildBackdrop = () => {
     clouds = makeClouds(width, Math.round(height * 0.34), 21);
-    hillsFar = makeMountains(
-      width,
-      Math.round(height * 0.18),
-      9,
-      "#4a2c50",
-      7,
-    );
+    hillsFar = makeMountains(width, Math.round(height * 0.18), 9, "#4a2c50", 7);
     hillsNear = makeMountains(
       width,
       Math.round(height * 0.13),
@@ -1563,9 +1608,13 @@ export function createEngine(opts: {
     // segments the car's pickup point crosses this frame — at full speed
     // a slow frame can span 2+ segments, and a can sitting on a skipped
     // one would be driven through without registering
-    const prevPickupSeg = Math.floor((state.position + PLAYER_Z) / SEGMENT_LENGTH);
+    const prevPickupSeg = Math.floor(
+      (state.position + PLAYER_Z) / SEGMENT_LENGTH,
+    );
     state.position += state.speed * dt;
-    const nextPickupSeg = Math.floor((state.position + PLAYER_Z) / SEGMENT_LENGTH);
+    const nextPickupSeg = Math.floor(
+      (state.position + PLAYER_Z) / SEGMENT_LENGTH,
+    );
     // display km at the same scale as the 180 km/h top speed
     state.distanceKm += speedPercent * 180 * (dt / 3600);
     // ring window: keep the road buffered ahead; the generator overwrites
@@ -1582,10 +1631,21 @@ export function createEngine(opts: {
       curveGrip = Math.min(1.3, 1 + 0.04 * (state.level - 1));
       hillGain = Math.min(1.5, 1 + 0.07 * (state.level - 1));
       canSpread = Math.min(1.35, 1 + 0.05 * (state.level - 1));
-      // OutRun's shrinking stage bonus, kept soft: +5%/level capped at
-      // ×1.4, so a clean can chain stays sustainable well past level 5 —
-      // a missed can is a setback, not a guaranteed death sentence
-      drainGain = Math.min(1.4, 1 + 0.05 * (state.level - 1));
+      // OutRun's shrinking stage bonus, with a squeeze: +6%/level to ×1.5
+      // by L9 like before, then KEEPS growing +2.5%/level to a ×1.9 cap
+      // (~L45) — sim-calibrated (scripts/sim-squeeze.mjs): a perfect chain
+      // stays sustainable forever (lap fuel is the margin), but the
+      // sustainable miss rate tightens with depth — ~15% at L14, ~10% at
+      // L25-42, ~7.5% at L45+. Median death: 30% miss ≈ 26 km (~96k pts),
+      // 10% ≈ 60 km (~202k), 5% ≈ 124 km (~443k). 240k (Challenger,
+      // ~25 min) needs ~5-7% sustained on bot-perfect lines — humans bend
+      // worse, so the real bar is higher.
+      drainGain = Math.min(
+        1.9,
+        1 +
+          0.06 * Math.min(state.level - 1, 8) +
+          0.025 * Math.max(0, state.level - 9),
+      );
       levelUpAt = state.time;
     }
 
@@ -1640,10 +1700,7 @@ export function createEngine(opts: {
     // revs = wheel speed over the gear's top (every gear hits the redline
     // at its band top) — an upshift drops the needle by the ratio gap on
     // its own, a downshift kicks it up; no fake pitch dips needed
-    state.rpm01 = Math.max(
-      0,
-      Math.min(1, kmhNow / GEAR_TOPS[state.gear - 1]),
-    );
+    state.rpm01 = Math.max(0, Math.min(1, kmhNow / GEAR_TOPS[state.gear - 1]));
     state.braking = input.brake;
 
     // the boost top-speed ceiling eases in AND out: when the boost burns
@@ -1655,18 +1712,13 @@ export function createEngine(opts: {
 
     if (input.gas && state.fuel > 0 && state.shiftT <= 0) {
       // throttle follows the measured km/h curve of the real car; BOOST
-      // lifts the ceiling from 180 to ~202 km/h with a harder pull
+      // lifts the ceiling from 180 to ~194 km/h with a harder pull
       const kmh = (state.speed / MAX_SPEED) * 180;
       const normalAccel = ACCEL_KMH(kmh);
-      const boostPull = Math.max(
-        normalAccel,
-        (180 * BOOST_TOP - kmh) * 0.4,
-      );
+      const boostPull = Math.max(normalAccel, (180 * BOOST_TOP - kmh) * 0.4);
       const accel = normalAccel + (boostPull - normalAccel) * boostMix;
       state.speed +=
-        ((accel * (1 + (BOOST_ACCEL - 1) * boostMix)) / 180) *
-        MAX_SPEED *
-        dt;
+        ((accel * (1 + (BOOST_ACCEL - 1) * boostMix)) / 180) * MAX_SPEED * dt;
     } else if (input.brake) state.speed += BRAKING * dt;
     // clutch in during a shift: the car coasts almost freely (aero only),
     // none of the engine braking baked into ROLL_DRAG — a real shift
@@ -1729,14 +1781,15 @@ export function createEngine(opts: {
     // the tank is a clock that ticks a little faster every level: nearly
     // flat per second, so pace beats crawling. At zero the engine dies
     // and the car coasts — a can grabbed while coasting still revives it
-    // (OutRun's coast-over-checkpoint mercy). BOOST burns the overflow,
-    // not the tank — a reward, not a tax
+    // (OutRun's coast-over-checkpoint mercy). BOOST halves the burn
+    // (a reward, not a free pass); the 0.3 s pickup grace after any can
+    // still freezes it fully so a fresh tank never feels instantly eaten
+    const drainFactor = pickupGrace > 0 ? 0 : state.boostT > 0 ? 0.5 : 1;
     const fuelDrain =
-      state.boostT > 0 || pickupGrace > 0
-        ? 0
-        : dt *
-          (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent) *
-          drainGain;
+      dt *
+      (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent) *
+      drainGain *
+      drainFactor;
     state.fuel = Math.max(0, state.fuel - fuelDrain);
     state.boostT = Math.max(0, state.boostT - dt);
     pickupGrace = Math.max(0, pickupGrace - dt);
@@ -1760,7 +1813,7 @@ export function createEngine(opts: {
           Math.abs(state.playerX - pk.x * canSpread) < 0.24 &&
           state.speed > MAX_SPEED * 0.02
         ) {
-          const amount = pk.big ? 2 : 1;
+          const amount = pk.golden || pk.big ? 3 : 1;
           // a can grabbed with a near-full tank doesn't go to waste:
           // the overflow burns off as BOOST seconds instead
           const overflow = state.fuel + amount - FUEL_MAX;
@@ -1772,11 +1825,19 @@ export function createEngine(opts: {
               BOOST_MAX_T,
               state.boostT + Math.max(overflow * BOOST_PER_DOT, 0.5),
             );
-            lastOverflowAt = state.time;
+            lastBoostSource = "overflow";
+          }
+          if (pk.golden) {
+            // golden can: a flat 1 s of BOOST on top of the 3 dots —
+            // the label outranks an overflow grant from the same pickup
+            state.boostT = Math.min(BOOST_MAX_T, state.boostT + GOLDEN_BOOST_T);
+            lastBoostSource = "golden";
           }
           state.fuel = Math.min(FUEL_MAX, state.fuel + amount);
           seg.pickup = undefined;
           lastPickupAt = state.time;
+          lastPickupAmt = amount;
+          lastPickupGolden = pk.golden ?? false;
           pickupGrace = PICKUP_GRACE_T;
           state.streak += 1;
           // chain reward: crossing a ladder step pays bonus BOOST seconds
@@ -1785,12 +1846,26 @@ export function createEngine(opts: {
           const reward = streakReward(state.streak);
           if (reward) {
             state.boostT = Math.min(BOOST_MAX_T, state.boostT + reward);
+            lastBoostSource = "streak";
             lastStreakAt = state.time;
             lastStreakTier = state.streak;
             lastStreakSecs = reward;
             opts.onStreak?.(state.streak);
+            // a completed clean lap (every multiple of 10) also pays fuel
+            // dots — this bonus is the perfect chain's survival margin in
+            // the capped deep game, and a single miss never earns it
+            if (state.streak % 10 === 0) {
+              const lapOverflow = state.fuel + LAP_FUEL - FUEL_MAX;
+              if (lapOverflow > 0) {
+                state.boostT = Math.min(
+                  BOOST_MAX_T,
+                  state.boostT + Math.max(lapOverflow * BOOST_PER_DOT, 0.5),
+                );
+              }
+              state.fuel = Math.min(FUEL_MAX, state.fuel + LAP_FUEL);
+            }
           }
-          opts.onPickup?.(pk.big ?? false);
+          opts.onPickup?.(pk.big ?? false, pk.golden ?? false);
         } else {
           // an active can was on this segment and we drove past it —
           // the chain is broken (and the HUD gets to burn the can away)
@@ -1798,12 +1873,17 @@ export function createEngine(opts: {
           state.streak = 0;
         }
       }
-      // mercy can: below 2 dots with nothing collectible in the next ~90
+      // mercy can: below 1.5 dots with nothing collectible in the next ~90
       // segments, one can materialises on a reachable line ~60 segments
-      // out — once per dry spell. A missed can at high level becomes a
-      // setback you can fight back from, not a guaranteed death sentence
-      if (state.fuel >= 2.5) mercyUsed = false;
-      if (state.fuel < 2 && !mercyUsed && state.speed > 0) {
+      // out — once per dry spell, and only in the early game (level ≤
+      // MERCY_MAX_LEVEL): past that the economy must carry the run
+      if (state.fuel >= 2) mercyUsed = false;
+      if (
+        state.fuel < 1.5 &&
+        !mercyUsed &&
+        state.speed > 0 &&
+        state.level <= MERCY_MAX_LEVEL
+      ) {
         const playerSegIdx = Math.floor(
           (state.position + PLAYER_Z) / SEGMENT_LENGTH,
         );
@@ -1856,6 +1936,14 @@ export function createEngine(opts: {
               ? 2
               : 1;
     state.score += ((kmh * dt) / 3.6) * state.multiplier;
+
+    // record chase: each leaderboard top crossed fires the centre banner
+    // once — targets arrive ascending, so the first is always the next
+    while (recordTargets.length > 0 && state.score > recordTargets[0].score) {
+      recordBannerLabel = recordTargets[0].label;
+      recordBannerAt = state.time;
+      recordTargets = recordTargets.slice(1);
+    }
 
     // horizon drifts opposite the current curve, faster with speed
     // (rates eased 30% down from Jake's 2.5/5 — gentler mountain parallax)
@@ -1953,7 +2041,12 @@ export function createEngine(opts: {
       const [mx, my] = celestial((dayT - 0.58) / 0.42, "#e8ecff", r);
       // crescent: a bite of sky colour bitten out of the moon's corner
       ctx.fillStyle = rgb(skySt.stops[2]);
-      ctx.fillRect(mx - r + Math.round(r * 0.8), my - r + Math.round(r * 0.2), r * 2, r * 2);
+      ctx.fillRect(
+        mx - r + Math.round(r * 0.8),
+        my - r + Math.round(r * 0.2),
+        r * 2,
+        r * 2,
+      );
     }
     // stars fade in and twinkle with the depth of the night
     if (skySt.night > 0.05) {
@@ -2044,7 +2137,16 @@ export function createEngine(opts: {
       const camX = state.playerX * ROAD_WIDTH - x;
       const camY = playerY + CAMERA_HEIGHT;
       project(segment.p1, camX, camY, camZ, width, height, yShift, hillGain);
-      project(segment.p2, camX + dx, camY, camZ, width, height, yShift, hillGain);
+      project(
+        segment.p2,
+        camX + dx,
+        camY,
+        camZ,
+        width,
+        height,
+        yShift,
+        hillGain,
+      );
 
       x += dx;
       dx += segment.curve * curveGain;
@@ -2188,15 +2290,16 @@ export function createEngine(opts: {
       if (!pk && segment.sprites.length === 0) continue;
 
       // gas cans hover above the tarmac of their segment, bobbing gently
-      // so they catch the eye; big cans (every 10th, worth 2 dots) are
+      // so they catch the eye; big cans (every 10th, worth 3 dots) are
       // drawn larger with a hotter halo — the relief must read from afar
       if (pk && pickupActive(segment)) {
         const scale = segment.p1.screen.scale;
+        const canFrame = pk.golden && gasCanGolden ? gasCanGolden : gasCan;
         // much bigger than the roadside-sprite factor (4.2): pickups must
         // read from far away and feel worth steering for
-        const sizeMul = pk.big ? 1.6 : 1;
-        const destW = gasCan.w * scale * (width / 2) * 8 * sizeMul;
-        const destH = gasCan.h * scale * (width / 2) * 8 * sizeMul;
+        const sizeMul = pk.big ? 1.6 : pk.golden ? 1.15 : 1;
+        const destW = canFrame.w * scale * (width / 2) * 8 * sizeMul;
+        const destH = canFrame.h * scale * (width / 2) * 8 * sizeMul;
         if (destW >= 2) {
           // floats above the road: fixed hover height + slow bob
           const bob =
@@ -2228,12 +2331,13 @@ export function createEngine(opts: {
             ctx.fill();
             // pulsing halo ring — at distance the can itself is a few
             // pixels, so this is what reads as "pickup here!" from afar.
-            // Big cans pulse faster and hotter, with a second outer ring
+            // Big and golden cans pulse faster and hotter, with a second
+            // outer ring
+            const hot = pk.big || pk.golden;
             const pulse =
-              0.5 +
-              0.5 * Math.sin(state.time * (pk.big ? 9 : 5) + segment.index);
-            ctx.strokeStyle = `rgba(255,215,94,${(pk.big ? 0.55 : 0.35) + (pk.big ? 0.45 : 0.35) * pulse})`;
-            ctx.lineWidth = Math.max(1, destW * (pk.big ? 0.09 : 0.07));
+              0.5 + 0.5 * Math.sin(state.time * (hot ? 9 : 5) + segment.index);
+            ctx.strokeStyle = `rgba(255,215,94,${(hot ? 0.55 : 0.35) + (hot ? 0.45 : 0.35) * pulse})`;
+            ctx.lineWidth = Math.max(1, destW * (hot ? 0.09 : 0.07));
             ctx.beginPath();
             ctx.ellipse(
               Math.round(destX + destW / 2),
@@ -2245,7 +2349,7 @@ export function createEngine(opts: {
               Math.PI * 2,
             );
             ctx.stroke();
-            if (pk.big) {
+            if (hot) {
               ctx.strokeStyle = `rgba(255,242,190,${0.2 + 0.3 * pulse})`;
               ctx.lineWidth = Math.max(1, destW * 0.04);
               ctx.beginPath();
@@ -2261,11 +2365,11 @@ export function createEngine(opts: {
               ctx.stroke();
             }
             ctx.drawImage(
-              gasCan.image,
+              canFrame.image,
               0,
               0,
-              gasCan.w,
-              (visibleH / destH) * gasCan.h,
+              canFrame.w,
+              (visibleH / destH) * canFrame.h,
               Math.round(destX),
               Math.round(destY),
               Math.round(destW),
@@ -2474,8 +2578,7 @@ export function createEngine(opts: {
         state.speed > MAX_SPEED * 0.08 &&
         car.smoke.length > 0
       ) {
-        const puff =
-          car.smoke[Math.floor(state.time * 12) % car.smoke.length];
+        const puff = car.smoke[Math.floor(state.time * 12) % car.smoke.length];
         const puffW = destW * 0.22;
         const puffH = (puff.h / puff.w) * puffW;
         const side = Math.floor(state.time * 12) % 2 ? -1 : 1;
@@ -2587,10 +2690,14 @@ export function createEngine(opts: {
         mH = Math.round(mH * grow);
       }
       const mX = Math.round(
-        dashX + dashW * COCKPIT_MIRROR.xF + (dashW * COCKPIT_MIRROR.wF - mW) / 2,
+        dashX +
+          dashW * COCKPIT_MIRROR.xF +
+          (dashW * COCKPIT_MIRROR.wF - mW) / 2,
       );
       const mY = Math.round(
-        dashY + dashH * COCKPIT_MIRROR.yF + (dashH * COCKPIT_MIRROR.hF - mH) / 2,
+        dashY +
+          dashH * COCKPIT_MIRROR.yF +
+          (dashH * COCKPIT_MIRROR.hF - mH) / 2,
       );
       renderMirror(
         ctx,
@@ -2676,10 +2783,11 @@ export function createEngine(opts: {
           );
         }
       }
-      // "+1" floats up off the fuel gauge — dark outline so it reads
+      // "+N" floats up off the fuel gauge — dark outline so it reads
       // against both the light LCD panel and the dark road behind it.
-      // (A full-tank pickup's OVERFLOW reason gets the centre banner below)
-      const fxText = "+1";
+      // Golden pickups rise in gold. (A full-tank pickup's boost reason
+      // is named by the centre countdown's OVERFLOW BOOST prefix)
+      const fxText = `+${lastPickupAmt}`;
       const p = fxAge / 0.8;
       const tx = Math.round(gaugePos.x);
       const ty = Math.round(gaugePos.y - 4 * ui - p * 14 * ui);
@@ -2687,7 +2795,7 @@ export function createEngine(opts: {
       ctx.font = `bold ${Math.round(9 * ui)}px monospace`;
       ctx.fillStyle = "#141611";
       ctx.fillText(fxText, tx + 1, ty + 1);
-      ctx.fillStyle = "#d7ff9e";
+      ctx.fillStyle = lastPickupGolden ? "#ffd75e" : "#d7ff9e";
       ctx.fillText(fxText, tx, ty);
       ctx.globalAlpha = 1;
     }
@@ -2698,7 +2806,13 @@ export function createEngine(opts: {
     if (state.boostT > 0 && !state.gameOver) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
       if (Math.floor(state.time * 3) % 2 === 0) {
-        const msg = `BOOST ${state.boostT.toFixed(1)}s`;
+        const src =
+          lastBoostSource === "streak"
+            ? "STREAK"
+            : lastBoostSource === "golden"
+              ? "GOLDEN"
+              : "OVERFLOW";
+        const msg = `${src} BOOST ${state.boostT.toFixed(1)}s`;
         ctx.font = `bold ${Math.round(12 * ui)}px monospace`;
         const tw = ctx.measureText(msg).width;
         const bx = Math.round(width / 2 - tw / 2);
@@ -2711,10 +2825,11 @@ export function createEngine(opts: {
     }
 
     // fuel-chain streak HUD: a red jerrycan stamped with a tiny "GAS" +
-    // an "xN" counter, parked in the corner opposite the LCD cluster so
-    // the two never collide (touch moves the cluster top-left, so we
-    // mirror). Visible from x1; when the chain breaks the can flares up,
-    // burns for a beat and fades away
+    // an "xN" counter. Desktop: top-left corner (the LCD cluster sits
+    // bottom-right there). Touch: the left column UNDER the top-left LCD
+    // cluster — the top-right corner belongs to the DOM top bar
+    // (CAM/mute/pause/✕), which swallowed the counter. Visible from x1;
+    // when the chain breaks the can flares up, burns for a beat and fades
     const stAge = state.time - lastStreakAt;
     const lostAge = state.time - lastStreakLostAt;
     const STREAK_BURN_T = 0.9; // burn-out animation length on a broken chain
@@ -2722,24 +2837,25 @@ export function createEngine(opts: {
       (state.streak >= 1 || stAge < 1.2 || lostAge < STREAK_BURN_T) &&
       !state.gameOver
     ) {
-      // portrait phones: the buffer keeps its desktop design size, so the
-      // physical pixels end up tiny — scale the whole corner cluster up
+      const uiBase = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      // phone buffers keep their desktop design size, so the physical
+      // pixels end up tiny — scale the corner cluster up hard
       const ui =
-        Math.min(width / RACER_WIDTH, height / RACER_HEIGHT) *
-        (height > width ? 2 : 1);
+        uiBase * (height > width ? 2.5 : opts.clusterTopLeft ? 1.4 : 1);
       ctx.font = `bold ${Math.round(8 * ui)}px monospace`;
-      // measure the widest label the counter can show here so the anchor
-      // corner doesn't drift while the can burns out (streak is 0 then)
       const label = `x${Math.max(1, state.streak)}`;
-      const labelW = ctx.measureText(label).width;
       const margin = Math.round(8 * ui);
       const iconW = Math.round(10 * ui);
       const iconH = Math.round(12 * ui);
       const pad = Math.round(4 * ui);
-      const bx = opts.clusterTopLeft
-        ? Math.round(width - margin - iconW - pad - labelW)
+      const bx = margin;
+      // the touch LCD cluster is 150×52 parked at TOUCH_CLUSTER_TOP·uiBase —
+      // sit under its bottom edge with a gap that scales with the streak's
+      // own ui, so the flame tongues licking ABOVE the can (up to ~3·ui on
+      // the burn-out) never touch the cluster either
+      const by = opts.clusterTopLeft
+        ? Math.round((TOUCH_CLUSTER_TOP + 52) * uiBase + 10 * ui)
         : margin;
-      const by = margin;
       // pixel jerrycan: black outline, red pressed-steel body, stamped X,
       // cap nub on the top-right corner, tiny "GAS" plate
       const drawCan = (alpha: number) => {
@@ -2808,9 +2924,7 @@ export function createEngine(opts: {
           const flick = 0.5 + 0.5 * Math.sin(state.time * 16 + k * 2.3);
           const fh = Math.round((6 + k + flick * 5) * ui * (1 - p * 0.5));
           const fw = Math.round((3 + (k % 2)) * ui);
-          const fx = Math.round(
-            bx + iconW / 2 - fw / 2 + (k - 2) * 3 * ui,
-          );
+          const fx = Math.round(bx + iconW / 2 - fw / 2 + (k - 2) * 3 * ui);
           ctx.globalAlpha = (1 - p) * (0.4 + 0.5 * flick);
           ctx.fillStyle = k % 2 ? "#e2703a" : "#ffb03a";
           ctx.fillRect(fx, by + iconH - fh, fw, fh);
@@ -2821,19 +2935,16 @@ export function createEngine(opts: {
       // tier-crossing popup under the counter: the flame was the promise,
       // this is the payoff. Same face as the LEVEL banner. Completing a
       // full 10-can lap is the prestigious moment — it gets the COMBO
-      // count (2 combos clean = streak 20) instead of a raw streak number
+      // count (2 combos clean = streak 20) instead of a raw streak number,
+      // plus the LAP_FUEL dot grant that keeps a perfect chain alive
       if (stAge < 1.2) {
         const msg =
           lastStreakTier % 10 === 0
-            ? `COMBO ${lastStreakTier / 10}! +${lastStreakSecs}s`
+            ? `COMBO ${lastStreakTier / 10}! +${lastStreakSecs}s +${LAP_FUEL}GAS`
             : `STREAK ${lastStreakTier}! +${lastStreakSecs}s`;
         ctx.font = `bold ${Math.round(8 * ui)}px monospace`;
-        const tw = ctx.measureText(msg).width;
-        const tx = Math.round(
-          opts.clusterTopLeft
-            ? width - margin - tw
-            : margin,
-        );
+        // left column on every form factor now (under the touch cluster)
+        const tx = margin;
         const ty = by + iconH + Math.round(10 * ui);
         ctx.globalAlpha = Math.max(
           0,
@@ -2911,24 +3022,24 @@ export function createEngine(opts: {
       ctx.globalAlpha = 1;
     }
 
-    // OVERFLOW banner: a full-tank pickup's waste burns as BOOST — the
-    // same centre-screen face as the LEVEL banner, so the driver learns
-    // where the boost seconds came from. Shorter beat, accent orange
-    const ovAge = state.time - lastOverflowAt;
-    if (ovAge < 1.4 && !state.gameOver) {
+    // record-chase banner: crossing a leaderboard top (24H / 7D / 30D /
+    // ALL-TIME) fires this once per threshold — the LEVEL banner's face,
+    // parked lower so the two can coexist, in trophy gold
+    const recAge = state.time - recordBannerAt;
+    if (recAge < 2.2 && !state.gameOver) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
-      const msg = "OVERFLOW";
+      const msg = `NEW ${recordBannerLabel} RECORD!`;
       ctx.font = `bold ${Math.round(11 * ui)}px monospace`;
       const tw = ctx.measureText(msg).width;
       const tx = Math.round(width / 2 - tw / 2);
-      const ty = Math.round(height * 0.3);
+      const ty = Math.round(height * 0.42);
       ctx.globalAlpha = Math.max(
         0,
-        Math.min(1, Math.min(ovAge / 0.15, (1.4 - ovAge) / 0.4)),
+        Math.min(1, Math.min(recAge / 0.2, (2.2 - recAge) / 0.5)),
       );
       ctx.fillStyle = "#141611";
       ctx.fillText(msg, tx + 2, ty + 2);
-      ctx.fillStyle = "#e2703a";
+      ctx.fillStyle = "#ffd75e";
       ctx.fillText(msg, tx, ty);
       ctx.globalAlpha = 1;
     }
@@ -2947,13 +3058,26 @@ export function createEngine(opts: {
                 absIndex: si,
                 x: seg.pickup.x * canSpread,
                 big: !!seg.pickup.big,
+                golden: !!seg.pickup.golden,
               };
             }
           }
           return null;
         };
 
-  return { update, render, resize, state, debugNextPickup, get probe() { return probe; } };
+  return {
+    update,
+    render,
+    resize,
+    state,
+    setRecordTargets: (t) => {
+      recordTargets = t;
+    },
+    debugNextPickup,
+    get probe() {
+      return probe;
+    },
+  };
 }
 
 export const ENGINE_CONSTANTS = {

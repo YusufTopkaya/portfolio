@@ -100,15 +100,19 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
       }
     }
 
-    // gas cans on the tarmac: spaced ~7-13 s of driving apart, so a tank
+    // gas cans on the tarmac: spaced ~5-11 s of driving apart, so a tank
     // (the run's death clock) only stretches when the driver goes and
-    // gets them. Every 10th can is BIG — worth 2 gauge dots, drawn
-    // larger, and it resists scarcity hiding at half rate (see engine)
+    // gets them. Every 10th can is BIG — worth 3 gauge dots, drawn
+    // larger, and it resists scarcity hiding at half rate (see engine).
+    // ~3% of regular cans are GOLDEN — 3 dots + 1 s of BOOST, never
+    // scarcity-hidden; big cans keep their own identity
     if (i >= nextCanAt) {
-      nextCanAt = i + 240 + Math.floor(rng() * 240);
+      nextCanAt = i + 180 + Math.floor(rng() * 200);
+      const big = canOrdinal % 10 === 9;
       seg.pickup = {
         x: rng() * 1.4 - 0.7,
-        big: canOrdinal % 10 === 9,
+        big,
+        golden: !big && rng() < 0.03,
         ordinal: canOrdinal,
       };
       canOrdinal++;

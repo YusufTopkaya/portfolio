@@ -23,7 +23,12 @@
  * procedural pixel-art jerry can.
  */
 
-import type { CarFrame, CarFrames, CockpitSprites, RoadsideSprite } from "./engine";
+import type {
+  CarFrame,
+  CarFrames,
+  CockpitSprites,
+  RoadsideSprite,
+} from "./engine";
 
 export type { CockpitSprites };
 
@@ -378,7 +383,9 @@ export async function loadCarFrames(): Promise<CarFrames> {
       image,
       w: image.width,
       h: image.height,
-      lamps: LAMPS.straight.map((l) => [...l] as [number, number, number, number]),
+      lamps: LAMPS.straight.map(
+        (l) => [...l] as [number, number, number, number],
+      ),
     };
   };
   return {
@@ -530,6 +537,21 @@ export async function loadGasCan(): Promise<CarFrame> {
   }
   const image = makeGasCan();
   return { image, w: image.width, h: image.height };
+}
+
+/** gold-tinted copy of the gas can sprite, for the rare golden pickups —
+    a translucent source-atop wash keeps the shading underneath */
+export function tintGold(base: CarFrame): CarFrame {
+  const c = document.createElement("canvas");
+  c.width = base.w;
+  c.height = base.h;
+  const g = c.getContext("2d");
+  if (!g) return base;
+  g.drawImage(base.image, 0, 0);
+  g.globalCompositeOperation = "source-atop";
+  g.fillStyle = "rgba(255,180,30,0.55)";
+  g.fillRect(0, 0, c.width, c.height);
+  return { image: c, w: base.w, h: base.h };
 }
 
 /* ── cockpit (first-person) view ───────────────────────────────────────

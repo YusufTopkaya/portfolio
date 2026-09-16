@@ -16,7 +16,9 @@ interface StoreFile {
   nonces: Record<string, number>; // hmacHex -> issuedAt ms (single-use)
 }
 
-const STORE_VERSION = 2;
+// v3: the difficulty squeeze (drainGain ×1.9 deep-game cap) made old
+// scores incomparable — they were earned on the easy flat-cap economy
+const STORE_VERSION = 3;
 const MAX_SCORES = 50;
 const MAX_STORED = 300; // hard cap on the file, incl. entries kept for period boards
 const RETENTION_MS = 40 * 24 * 60 * 60 * 1000; // keep recent entries for period boards

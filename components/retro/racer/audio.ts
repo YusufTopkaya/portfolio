@@ -69,7 +69,7 @@ export interface RacerAudio {
         whistle while it lasts, blow-off sigh at the end */
     boost: boolean,
   ): void;
-  pickup(big: boolean): void;
+  pickup(big: boolean, golden?: boolean): void;
   /** streak ladder step crossed (+2/+4/+8 s at 3/5/each 10 — repeats
       every 10 cans) — rising fanfare, deeper steps climb higher */
   streak(streak: number): void;
@@ -100,17 +100,73 @@ const LOOP_STEPS = 32; // two bars of 16ths
 
 /* bass hits on 8ths: | A . A . C . A . | G . G . A . E . | */
 const BASS: (number | null)[] = [
-  N.A1, null, N.A1, null, N.C2, null, N.A1, null,
-  N.G1, null, N.G1, null, N.A1, null, N.E2, null,
-  N.A1, null, N.A1, null, N.C2, null, N.A1, null,
-  N.G1, null, N.G1, null, N.A1, null, N.D2, null,
+  N.A1,
+  null,
+  N.A1,
+  null,
+  N.C2,
+  null,
+  N.A1,
+  null,
+  N.G1,
+  null,
+  N.G1,
+  null,
+  N.A1,
+  null,
+  N.E2,
+  null,
+  N.A1,
+  null,
+  N.A1,
+  null,
+  N.C2,
+  null,
+  N.A1,
+  null,
+  N.G1,
+  null,
+  N.G1,
+  null,
+  N.A1,
+  null,
+  N.D2,
+  null,
 ];
 /* lead arpeggio on 16ths — the Am pentatonic climb that never resolves */
 const LEAD: (number | null)[] = [
-  N.A3, null, N.C4, N.E4, N.A4, null, N.E4, N.C4,
-  N.G4, null, N.E4, N.C4, N.D4, null, N.E4, null,
-  N.A3, null, N.C4, N.E4, N.A4, null, N.C5, N.A4,
-  N.G4, null, N.E4, N.D4, N.C4, null, N.D4, null,
+  N.A3,
+  null,
+  N.C4,
+  N.E4,
+  N.A4,
+  null,
+  N.E4,
+  N.C4,
+  N.G4,
+  null,
+  N.E4,
+  N.C4,
+  N.D4,
+  null,
+  N.E4,
+  null,
+  N.A3,
+  null,
+  N.C4,
+  N.E4,
+  N.A4,
+  null,
+  N.C5,
+  N.A4,
+  N.G4,
+  null,
+  N.E4,
+  N.D4,
+  N.C4,
+  null,
+  N.D4,
+  null,
 ];
 
 /* score thresholds where the loop picks up another layer */
@@ -125,7 +181,7 @@ const REDLINE_HZ = 6000 / 30;
 
 /** 0-10 slider → gain, with a perceptual curve so 5 feels like "half" */
 const levelToGain = (level: number): number =>
-  Math.pow(Math.max(0, Math.min(10, level)) / 10, 1.5);
+  (Math.max(0, Math.min(10, level)) / 10) ** 1.5;
 
 export function createRacerAudio(): RacerAudio {
   let ctx: AudioContext | null = null;
@@ -175,6 +231,15 @@ export function createRacerAudio(): RacerAudio {
   let musicTier = 0; // 0..3, driven by score
   let wasShifting = false; // rising edge fires the clutch thump
   let wasThrottle = false; // falling edge fires the overrun crackle
+  // setHidden(false) defers the context wake to the next user-driven call
+  // so tab-return frames don't pay the resume cost (see setHidden)
+  let hiddenDeferred = false;
+  const ensureRunning = () => {
+    if (hiddenDeferred && ctx) {
+      hiddenDeferred = false;
+      void ctx.resume();
+    }
+  };
 
   const makeNoise = (c: AudioContext): AudioBufferSourceNode => {
     // 4 s buffer: a 1 s loop repeats audibly as a warble under the exhaust
@@ -295,8 +360,7 @@ export function createRacerAudio(): RacerAudio {
     if (lead !== null) {
       // leadGain/lead2Gain are driven per frame by speed and score tier
       if (leadGain) blip(at, lead, STEP * 0.9, "square", 0.5, leadGain);
-      if (lead2Gain)
-        blip(at, lead * 2, STEP * 0.7, "square", 0.3, lead2Gain);
+      if (lead2Gain) blip(at, lead * 2, STEP * 0.7, "square", 0.3, lead2Gain);
     }
     // offbeat noise hat — double-time from tier 3 on
     const hat = s % 4 === 2 || (musicTier >= 3 && s % 8 === 6);
@@ -477,7 +541,8 @@ export function createRacerAudio(): RacerAudio {
     stop() {
       if (schedTimer) clearInterval(schedTimer);
       schedTimer = null;
-      if (engGain && ctx) engGain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+      if (engGain && ctx)
+        engGain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
       if (rumbleGain && ctx)
         rumbleGain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
       if (brakeGain && ctx)
@@ -512,11 +577,17 @@ export function createRacerAudio(): RacerAudio {
     setHidden(h) {
       if (!ctx) return;
       // suspended contexts freeze currentTime, so the music scheduler's
-      // 0.6 s lookahead just waits — resume continues seamlessly. A
-      // gesture-unlocked context may be resumed programmatically
-      if (h) void ctx.suspend();
-      else void ctx.resume(); // muted = master gain 0 anyway; a stopped
-      // context has no scheduled sources, so this is always safe
+      // 0.6 s lookahead just waits — resume continues seamlessly
+      if (h) {
+        void ctx.suspend();
+      } else {
+        // don't pay the resume cost inside the visibilitychange handler:
+        // the tab-return frames are the jankiest the browser produces, so
+        // the wake is deferred to the next user-driven entry point
+        // (drive/menuSelect/… via ensureRunning). Muted = master gain 0
+        // anyway; a stopped context has no scheduled sources
+        hiddenDeferred = true;
+      }
     },
 
     setInterior(i) {
@@ -539,7 +610,16 @@ export function createRacerAudio(): RacerAudio {
     },
 
     drive(p, throttle, braking, skid, rpm01, shifting, score, boost) {
-      if (!ctx || !engSub || !engMain || !engHarm || !engFat || !engFilter || !engGain)
+      ensureRunning();
+      if (
+        !ctx ||
+        !engSub ||
+        !engMain ||
+        !engHarm ||
+        !engFat ||
+        !engFilter ||
+        !engGain
+      )
         return;
       const t = ctx.currentTime;
       carSilent = false;
@@ -666,10 +746,17 @@ export function createRacerAudio(): RacerAudio {
       }
     },
 
-    pickup(big) {
+    pickup(big, golden) {
       if (!ctx) return;
       const t = ctx.currentTime;
-      if (big) {
+      if (golden) {
+        // coin-chime: a bright climb past the big can's arpeggio — the
+        // rarest pickup gets the highest landing note
+        blip(t, N.E4, 0.07, "square", 0.14, menuBus ?? undefined);
+        blip(t + 0.06, N.A4, 0.07, "square", 0.14, menuBus ?? undefined);
+        blip(t + 0.12, N.C5, 0.09, "square", 0.15, menuBus ?? undefined);
+        blip(t + 0.18, 659.25, 0.14, "square", 0.16, menuBus ?? undefined);
+      } else if (big) {
         blip(t, N.A3, 0.09, "square", 0.14, menuBus ?? undefined);
         blip(t + 0.08, N.E4, 0.09, "square", 0.14, menuBus ?? undefined);
         blip(t + 0.16, N.A4, 0.16, "square", 0.16, menuBus ?? undefined);
@@ -697,10 +784,12 @@ export function createRacerAudio(): RacerAudio {
     },
 
     menuMove() {
+      ensureRunning();
       if (ctx)
         blip(ctx.currentTime, 440, 0.05, "square", 0.08, menuBus ?? undefined);
     },
     menuSelect() {
+      ensureRunning();
       if (ctx)
         blip(ctx.currentTime, 660, 0.09, "square", 0.1, menuBus ?? undefined);
     },
