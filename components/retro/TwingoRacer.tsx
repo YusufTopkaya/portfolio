@@ -14,6 +14,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScoreEntry, ScorePeriod } from "@/lib/highscore";
 import {
+  createRacerAudio,
+  type RacerAudio,
+  type RacerVolumes,
+} from "./racer/audio";
+import { bracketForScore, nextBracket } from "./racer/brackets";
+import {
   createEngine,
   ENGINE_CONSTANTS,
   RACER_HEIGHT,
@@ -22,14 +28,15 @@ import {
   type RacerInput,
   type RacerView,
 } from "./racer/engine";
-import { createRacerAudio, type RacerAudio, type RacerVolumes } from "./racer/audio";
 import {
   loadCarFrames,
   loadCockpit,
   loadGasCan,
   makeRoadside,
+  tintGold,
 } from "./racer/sprites";
 import { createTrackGenerator } from "./racer/track";
+import { analyzeTrack, type TrackStats } from "./racer/trackstats";
 
 /** render buffer: landscape keeps the native 480×270, portrait phones get
     a taller buffer so the game fills the screen instead of letterboxing
@@ -52,6 +59,9 @@ export function TwingoRacer() {
     "start",
   );
   const [titleBoard, setTitleBoard] = useState(false);
+  /* TODAY'S TRACK: 1-5 star difficulty card of the first ~3 km, rated
+     once per session from the same daily seed the engine races on */
+  const [trackStats, setTrackStats] = useState<TrackStats | null>(null);
   const [boardError, setBoardError] = useState(false);
   const [intro, setIntro] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -168,10 +178,22 @@ export function TwingoRacer() {
   /* render buffer size — portrait phones get a taller buffer so the game
      fills the screen instead of letterboxing into a thin strip */
   const [buf, setBuf] = useState({ w: RACER_WIDTH, h: RACER_HEIGHT });
+  /* touch devices: canvas CSS size measured in JS from the visual viewport.
+     Mobile viewport units proved unreliable across URL-bar states (a vh —
+     and on some browsers even dvh — sized canvas ends up taller than the
+     visible area and the centred layout clips the LCD cluster off the top).
+     visualViewport always reflects the visible area, chrome excluded */
+  const [canvasCss, setCanvasCss] = useState<{ w: number; h: number } | null>(
+    null,
+  );
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<RacerEngine | null>(null);
+  /* record chase: each period's #1 score, fetched at run start — applied
+     to the engine both when the fetch lands and when the engine boots,
+     whichever happens last */
+  const recordTargetsRef = useRef<{ score: number; label: string }[]>([]);
   const pausedRef = useRef(false);
   const gameOverRef = useRef(false);
   /* mirrors for the engine-loop key handler — it closes over the first
@@ -370,12 +392,40 @@ export function TwingoRacer() {
 
   /* START on the title screen: boot the engine and drop into the READY
      flash. If the previous session ended mid-overlay (game over never
-     replayed), reset the run first — same as PLAY AGAIN. */
+     replayed), reset the run first — same as PLAY AGAIN. Also kick off
+     the record-chase fetch: the run's targets are each period's #1. */
   const startRun = useCallback(() => {
     setTitleBoard(false);
     if (gameOverRef.current) playAgain();
     setScreen("playing");
     setIntro(true);
+    // ascending prestige: later entries win the dedupe when two period
+    // tops sit on the same score (the same run holding 24H and 7D fires
+    // one banner, the more prestigious one)
+    const CHASE: [ScorePeriod, string][] = [
+      ["daily", "24H"],
+      ["weekly", "7D"],
+      ["monthly", "30D"],
+      ["all", "ALL-TIME"],
+    ];
+    void Promise.all(
+      CHASE.map(([p]) =>
+        fetch(`/api/highscore?period=${p}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    ).then((boards) => {
+      const byScore = new Map<number, { score: number; label: string }>();
+      boards.forEach((d: { scores?: ScoreEntry[] } | null, i) => {
+        const top = d?.scores?.[0]?.score;
+        if (typeof top === "number" && top > 0) {
+          byScore.set(top, { score: top, label: CHASE[i][1] });
+        }
+      });
+      const targets = [...byScore.values()].sort((a, b) => a.score - b.score);
+      recordTargetsRef.current = targets;
+      engineRef.current?.setRecordTargets(targets);
+    });
   }, [playAgain]);
 
   /* leaderboard fetch for the visible period tab; the game-over overlay
@@ -599,7 +649,22 @@ export function TwingoRacer() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, screen, titleBoard, titleSel, titleSettingsOpen, settingsRow, coarse, close, startRun, openTitleBoard, toggleMute, adjustVol, toggleTilt, adjustTiltSens]);
+  }, [
+    open,
+    screen,
+    titleBoard,
+    titleSel,
+    titleSettingsOpen,
+    settingsRow,
+    coarse,
+    close,
+    startRun,
+    openTitleBoard,
+    toggleMute,
+    adjustVol,
+    toggleTilt,
+    adjustTiltSens,
+  ]);
 
   /* rotating the phone mid-run flips the buffer between the landscape and
      portrait shapes; the engine keeps its state and just re-fits (resize) */
@@ -610,6 +675,47 @@ export function TwingoRacer() {
     mq.addEventListener("change", onFlip);
     return () => mq.removeEventListener("change", onFlip);
   }, [open]);
+
+  /* touch devices: fit the canvas into the REALLY visible box, measured in
+     JS (see canvasCss above). Re-runs on orientation flips (buf changes)
+     and on URL-bar show/hide (visualViewport resize). Desktop keeps the
+     pure-CSS min() sizing — no viewport-unit quirks there */
+  useEffect(() => {
+    if (!open || !coarse) {
+      setCanvasCss(null);
+      return;
+    }
+    const fit = () => {
+      const vv = window.visualViewport;
+      const availW = vv?.width ?? window.innerWidth;
+      const availH = vv?.height ?? window.innerHeight;
+      const a = buf.w / buf.h;
+      let w = availW;
+      let h = w / a;
+      if (h > availH) {
+        h = availH;
+        w = h * a;
+      }
+      setCanvasCss({ w: Math.floor(w), h: Math.floor(h) });
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    window.visualViewport?.addEventListener("resize", fit);
+    return () => {
+      window.removeEventListener("resize", fit);
+      window.visualViewport?.removeEventListener("resize", fit);
+    };
+  }, [open, coarse, buf]);
+
+  /* TODAY'S TRACK difficulty card: rate the daily layout once per
+     session, deferred a beat so the title art paints first */
+  useEffect(() => {
+    if (!open || screen !== "title" || trackStats) return;
+    const id = window.setTimeout(() => {
+      setTrackStats(analyzeTrack(Math.floor(Date.now() / 86400000), 3000));
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [open, screen, trackStats]);
 
   /* engine boot + game loop, alive only while a run is on screen — the
      title screen is a static image and never boots the engine */
@@ -627,10 +733,33 @@ export function TwingoRacer() {
     let last = performance.now();
     let fpsFrames = 0;
     let fpsLast = performance.now();
+    // dev-only: after a wake (tab switch / lock), capture the next ~5 s of
+    // raw frame intervals and log a summary — tab-return jank diagnosis
+    let resumeCap: number[] | null = null;
 
     const frame = (now: number) => {
-      const dt = Math.min((now - last) / 1000, 1 / 30);
+      const rawGap = now - last;
+      const dt = Math.min(rawGap / 1000, 1 / 30);
       last = now;
+      if (rawGap > 250) {
+        // the tab slept: the FPS window must not average the freeze in,
+        // or the overlay shows a bogus single-digit FPS after every wake
+        fpsFrames = 0;
+        fpsLast = now;
+        if (process.env.NODE_ENV !== "production") resumeCap = [];
+      } else if (resumeCap) {
+        resumeCap.push(rawGap);
+        if (resumeCap.length >= 300) {
+          const sorted = [...resumeCap].sort((a, b) => a - b);
+          const avg = resumeCap.reduce((s, v) => s + v, 0) / resumeCap.length;
+          console.info(
+            `[racer] post-wake frames: avg ${avg.toFixed(1)}ms ` +
+              `p95 ${sorted[Math.floor(sorted.length * 0.95)].toFixed(1)}ms ` +
+              `max ${sorted[sorted.length - 1].toFixed(1)}ms`,
+          );
+          resumeCap = null;
+        }
+      }
       // FPS overlay: average over 0.5 s windows, only setState when shown
       fpsFrames++;
       if (now - fpsLast >= 500) {
@@ -702,6 +831,7 @@ export function TwingoRacer() {
           roadside: makeRoadside(),
           car,
           gasCan,
+          gasCanGolden: tintGold(gasCan),
           cockpit,
           view: "chase",
           width: buf.w,
@@ -709,11 +839,15 @@ export function TwingoRacer() {
           clusterTopLeft: window.matchMedia("(pointer: coarse)").matches,
           reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
-          onPickup: (big) => audioRef.current?.pickup(big),
+          onPickup: (big, golden) => audioRef.current?.pickup(big, golden),
           onStreak: (tier) => audioRef.current?.streak(tier),
           debug: process.env.NODE_ENV !== "production",
         });
         setView(engineRef.current.state.view);
+        // a record-chase fetch that landed before the engine booted
+        if (recordTargetsRef.current.length > 0) {
+          engineRef.current.setRecordTargets(recordTargetsRef.current);
+        }
         // dev-only handle for e2e probes (speed, gear, …)
         if (process.env.NODE_ENV !== "production") {
           (window as unknown as { __twingo?: RacerEngine }).__twingo =
@@ -886,7 +1020,19 @@ export function TwingoRacer() {
       // release any held keys so the car doesn't drive off on its own
       keysRef.current = { left: false, right: false, gas: false, brake: false };
     };
-  }, [open, screen, close, buf.w, buf.h, runId, toggleMute, adjustVol, toggleTilt, adjustTiltSens, fetchBoard]);
+  }, [
+    open,
+    screen,
+    close,
+    buf.w,
+    buf.h,
+    runId,
+    toggleMute,
+    adjustVol,
+    toggleTilt,
+    adjustTiltSens,
+    fetchBoard,
+  ]);
 
   const bindTouch = (key: "left" | "right" | "gas" | "brake") => ({
     onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -1187,7 +1333,40 @@ export function TwingoRacer() {
           >
             SETTINGS
           </button>
-          {titleSettingsOpen && settingsPanel(() => setTitleSettingsOpen(false))}
+          {/* TODAY'S TRACK: 1-5 star difficulty card of the first 3 km of
+              today's seeded layout — a slim bottom strip, hidden while a
+              title panel is open. Stars are pixel squares: Press Start 2P
+              has no ★ glyph */}
+          {trackStats && !titleBoard && !titleSettingsOpen && (
+            <div className="racer-trackstats font-pixel">
+              <span className="racer-trackstats-cap">TODAY&apos;S TRACK</span>
+              {(
+                [
+                  ["CURVES", trackStats.curves],
+                  ["HILLS", trackStats.hills],
+                  ["FUEL", trackStats.fuel],
+                ] as [string, number][]
+              ).map(([label, n]) => (
+                <span className="racer-trackstats-row" key={label}>
+                  {label}
+                  <span className="racer-trackstats-stars" aria-hidden="true">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <span
+                        key={i}
+                        className={`racer-star${i <= n ? " racer-star-on" : ""}`}
+                      />
+                    ))}
+                  </span>
+                  <span className="sr-only">{n} of 5</span>
+                </span>
+              ))}
+              <span className="racer-trackstats-verdict">
+                {trackStats.verdict}
+              </span>
+            </div>
+          )}
+          {titleSettingsOpen &&
+            settingsPanel(() => setTitleSettingsOpen(false))}
           {titleBoard && (
             <div
               className="racer-gameover racer-title-panel font-pixel"
@@ -1202,6 +1381,12 @@ export function TwingoRacer() {
                     <li key={`${s.name}-${s.at}-${i}`}>
                       <span className="racer-lb-name">
                         {String(i + 1).padStart(2, "0")}. {s.name}
+                      </span>
+                      <span
+                        className="racer-lb-bracket"
+                        style={{ color: bracketForScore(s.score).color }}
+                      >
+                        {bracketForScore(s.score).short}
                       </span>
                       <span className="racer-lb-score">{s.score}</span>
                     </li>
@@ -1238,9 +1423,17 @@ export function TwingoRacer() {
               width={buf.w}
               height={buf.h}
               className="racer-canvas"
-              style={{
-                width: `min(calc(100vw - var(--racer-bezel-x)), calc((100vh - var(--racer-bezel-y)) * ${buf.w / buf.h}))`,
-              }}
+              style={
+                // touch: exact pixel fit measured off the visual viewport
+                // (canvasCss) — viewport units clipped the cluster on some
+                // phones. Desktop: pure CSS, dvh not vh (mobile 100vh is the
+                // URL-bar-hidden height and would clip the centred canvas)
+                canvasCss
+                  ? { width: canvasCss.w, height: canvasCss.h }
+                  : {
+                      width: `min(calc(100vw - var(--racer-bezel-x)), calc((100dvh - var(--racer-bezel-y)) * ${buf.w / buf.h}))`,
+                    }
+              }
             />
             {/* glass effects live ON the screen: scanlines, corner vignette,
                 hazy CRT grain creeping in from the bezel edges, and a faint
@@ -1356,21 +1549,20 @@ export function TwingoRacer() {
           {pauseStats && engineRef.current && (
             <div className="racer-pausemenu-stats">
               <div>SCORE {Math.floor(engineRef.current.state.score)}</div>
-              <div>
-                DIST {engineRef.current.state.distanceKm.toFixed(2)} KM
-              </div>
+              <div>DIST {engineRef.current.state.distanceKm.toFixed(2)} KM</div>
               <div>
                 TIME {Math.floor(engineRef.current.state.time / 60)}:
-                {String(
-                  Math.floor(engineRef.current.state.time % 60),
-                ).padStart(2, "0")}
+                {String(Math.floor(engineRef.current.state.time % 60)).padStart(
+                  2,
+                  "0",
+                )}
               </div>
               <div>
                 AVG{" "}
                 {engineRef.current.state.time > 0.5
                   ? Math.round(
-                      (engineRef.current.state.distanceKm /
-                        (engineRef.current.state.time / 3600)),
+                      engineRef.current.state.distanceKm /
+                        (engineRef.current.state.time / 3600),
                     )
                   : 0}{" "}
                 KM/H
@@ -1379,15 +1571,32 @@ export function TwingoRacer() {
           )}
           {pauseSettingsOpen &&
             settingsPanel(() => setPauseSettingsOpen(false))}
-          {!coarse && (
-            <div className="racer-pausemenu-hint">ESC — RESUME</div>
-          )}
+          {!coarse && <div className="racer-pausemenu-hint">ESC — RESUME</div>}
         </div>
       )}
       {gameOver && screen === "playing" && (
         <div className="racer-gameover font-pixel" role="alert">
           <div className="racer-gameover-title">GAME OVER</div>
           <div className="racer-gameover-score">SCORE {finalScore}</div>
+
+          {/* LoL-style bracket badge, derived from the score */}
+          {(() => {
+            const b = bracketForScore(finalScore);
+            const next = nextBracket(finalScore);
+            return (
+              <>
+                <div className="racer-bracket" style={{ color: b.color }}>
+                  {b.name}
+                </div>
+                {next && (
+                  <div className="racer-bracket-next">
+                    NEXT: {next.name} —{" "}
+                    {(next.min - finalScore).toLocaleString("en-US")} TO GO
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {myRank !== null && (
             <div className="racer-leaderboard-rank">RANK #{myRank}</div>
@@ -1406,6 +1615,12 @@ export function TwingoRacer() {
                 >
                   <span className="racer-lb-name">
                     {String(i + 1).padStart(2, "0")}. {s.name}
+                  </span>
+                  <span
+                    className="racer-lb-bracket"
+                    style={{ color: bracketForScore(s.score).color }}
+                  >
+                    {bracketForScore(s.score).short}
                   </span>
                   <span className="racer-lb-score">{s.score}</span>
                 </li>

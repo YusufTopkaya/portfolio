@@ -644,6 +644,31 @@ html.crt-boot::after {
   }
 }
 
+/* touch devices: the monitor shell trades the retro frame for raw glass —
+   the pedals and the top bar already float over the screen, so the bezel,
+   the chin and the rounded frame are pure wasted space */
+@media (pointer: coarse) {
+  .racer-overlay {
+    --racer-bezel-x: 0px;
+    --racer-bezel-y: 0px;
+  }
+
+  .racer-crt {
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .racer-crt-chin {
+    display: none;
+  }
+
+  .racer-screen {
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
 /* the CRT monitor itself: chunky plastic shell with rounded corners,
    a shadowed bezel around the glass and a chin with brand + power LED */
 .racer-crt {
@@ -968,14 +993,15 @@ html.crt-boot::after {
    lives as a small DOM chip centered under the art box */
 .racer-title-settings {
   position: absolute;
-  bottom: 4%;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 9px;
+  top: 10px;
+  right: 50px; /* left of the ✕ close button — the bottom of the art is
+    painted content (PRESS ENTER TO SELECT / © line), so nothing DOM
+    lives there anymore */
+  font-size: 7px;
   color: #d7ff9e;
   background: rgba(0, 0, 0, 0.6);
   border: 2px solid #6e8f50;
-  padding: 6px 14px;
+  padding: 5px 10px;
   cursor: pointer;
   font-family: inherit;
   z-index: 1;
@@ -985,6 +1011,65 @@ html.crt-boot::after {
 .racer-title-settings-sel {
   border-color: #d7ff9e;
   box-shadow: 0 0 10px rgba(146, 204, 65, 0.7);
+}
+
+/* TODAY'S TRACK difficulty card: 1-5 pixel-star ratings of the first
+   3 km (curves / hills / fuel) + a verdict stamp, parked in the top-left
+   sky corner — the art's painted buttons live at the bottom, the logo
+   starts further right and lower, so the card covers only empty sky */
+.racer-trackstats {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 46vw;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid #6e8f50;
+  padding: 5px 8px 6px;
+  z-index: 1;
+}
+
+.racer-trackstats-cap {
+  font-size: 6px;
+  color: #d7ff9e;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+.racer-trackstats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 6px;
+  color: #d7ff9e;
+}
+
+.racer-trackstats-stars {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.racer-star {
+  width: 6px;
+  height: 6px;
+  border: 1px solid #6e8f50;
+}
+
+.racer-star-on {
+  background: #ffd75e;
+  border-color: #ffd75e;
+  box-shadow: 0 0 4px rgba(255, 215, 94, 0.8);
+}
+
+.racer-trackstats-verdict {
+  font-size: 6px;
+  color: #e2703a;
+  letter-spacing: 1px;
+  text-align: center;
+  margin-top: 2px;
 }
 
 /* touch pause trigger: top-right, just left of the ✕ close button — the
@@ -1190,6 +1275,26 @@ html.crt-boot::after {
   color: #d7ff9e;
 }
 
+/* LoL-style bracket badge under the final score (colour comes from
+   RACER_BRACKETS via inline style) */
+.racer-bracket {
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px currentColor;
+}
+
+.racer-bracket-next {
+  font-size: 7px;
+  color: #9fb97a;
+}
+
+/* tiny bracket tag inside leaderboard rows */
+.racer-lb-bracket {
+  font-size: 6px;
+  opacity: 0.85;
+  align-self: center;
+}
+
 .racer-playagain {
   font-size: 11px;
   color: #0d1f0a;
@@ -1350,17 +1455,19 @@ html.crt-boot::after {
 }
 
 /* portrait (mobile) art by default, landscape (desktop) art once the
-   viewport is wider than tall — matches the <picture> source query */
+   viewport is wider than tall — matches the <picture> source query.
+   dvh (visible viewport), not vh: mobile 100vh ignores the URL bar and
+   the centred art would clip top+bottom while the bar is showing */
 .racer-title-art {
   position: relative;
-  width: min(100vw, calc(100vh * 0.5628));
+  width: min(100vw, calc(100dvh * 0.5628));
   aspect-ratio: 941 / 1672;
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
 }
 
 @media (min-aspect-ratio: 1 / 1) {
   .racer-title-art {
-    width: min(100vw, calc(100vh * 1.7073));
+    width: min(100vw, calc(100dvh * 1.7073));
     aspect-ratio: 1639 / 960;
   }
 }
