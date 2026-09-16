@@ -1395,11 +1395,11 @@ export function TwingoRacer() {
                         {String(i + 1).padStart(2, "0")}. {s.name}
                       </span>
                       <span
-                        className="racer-lb-bracket"
-                        style={{ color: bracketForScore(s.score).color }}
-                      >
-                        {bracketForScore(s.score).short}
-                      </span>
+                        className="racer-lb-gem"
+                        title={bracketForScore(s.score).name}
+                        aria-label={bracketForScore(s.score).name}
+                        style={{ background: bracketForScore(s.score).color }}
+                      />
                       <span className="racer-lb-score">{s.score}</span>
                     </li>
                   ))}
@@ -1629,11 +1629,11 @@ export function TwingoRacer() {
                     {String(i + 1).padStart(2, "0")}. {s.name}
                   </span>
                   <span
-                    className="racer-lb-bracket"
-                    style={{ color: bracketForScore(s.score).color }}
-                  >
-                    {bracketForScore(s.score).short}
-                  </span>
+                    className="racer-lb-gem"
+                    title={bracketForScore(s.score).name}
+                    aria-label={bracketForScore(s.score).name}
+                    style={{ background: bracketForScore(s.score).color }}
+                  />
                   <span className="racer-lb-score">{s.score}</span>
                 </li>
               ))}

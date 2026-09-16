@@ -1288,11 +1288,14 @@ html.crt-boot::after {
   color: #9fb97a;
 }
 
-/* tiny bracket tag inside leaderboard rows */
-.racer-lb-bracket {
-  font-size: 6px;
-  opacity: 0.85;
+/* league gem: a rotated square in the bracket colour */
+.racer-lb-gem {
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
   align-self: center;
+  flex: none;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.35);
 }
 
 .racer-playagain {
