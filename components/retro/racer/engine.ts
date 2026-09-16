@@ -1735,7 +1735,10 @@ export function createEngine(opts: {
       state.speed += OFFROAD_DECEL * dt;
     }
 
-    state.playerX = Math.max(-2.2, Math.min(2.2, state.playerX));
+    // pin AT the stranded threshold: the respawn check below fires the same
+    // frame the car maxes out past the trees (a tighter clamp here — the old
+    // ±2.2 — made FAR_OFFROAD unreachable and the teleport never happened)
+    state.playerX = Math.max(-FAR_OFFROAD, Math.min(FAR_OFFROAD, state.playerX));
     state.speed = Math.max(0, Math.min(MAX_SPEED * boostTop, state.speed));
 
     // crest hop: the road falling away steeply right after a steep climb
