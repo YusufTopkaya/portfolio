@@ -1680,16 +1680,25 @@ export function TwingoRacer() {
             <div className="racer-initials-error">SAVE FAILED</div>
           )}
 
-          <button
-            type="button"
-            className="racer-playagain font-pixel"
-            onClick={playAgain}
-            ref={(el) => {
-              if (!qualifies || submitState === "done") el?.focus();
-            }}
-          >
-            PLAY AGAIN
-          </button>
+          <div className="racer-gameover-actions">
+            <button
+              type="button"
+              className="racer-playagain font-pixel"
+              onClick={playAgain}
+              ref={(el) => {
+                if (!qualifies || submitState === "done") el?.focus();
+              }}
+            >
+              PLAY AGAIN
+            </button>
+            <button
+              type="button"
+              className="racer-quit font-pixel"
+              onClick={quitToTitle}
+            >
+              QUIT
+            </button>
+          </div>
         </div>
       )}
 

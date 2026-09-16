@@ -1312,6 +1312,26 @@ html.crt-boot::after {
   box-shadow: 0 0 10px rgba(146, 204, 65, 0.7);
 }
 
+/* game-over action row: PLAY AGAIN + QUIT side by side */
+.racer-gameover-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.racer-quit {
+  font-size: 11px;
+  color: #d7ff9e;
+  background: transparent;
+  border: 2px solid #5a7a3a;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.racer-quit:hover {
+  border-color: #d7ff9e;
+  box-shadow: 0 0 10px rgba(146, 204, 65, 0.4);
+}
+
 /* period tabs above the leaderboard: ALL / 30D / 7D / 24H */
 .racer-lb-tabs {
   display: flex;
