@@ -287,7 +287,10 @@ export function TwingoRacer() {
       tokenRef.current = null; // consumed — no resubmits
       setMyRank(d.rank);
       // the submit response carries the all-time top-10 and the rank is
-      // an all-time rank — pin the visible tab to ALL so they line up
+      // an all-time rank — pin the visible tab to ALL so they line up.
+      // Bump the board generation so the game-over-time fetch (possibly
+      // still in flight, possibly stale-cached) can't overwrite this
+      boardGenRef.current++;
       setBoardPeriod("all");
       setBoard(d.scores);
       setSubmitState("done");
@@ -429,16 +432,25 @@ export function TwingoRacer() {
   }, [playAgain]);
 
   /* leaderboard fetch for the visible period tab; the game-over overlay
-     and the title panel share it */
+     and the title panel share it. Generation guard: a slow fetch started
+     at game-over time must not clobber the fresher board that a submit
+     response just delivered (a stale-SW NetworkFirst reply can land
+     seconds late — that once blanked a fresh #1 on the ALL tab) */
+  const boardGenRef = useRef(0);
   const fetchBoard = useCallback((period: ScorePeriod) => {
+    const gen = boardGenRef.current;
     setBoard(null);
     setBoardError(false);
     fetch(`/api/highscore?period=${period}`)
       .then((r) =>
         r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
       )
-      .then((d: { scores: ScoreEntry[] }) => setBoard(d.scores))
-      .catch(() => setBoardError(true));
+      .then((d: { scores: ScoreEntry[] }) => {
+        if (boardGenRef.current === gen) setBoard(d.scores);
+      })
+      .catch(() => {
+        if (boardGenRef.current === gen) setBoardError(true);
+      });
   }, []);
 
   const selectPeriod = useCallback(
