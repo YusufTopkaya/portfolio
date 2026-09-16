@@ -156,7 +156,7 @@
     {
       "title": "dokunduur",
       "description": "Una plataforma SaaS multi-inquilino para cafeterías y restaurantes: los clientes escanean un código QR o tocan una etiqueta NFC para abrir al instante un menú digital rápido y con la marca del negocio. Los comerciantes gestionan menús, marca y funcionalidades desde un panel de control dedicado.",
-      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "projectUrl": "https://www.dokunduur.com",
       "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
       "imageUrl": "/images/dokunduur-logo.png"
     },

@@ -156,7 +156,7 @@
     {
       "title": "dokunduur",
       "description": "Eine Multi-Tenant-SaaS-Plattform für Cafés und Restaurants: Kunden scannen einen QR-Code oder tippen auf ein NFC-Tag, um sofort eine schnelle, gebrandete digitale Speisekarte zu öffnen. Gastronomen verwalten Speisekarten, Branding und Funktionen über ein eigenes Dashboard.",
-      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "projectUrl": "https://www.dokunduur.com",
       "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
       "imageUrl": "/images/dokunduur-logo.png"
     },

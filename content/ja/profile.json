@@ -156,7 +156,7 @@
     {
       "title": "dokunduur",
       "description": "カフェやレストラン向けのマルチテナントSaaSプラットフォーム。顧客はQRコードをスキャンするかNFCタグにタップするだけで、高速でブランディングされたデジタルメニューを即座に開くことができます。店舗側は専用ダッシュボードからメニュー、ブランディング、機能を管理できます。",
-      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "projectUrl": "https://www.dokunduur.com",
       "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
       "imageUrl": "/images/dokunduur-logo.png"
     },

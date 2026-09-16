@@ -156,7 +156,7 @@
     {
       "title": "dokunduur",
       "description": "Een multi-tenant SaaS-platform voor cafés en restaurants: klanten scannen een QR-code of tikken op een NFC-tag om direct een snel digitaal menu in eigen huisstijl te openen. Ondernemers beheren menu's, huisstijl en functies vanuit een eigen dashboard.",
-      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "projectUrl": "https://www.dokunduur.com",
       "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
       "imageUrl": "/images/dokunduur-logo.png"
     },

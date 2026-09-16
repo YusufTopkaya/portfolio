@@ -156,7 +156,7 @@
     {
       "title": "dokunduur",
       "description": "Una piattaforma SaaS multi-tenant per bar e ristoranti: i clienti inquadrano un codice QR o avvicinano il telefono a un tag NFC per aprire istantaneamente un menu digitale veloce e personalizzato con il brand. I commercianti gestiscono menu, branding e funzionalità da una dashboard dedicata.",
-      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "projectUrl": "https://www.dokunduur.com",
       "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
       "imageUrl": "/images/dokunduur-logo.png"
     },

@@ -156,7 +156,7 @@
     {
       "title": "dokunduur",
       "description": "Мультитенантная SaaS-платформа для кафе и ресторанов: гости сканируют QR-код или касаются NFC-метки, чтобы мгновенно открыть быстрое фирменное цифровое меню. Заведения управляют меню, брендингом и функциями через отдельную панель управления.",
-      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "projectUrl": "https://www.dokunduur.com",
       "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
       "imageUrl": "/images/dokunduur-logo.png"
     },

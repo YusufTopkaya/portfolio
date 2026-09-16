@@ -156,7 +156,7 @@
     {
       "title": "dokunduur",
       "description": "Wielodostępna platforma SaaS dla kawiarni i restauracji: klienci skanują kod QR lub dotykają znacznika NFC, aby natychmiast otworzyć szybkie, markowe menu cyfrowe. Przedsiębiorcy zarządzają menu, identyfikacją wizualną i funkcjami z poziomu dedykowanego panelu.",
-      "projectUrl": "https://github.com/YusufTopkaya/dokunduur-business",
+      "projectUrl": "https://www.dokunduur.com",
       "tags": ["SaaS", "Multi-Tenant", "QR/NFC"],
       "imageUrl": "/images/dokunduur-logo.png"
     },
