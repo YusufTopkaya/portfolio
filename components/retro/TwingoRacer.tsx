@@ -357,7 +357,7 @@ export function TwingoRacer() {
     // silence the engine hum; the music keeps playing over the title art
     audioRef.current?.menuSelect();
     audioRef.current?.setInterior(false);
-    audioRef.current?.drive(0, false, false, 0, 0, false, 0);
+    audioRef.current?.drive(0, false, false, 0, 0, false, 0, false);
     setGameOver(false);
     setPauseMenu(false);
     setPauseSettingsOpen(false);
@@ -659,6 +659,7 @@ export function TwingoRacer() {
             e.state.rpm01,
             e.state.shiftT > 0,
             e.state.score,
+            e.state.boostT > 0,
           );
         }
         if (e.state.gameOver && !gameOverRef.current) {
@@ -709,6 +710,7 @@ export function TwingoRacer() {
           reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
           onPickup: (big) => audioRef.current?.pickup(big),
+          onStreak: (tier) => audioRef.current?.streak(tier),
           debug: process.env.NODE_ENV !== "production",
         });
         setView(engineRef.current.state.view);

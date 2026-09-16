@@ -139,7 +139,7 @@ const TIRE_SCRUB = 0.23;
 const GEAR_TOPS = [45, 80, 115, 150, 180];
 const SHIFT_TIME = 0.28;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
-const PICKUP_GRACE_T = 0.5; // fuel burns free for this long after a can grab
+const PICKUP_GRACE_T = 0.3; // fuel burns free for this long after a can grab
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank is the run's death clock, OutRun-style: the drain is (nearly)
 // FLAT per second, so fuel-per-km falls monotonically with speed —
@@ -157,7 +157,17 @@ const FUEL_DRAIN_SPEED = 0.04;
 const BOOST_TOP = 1.12;
 const BOOST_ACCEL = 1.3;
 const BOOST_PER_DOT = 2;
-const BOOST_MAX_T = 6;
+// streak rewards pay up to +8 s on their own, so the shared pool tops at 10
+const BOOST_MAX_T = 10;
+// fuel-chain streak ladder, repeating every 10 cans: +1.5 s at 3, +3 s at
+// 5, +5 s at each multiple of 10 (10/20/30…). A full clean lap pays 9.5 s,
+// which beats the 8 s a player earns by DELIBERATELY breaking a chain
+// after 10 and re-farming 3/5 (4.5 s per 5 cans) — staying clean always
+// wins, so there's never an incentive to drop a combo on purpose
+const streakReward = (streak: number): number => {
+  const lap = streak % 10 === 0 ? 10 : streak % 10; // position in the ladder
+  return lap === 10 ? 5 : lap === 5 ? 3 : lap === 3 ? 1.5 : 0;
+};
 // km driven per difficulty level — every step sharpens curves, steepens
 // hills and pushes the gas cans wider (see curveGain/hillGain/canSpread)
 const LEVEL_EVERY_KM = 2;
@@ -211,6 +221,9 @@ export interface EngineState {
   fuel: number;
   /** seconds of BOOST left — overflow fuel burning as extra top speed */
   boostT: number;
+  /** consecutive gas cans collected without missing one (drives the
+      streak HUD and the tiered BOOST rewards in STREAK_REWARDS) */
+  streak: number;
   /** fuel ran dry and the car rolled to a standstill */
   gameOver: boolean;
   offRoad: boolean;
@@ -635,6 +648,7 @@ function drawFuelGauge(
   fuel: number,
   time: number,
   flash: boolean,
+  frozen: boolean,
 ): { x: number; y: number } {
   // pump body
   const bw = 6 * ui;
@@ -678,7 +692,15 @@ function drawFuelGauge(
     ctx.beginPath();
     ctx.arc(cx, dotsY, r, 0, Math.PI * 2);
     if (i < lit) {
-      if (low && i === lit - 1) {
+      if (frozen) {
+        // BOOST freezes the tank drain — the lit dots frost over ice-blue
+        // with a pale ring so the freeze reads at a glance
+        ctx.fillStyle = "#aee3ff";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = Math.max(1, 0.7 * ui);
+        ctx.stroke();
+      } else if (low && i === lit - 1) {
         ctx.fillStyle = blinkOn ? "#e2703a" : "rgba(226,112,58,0.3)";
       } else if (flash) {
         // pickup feedback: the whole gauge pops orange for a beat
@@ -686,7 +708,7 @@ function drawFuelGauge(
       } else {
         ctx.fillStyle = segColor;
       }
-      ctx.fill();
+      if (!frozen) ctx.fill();
     } else {
       ctx.strokeStyle = segColor;
       ctx.lineWidth = Math.max(1, 0.7 * ui);
@@ -713,6 +735,7 @@ function renderCluster(
   fuel: number,
   time: number,
   flash: boolean,
+  frozen: boolean,
   topLeft = false,
 ): { x: number; y: number } {
   const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
@@ -788,6 +811,7 @@ function renderCluster(
     fuel,
     time,
     flash,
+    frozen,
   );
 }
 
@@ -806,6 +830,7 @@ function renderDashCluster(
   fuel: number,
   time: number,
   flash: boolean,
+  frozen: boolean,
 ): { x: number; y: number } {
   const u = h / 19; // the baked screen is 19px tall on the 480x270 master
   ctx.fillStyle = "#23522d";
@@ -872,12 +897,20 @@ function renderDashCluster(
     ctx.beginPath();
     ctx.arc(Math.round(cx), Math.round(dotsY), r, 0, Math.PI * 2);
     if (i < lit) {
-      if (low && i === lit - 1) {
-        ctx.fillStyle = blinkOn ? "#e2703a" : "rgba(226,112,58,0.3)";
+      if (frozen) {
+        ctx.fillStyle = "#aee3ff";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = Math.max(1, 0.5 * u);
+        ctx.stroke();
       } else {
-        ctx.fillStyle = flash ? "#e2703a" : segColor;
+        if (low && i === lit - 1) {
+          ctx.fillStyle = blinkOn ? "#e2703a" : "rgba(226,112,58,0.3)";
+        } else {
+          ctx.fillStyle = flash ? "#e2703a" : segColor;
+        }
+        ctx.fill();
       }
-      ctx.fill();
     } else {
       ctx.strokeStyle = segColor;
       ctx.lineWidth = Math.max(1, 0.5 * u);
@@ -1315,6 +1348,9 @@ export function createEngine(opts: {
   clusterTopLeft?: boolean;
   /** fired when the car drives through a gas can (big = the 2-dot ones) */
   onPickup?: (big: boolean) => void;
+  /** fired when a streak ladder step is crossed (+2/+4/+8 s at 3/5/each
+      multiple of 10 — the ladder repeats every 10 cans) */
+  onStreak?: (streak: number) => void;
   /** dev-only (e2e probes): collect per-render road diagnostics into
       `probe` — off in production so the game ships zero per-frame garbage */
   debug?: boolean;
@@ -1354,6 +1390,7 @@ export function createEngine(opts: {
     respawn: 0,
     fuel: FUEL_MAX,
     boostT: 0,
+    streak: 0,
     gameOver: false,
     offRoad: false,
     gear: 1,
@@ -1395,8 +1432,14 @@ export function createEngine(opts: {
   let canSpread = 1;
   let drainGain = 1;
   let levelUpAt = -10; // engine time of the last level-up (banner)
-  // engine time of the last pickup that produced BOOST (popup variant)
-  let lastBoostAt = -10;
+  // engine time of the last OVERFLOW pickup — its popup names the reason
+  let lastOverflowAt = -10;
+  // engine time / tier / seconds of the last streak reward (popup variant)
+  let lastStreakAt = -10;
+  let lastStreakTier = 0;
+  let lastStreakSecs = 0;
+  // engine time of the last broken chain — drives the burn-out animation
+  let lastStreakLostAt = -10;
   // mercy can: one rescue can per dry spell, injected by update() when
   // the tank runs below 2 dots with nothing collectible ahead
   let mercyUsed = false;
@@ -1404,9 +1447,13 @@ export function createEngine(opts: {
   // (sparkle burst at the car, gauge flash, rising "+1")
   let lastPickupAt = -10;
   // fuel sip grace right after a pickup: the gauge just lit up, so the
-  // first 0.5 s of the new tank burn for free — grabbing a can at a hot
+  // first 0.3 s of the new tank burn for free — grabbing a can at a hot
   // level no longer feels like the drain instantly eating the reward
   let pickupGrace = 0;
+  // smoothed top-speed ceiling: eases toward BOOST_TOP while boost burns
+  // and bleeds back to 1 over ~a second when it ends — no snap from 202
+  // to 180 in a single frame
+  let boostTop = 1;
   // dev-only render diagnostics, refreshed every render (see RacerEngine.probe)
   let probe: NonNullable<RacerEngine["probe"]> = {
     nearGap: 0,
@@ -1598,16 +1645,25 @@ export function createEngine(opts: {
     );
     state.braking = input.brake;
 
+    // the boost top-speed ceiling eases in AND out: when the boost burns
+    // out, the extra speed bleeds off over ~a second of aero drag instead
+    // of snapping back to the 180 cap in a single frame
+    boostTop +=
+      ((state.boostT > 0 ? BOOST_TOP : 1) - boostTop) * Math.min(1, dt * 2.2);
+    const boostMix = (boostTop - 1) / (BOOST_TOP - 1); // smoothed 0..1
+
     if (input.gas && state.fuel > 0 && state.shiftT <= 0) {
       // throttle follows the measured km/h curve of the real car; BOOST
       // lifts the ceiling from 180 to ~202 km/h with a harder pull
       const kmh = (state.speed / MAX_SPEED) * 180;
-      const accel =
-        state.boostT > 0
-          ? Math.max(ACCEL_KMH(kmh), (180 * BOOST_TOP - kmh) * 0.4)
-          : ACCEL_KMH(kmh);
+      const normalAccel = ACCEL_KMH(kmh);
+      const boostPull = Math.max(
+        normalAccel,
+        (180 * BOOST_TOP - kmh) * 0.4,
+      );
+      const accel = normalAccel + (boostPull - normalAccel) * boostMix;
       state.speed +=
-        ((accel * (state.boostT > 0 ? BOOST_ACCEL : 1)) / 180) *
+        ((accel * (1 + (BOOST_ACCEL - 1) * boostMix)) / 180) *
         MAX_SPEED *
         dt;
     } else if (input.brake) state.speed += BRAKING * dt;
@@ -1625,10 +1681,7 @@ export function createEngine(opts: {
     }
 
     state.playerX = Math.max(-2.2, Math.min(2.2, state.playerX));
-    state.speed = Math.max(
-      0,
-      Math.min(MAX_SPEED * (state.boostT > 0 ? BOOST_TOP : 1), state.speed),
-    );
+    state.speed = Math.max(0, Math.min(MAX_SPEED * boostTop, state.speed));
 
     // crest hop: the road falling away steeply right after a steep climb
     // means the car just cleared a hilltop at speed — give it a short
@@ -1699,9 +1752,10 @@ export function createEngine(opts: {
       for (let si = prevPickupSeg; si <= nextPickupSeg; si++) {
         const seg = segments[ringSlot(si)];
         const pk = seg.pickup;
+        // scarcity-hidden cans aren't on the road — passing them neither
+        // counts nor breaks a streak
+        if (!pk || !pickupActive(seg)) continue;
         if (
-          pk &&
-          pickupActive(seg) &&
           Math.abs(state.playerX - pk.x * canSpread) < 0.24 &&
           state.speed > MAX_SPEED * 0.02
         ) {
@@ -1717,13 +1771,30 @@ export function createEngine(opts: {
               BOOST_MAX_T,
               state.boostT + Math.max(overflow * BOOST_PER_DOT, 0.5),
             );
-            lastBoostAt = state.time;
+            lastOverflowAt = state.time;
           }
           state.fuel = Math.min(FUEL_MAX, state.fuel + amount);
           seg.pickup = undefined;
           lastPickupAt = state.time;
           pickupGrace = PICKUP_GRACE_T;
+          state.streak += 1;
+          // chain reward: crossing a ladder step pays bonus BOOST seconds
+          // (the ladder repeats every 10 cans — the flame HUD is the
+          // promise, this is the payoff)
+          const reward = streakReward(state.streak);
+          if (reward) {
+            state.boostT = Math.min(BOOST_MAX_T, state.boostT + reward);
+            lastStreakAt = state.time;
+            lastStreakTier = state.streak;
+            lastStreakSecs = reward;
+            opts.onStreak?.(state.streak);
+          }
           opts.onPickup?.(pk.big ?? false);
+        } else {
+          // an active can was on this segment and we drove past it —
+          // the chain is broken (and the HUD gets to burn the can away)
+          if (state.streak > 0) lastStreakLostAt = state.time;
+          state.streak = 0;
         }
       }
       // mercy can: below 2 dots with nothing collectible in the next ~90
@@ -1762,6 +1833,9 @@ export function createEngine(opts: {
         state.speed = 0;
         state.playerX = 0;
         state.fuel = Math.max(0, state.fuel - 1);
+        // a crash breaks the fuel chain too
+        if (state.streak > 0) lastStreakLostAt = state.time;
+        state.streak = 0;
       }
     }
 
@@ -1840,11 +1914,14 @@ export function createEngine(opts: {
     const skySt = skyStateAt(dayT);
     const skyH = Math.round(height * 0.62);
     const topColor = rgb(skySt.stops[0]);
-    // downhill peeks a strip of void above the sky — fill it with the
-    // sky's own top colour
-    if (skyShiftY > 0) {
+    // any vertical parallax peeks a strip of void above the sky — fill it
+    // with the sky's own top colour. Both signs: downhill slides the
+    // gradient up off-screen, uphill starts it lower, and an unpainted
+    // strip would keep whatever the previous frames left there (a night
+    // sky's dark band surviving into the day was the visible symptom)
+    if (skyShiftY !== 0) {
       ctx.fillStyle = topColor;
-      ctx.fillRect(0, 0, width, Math.ceil(skyShiftY));
+      ctx.fillRect(0, 0, width, Math.ceil(Math.abs(skyShiftY)));
     }
     if (skyGradKey !== `${skyStateKey}:${height}`) {
       skyGradKey = `${skyStateKey}:${height}`;
@@ -2536,6 +2613,7 @@ export function createEngine(opts: {
             state.fuel,
             state.time,
             fxAge < 0.5,
+            state.boostT > 0,
           )
         : renderCluster(
             ctx,
@@ -2546,6 +2624,7 @@ export function createEngine(opts: {
             state.fuel,
             state.time,
             fxAge < 0.5,
+            state.boostT > 0,
             opts.clusterTopLeft,
           );
 
@@ -2572,9 +2651,10 @@ export function createEngine(opts: {
       }
       // "+1" floats up off the fuel gauge — dark outline so it reads
       // against both the light LCD panel and the dark road behind it.
-      // A pickup that overflowed the tank shows BOOST instead
-      const boostFx = lastBoostAt === lastPickupAt;
-      const fxText = boostFx ? "BOOST" : "+1";
+      // A pickup that overflowed the tank names the reason: OVERFLOW,
+      // so the driver knows where the BOOST seconds came from
+      const overflowFx = lastOverflowAt === lastPickupAt;
+      const fxText = overflowFx ? "OVERFLOW" : "+1";
       const p = fxAge / 0.8;
       const tx = Math.round(gaugePos.x);
       const ty = Math.round(gaugePos.y - 4 * ui - p * 14 * ui);
@@ -2582,22 +2662,169 @@ export function createEngine(opts: {
       ctx.font = `bold ${Math.round(9 * ui)}px monospace`;
       ctx.fillStyle = "#141611";
       ctx.fillText(fxText, tx + 1, ty + 1);
-      ctx.fillStyle = boostFx ? "#e2703a" : "#d7ff9e";
+      ctx.fillStyle = overflowFx ? "#e2703a" : "#d7ff9e";
       ctx.fillText(fxText, tx, ty);
       ctx.globalAlpha = 1;
     }
 
-    // BOOST active: blinking tag above the gauge dots until it burns out
+    // BOOST active: blinking readout of the seconds left. Desktop keeps
+    // it above the gauge; portrait phones get a big centred one — a corner
+    // tag is unreadable on a small screen held at arm's length (and it
+    // would fight the streak HUD for the corner anyway)
     if (state.boostT > 0 && !state.gameOver) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
       if (Math.floor(state.time * 3) % 2 === 0) {
-        ctx.font = `bold ${Math.round(7 * ui)}px monospace`;
-        const bx = Math.round(gaugePos.x);
-        const by = Math.round(gaugePos.y - 8 * ui);
+        const portraitHud = height > width;
+        const msg = `BOOST ${state.boostT.toFixed(1)}s`;
+        ctx.font = `bold ${Math.round((portraitHud ? 12 : 7) * ui)}px monospace`;
+        const tw = ctx.measureText(msg).width;
+        const bx = portraitHud
+          ? Math.round(width / 2 - tw / 2)
+          : Math.round(gaugePos.x);
+        const by = portraitHud
+          ? Math.round(height * 0.14)
+          : Math.round(gaugePos.y - 8 * ui);
         ctx.fillStyle = "#141611";
-        ctx.fillText("BOOST", bx + 1, by + 1);
+        ctx.fillText(msg, bx + 1, by + 1);
         ctx.fillStyle = "#e2703a";
-        ctx.fillText("BOOST", bx, by);
+        ctx.fillText(msg, bx, by);
+      }
+    }
+
+    // fuel-chain streak HUD: a red jerrycan stamped with a tiny "GAS" +
+    // an "xN" counter, parked in the corner opposite the LCD cluster so
+    // the two never collide (touch moves the cluster top-left, so we
+    // mirror). Visible from x1; when the chain breaks the can flares up,
+    // burns for a beat and fades away
+    const stAge = state.time - lastStreakAt;
+    const lostAge = state.time - lastStreakLostAt;
+    const STREAK_BURN_T = 0.9; // burn-out animation length on a broken chain
+    if (
+      (state.streak >= 1 || stAge < 1.2 || lostAge < STREAK_BURN_T) &&
+      !state.gameOver
+    ) {
+      // portrait phones: the buffer keeps its desktop design size, so the
+      // physical pixels end up tiny — scale the whole corner cluster up
+      const ui =
+        Math.min(width / RACER_WIDTH, height / RACER_HEIGHT) *
+        (height > width ? 2 : 1);
+      ctx.font = `bold ${Math.round(8 * ui)}px monospace`;
+      // measure the widest label the counter can show here so the anchor
+      // corner doesn't drift while the can burns out (streak is 0 then)
+      const label = `x${Math.max(1, state.streak)}`;
+      const labelW = ctx.measureText(label).width;
+      const margin = Math.round(8 * ui);
+      const iconW = Math.round(10 * ui);
+      const iconH = Math.round(12 * ui);
+      const pad = Math.round(4 * ui);
+      const bx = opts.clusterTopLeft
+        ? Math.round(width - margin - iconW - pad - labelW)
+        : margin;
+      const by = margin;
+      // pixel jerrycan: black outline, red pressed-steel body, stamped X,
+      // cap nub on the top-right corner, tiny "GAS" plate
+      const drawCan = (alpha: number) => {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#141611";
+        ctx.fillRect(bx - 1, by - 1, iconW + 2, iconH + 2);
+        ctx.fillRect(
+          bx + iconW - Math.round(3 * ui),
+          by - Math.round(2 * ui),
+          Math.round(3 * ui),
+          Math.round(2 * ui),
+        );
+        ctx.fillStyle = "#d43a2f";
+        ctx.fillRect(bx, by, iconW, iconH);
+        ctx.strokeStyle = "#8e2318";
+        ctx.lineWidth = Math.max(1, Math.round(1 * ui));
+        ctx.beginPath();
+        ctx.moveTo(bx + Math.round(iconW * 0.2), by + Math.round(iconH * 0.14));
+        ctx.lineTo(bx + Math.round(iconW * 0.8), by + Math.round(iconH * 0.55));
+        ctx.moveTo(bx + Math.round(iconW * 0.8), by + Math.round(iconH * 0.14));
+        ctx.lineTo(bx + Math.round(iconW * 0.2), by + Math.round(iconH * 0.55));
+        ctx.stroke();
+        ctx.font = `bold ${Math.max(3, Math.round(3 * ui))}px monospace`;
+        ctx.fillStyle = "#141611";
+        const gw = ctx.measureText("GAS").width;
+        ctx.fillText(
+          "GAS",
+          Math.round(bx + (iconW - gw) / 2),
+          by + Math.round(iconH * 0.8),
+        );
+        ctx.globalAlpha = 1;
+      };
+      if (state.streak >= 1) {
+        // flame tongues rising behind the can, flickering on engine time.
+        // They track the ladder lap: growing through each 10-can lap
+        // (2/3 tongues past 3/5) and burning fullest at every multiple
+        // of 10 — the fire itself shows how close the next +8 s is
+        const lap = state.streak % 10 === 0 ? 10 : state.streak % 10;
+        const tongues =
+          1 + (lap >= 3 ? 1 : 0) + (lap >= 5 ? 1 : 0) + (lap >= 10 ? 1 : 0);
+        for (let k = 0; k < tongues; k++) {
+          const flick = 0.5 + 0.5 * Math.sin(state.time * 11 + k * 1.7);
+          const fh = Math.round((4 + k * 2 + flick * 3) * ui);
+          const fw = Math.round((3 + (k % 2)) * ui);
+          const fx = Math.round(
+            bx + iconW / 2 - fw / 2 + (k - (tongues - 1) / 2) * 3 * ui,
+          );
+          ctx.globalAlpha = 0.35 + 0.4 * flick;
+          ctx.fillStyle = k % 2 ? "#e2703a" : "#ffb03a";
+          ctx.fillRect(fx, by + iconH - fh, fw, fh);
+        }
+        ctx.globalAlpha = 1;
+        drawCan(1);
+        const tx = bx + iconW + pad;
+        const ty = by + iconH - Math.round(1 * ui);
+        ctx.font = `bold ${Math.round(8 * ui)}px monospace`;
+        ctx.fillStyle = "#141611";
+        ctx.fillText(label, tx + 1, ty + 1);
+        ctx.fillStyle = "#ffd75e";
+        ctx.fillText(label, tx, ty);
+      } else if (lostAge < STREAK_BURN_T) {
+        // chain broken: the can flares up wilder than the streak flame
+        // ever burned, then is consumed — alpha and tongues die together
+        const p = lostAge / STREAK_BURN_T;
+        for (let k = 0; k < 5; k++) {
+          const flick = 0.5 + 0.5 * Math.sin(state.time * 16 + k * 2.3);
+          const fh = Math.round((6 + k + flick * 5) * ui * (1 - p * 0.5));
+          const fw = Math.round((3 + (k % 2)) * ui);
+          const fx = Math.round(
+            bx + iconW / 2 - fw / 2 + (k - 2) * 3 * ui,
+          );
+          ctx.globalAlpha = (1 - p) * (0.4 + 0.5 * flick);
+          ctx.fillStyle = k % 2 ? "#e2703a" : "#ffb03a";
+          ctx.fillRect(fx, by + iconH - fh, fw, fh);
+        }
+        ctx.globalAlpha = 1;
+        drawCan(1 - p);
+      }
+      // tier-crossing popup under the counter: the flame was the promise,
+      // this is the payoff. Same face as the LEVEL banner. Completing a
+      // full 10-can lap is the prestigious moment — it gets the COMBO
+      // count (2 combos clean = streak 20) instead of a raw streak number
+      if (stAge < 1.2) {
+        const msg =
+          lastStreakTier % 10 === 0
+            ? `COMBO ${lastStreakTier / 10}! +${lastStreakSecs}s`
+            : `STREAK ${lastStreakTier}! +${lastStreakSecs}s`;
+        ctx.font = `bold ${Math.round(8 * ui)}px monospace`;
+        const tw = ctx.measureText(msg).width;
+        const tx = Math.round(
+          opts.clusterTopLeft
+            ? width - margin - tw
+            : margin,
+        );
+        const ty = by + iconH + Math.round(10 * ui);
+        ctx.globalAlpha = Math.max(
+          0,
+          Math.min(1, Math.min(stAge / 0.15, (1.2 - stAge) / 0.4)),
+        );
+        ctx.fillStyle = "#141611";
+        ctx.fillText(msg, tx + 1, ty + 1);
+        ctx.fillStyle = "#e2703a";
+        ctx.fillText(msg, tx, ty);
+        ctx.globalAlpha = 1;
       }
     }
 

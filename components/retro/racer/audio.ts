@@ -65,8 +65,14 @@ export interface RacerAudio {
     rpm01: number,
     shifting: boolean,
     score: number,
+    /** BOOST burning: NOS whoosh on the rising edge, a rev-following
+        whistle while it lasts, blow-off sigh at the end */
+    boost: boolean,
   ): void;
   pickup(big: boolean): void;
+  /** streak ladder step crossed (+2/+4/+8 s at 3/5/each 10 — repeats
+      every 10 cans) — rising fanfare, deeper steps climb higher */
+  streak(streak: number): void;
   menuMove(): void;
   menuSelect(): void;
   gameOver(): void;
@@ -149,6 +155,17 @@ export function createRacerAudio(): RacerAudio {
   let brakeGain: GainNode | null = null;
   let skidGain: GainNode | null = null;
 
+  // boost voice: muscle first — a detuned saw growl + lowpassed air roar
+  // carry the sound, the thin whistle sine is just a garnish; all under
+  // boostGain, gated by drive() (NOS whoosh on activation, blow-off sigh
+  // at the end)
+  let boostWhistle: OscillatorNode | null = null;
+  let boostGrowl: OscillatorNode | null = null;
+  let boostGrowlFilter: BiquadFilterNode | null = null;
+  let boostAirFilter: BiquadFilterNode | null = null;
+  let boostGain: GainNode | null = null;
+  let boostWasOn = false; // edge detection for the whoosh / blow-off
+
   // music: per-part gains so speed/score can open up layers
   let leadGain: GainNode | null = null;
   let lead2Gain: GainNode | null = null; // octave-up doubler
@@ -203,6 +220,32 @@ export function createRacerAudio(): RacerAudio {
       curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x));
     }
     return curve;
+  };
+
+  /** filtered noise one-shot with a swept bandpass — the boost whoosh and
+      the blow-off are the same machine inhaling vs exhaling */
+  const noiseBurst = (
+    at: number,
+    dur: number,
+    fromFreq: number,
+    toFreq: number,
+    vol: number,
+    q = 1.2,
+  ) => {
+    if (!ctx || !engineBus) return;
+    const src = makeNoise(ctx);
+    src.loop = false;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = q;
+    bp.frequency.setValueAtTime(fromFreq, at);
+    bp.frequency.exponentialRampToValueAtTime(toFreq, at + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, at);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    src.connect(bp).connect(g).connect(engineBus);
+    src.start(at);
+    src.stop(at + dur + 0.02);
   };
 
   /** soft clutch/gear thump: a short burst of heavily lowpassed noise */
@@ -378,6 +421,44 @@ export function createRacerAudio(): RacerAudio {
         skidNoise.connect(sbp).connect(skidGain).connect(engineBus);
         skidNoise.start();
 
+        // boost voice: muscle first — a detuned saw growl + lowpassed air
+        // roar carry the sound, the thin whistle sine is just a garnish
+        // on top; all of it under a shared gain, silent until drive()
+        // opens it while boostT burns
+        boostWhistle = ctx.createOscillator();
+        boostWhistle.type = "sine";
+        boostWhistle.frequency.value = 500;
+        const whistleG = ctx.createGain();
+        whistleG.gain.value = 0.18;
+        boostWhistle.connect(whistleG);
+        boostGrowl = ctx.createOscillator();
+        boostGrowl.type = "sawtooth";
+        boostGrowl.frequency.value = 70;
+        boostGrowlFilter = ctx.createBiquadFilter();
+        boostGrowlFilter.type = "lowpass";
+        boostGrowlFilter.frequency.value = 600;
+        boostGrowlFilter.Q.value = 1.4;
+        const growlG = ctx.createGain();
+        growlG.gain.value = 1;
+        boostGrowl.connect(boostGrowlFilter).connect(growlG);
+        const boostAir = makeNoise(ctx);
+        boostAirFilter = ctx.createBiquadFilter();
+        boostAirFilter.type = "lowpass";
+        boostAirFilter.frequency.value = 1400;
+        boostAirFilter.Q.value = 0.8;
+        const airG = ctx.createGain();
+        airG.gain.value = 0.85;
+        boostAir.connect(boostAirFilter).connect(airG);
+        boostGain = ctx.createGain();
+        boostGain.gain.value = 0;
+        whistleG.connect(boostGain);
+        growlG.connect(boostGain);
+        airG.connect(boostGain);
+        boostGain.connect(engineBus);
+        boostWhistle.start();
+        boostGrowl.start();
+        boostAir.start();
+
         leadGain = ctx.createGain();
         leadGain.gain.value = 0.02;
         leadGain.connect(musicBus);
@@ -403,6 +484,8 @@ export function createRacerAudio(): RacerAudio {
         brakeGain.gain.setTargetAtTime(0, ctx.currentTime, 0.03);
       if (skidGain && ctx)
         skidGain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+      if (boostGain && ctx)
+        boostGain.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
       if (ctx) void ctx.suspend();
     },
 
@@ -422,6 +505,7 @@ export function createRacerAudio(): RacerAudio {
         if (rumbleGain) rumbleGain.gain.setTargetAtTime(0, t, 0.05);
         if (brakeGain) brakeGain.gain.setTargetAtTime(0, t, 0.03);
         if (skidGain) skidGain.gain.setTargetAtTime(0, t, 0.03);
+        if (boostGain) boostGain.gain.setTargetAtTime(0, t, 0.03);
       }
     },
 
@@ -454,7 +538,7 @@ export function createRacerAudio(): RacerAudio {
       return { ...volumes };
     },
 
-    drive(p, throttle, braking, skid, rpm01, shifting, score) {
+    drive(p, throttle, braking, skid, rpm01, shifting, score, boost) {
       if (!ctx || !engSub || !engMain || !engHarm || !engFat || !engFilter || !engGain)
         return;
       const t = ctx.currentTime;
@@ -529,6 +613,35 @@ export function createRacerAudio(): RacerAudio {
         const s = p > 0.15 ? Math.min(0.12, skid * 0.12) * tireQuiet : 0;
         skidGain.gain.setTargetAtTime(s, t, 0.05);
       }
+      // boost voice: NOS whoosh + a sub-bass punch on the rising edge,
+      // blow-off sigh on the falling one, and while it burns a detuned
+      // saw growl + lowpassed air roar under a faint whistle — the roar
+      // is the clock you hear draining
+      if (boost && !boostWasOn) {
+        noiseBurst(t, 0.45, 700, 3800, 0.15, 1.0);
+        blip(t, 130, 0.3, "sine", 0.2, engineBus ?? undefined, 45);
+      }
+      if (!boost && boostWasOn) noiseBurst(t, 0.3, 3400, 1300, 0.11, 1.6);
+      boostWasOn = boost;
+      if (boostGain) {
+        boostGain.gain.setTargetAtTime(
+          boost ? (0.05 + loadSmooth * 0.035) * quiet : 0,
+          t,
+          0.06,
+        );
+      }
+      if (boostWhistle) {
+        boostWhistle.frequency.setTargetAtTime(500 + r * 900, t, 0.08);
+      }
+      if (boostGrowl) {
+        boostGrowl.frequency.setTargetAtTime(65 + r * 130, t, 0.08);
+      }
+      if (boostGrowlFilter) {
+        boostGrowlFilter.frequency.setTargetAtTime(500 + r * 700, t, 0.1);
+      }
+      if (boostAirFilter) {
+        boostAirFilter.frequency.setTargetAtTime(1200 + r * 1800, t, 0.1);
+      }
       // progressive music: the loop picks up layers as the score climbs
       musicTier =
         score >= TIER_HATS
@@ -564,6 +677,23 @@ export function createRacerAudio(): RacerAudio {
       }
     },
 
+    streak(streak) {
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      const lap = streak % 10 === 0 ? 10 : streak % 10;
+      // rising arpeggio — the +8 s step at each multiple of 10 climbs
+      // further and lands higher than the mid-lap steps
+      const notes =
+        lap === 10
+          ? [N.C4, N.E4, N.A4, N.C5]
+          : lap === 5
+            ? [N.E4, N.A4, N.C5]
+            : [N.E4, N.A4];
+      for (const [i, f] of notes.entries()) {
+        blip(t + i * 0.07, f, 0.12, "square", 0.14, menuBus ?? undefined);
+      }
+    },
+
     menuMove() {
       if (ctx)
         blip(ctx.currentTime, 440, 0.05, "square", 0.08, menuBus ?? undefined);
@@ -582,6 +712,7 @@ export function createRacerAudio(): RacerAudio {
       if (rumbleGain) rumbleGain.gain.setTargetAtTime(0, t, 0.1);
       brakeGain.gain.setTargetAtTime(0, t, 0.05);
       if (skidGain) skidGain.gain.setTargetAtTime(0, t, 0.05);
+      if (boostGain) boostGain.gain.setTargetAtTime(0, t, 0.05);
       blip(t, 300, 0.8, "sawtooth", 0.12, menuBus ?? undefined, 70);
     },
   };
