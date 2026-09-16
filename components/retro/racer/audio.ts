@@ -169,10 +169,11 @@ const LEAD: (number | null)[] = [
   null,
 ];
 
-/* score thresholds where the loop picks up another layer */
-const TIER_LEAD = 25_000; // lead arpeggio opens up
-const TIER_OCTAVE = 60_000; // lead doubled an octave up
-const TIER_HATS = 100_000; // hats go double-time
+/* score thresholds where the loop picks up another layer (halved with
+   the ×0.5 score scale — same km marks as before) */
+const TIER_LEAD = 12_500; // lead arpeggio opens up
+const TIER_OCTAVE = 30_000; // lead doubled an octave up
+const TIER_HATS = 50_000; // hats go double-time
 
 /* engine model: D7F 1149 cc inline-4 four-stroke, ~850 rpm idle, 6000 rpm
    redline — firing frequency = RPM/30, so 28-200 Hz */

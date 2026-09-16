@@ -1520,10 +1520,12 @@ export function createEngine(opts: {
     profile: [],
     segDiag: [],
   };
-  // scarcity ramps with score: every 3000 points hides another 1% of the
+  // scarcity ramps with score: every 1500 points hides another 1% of the
   // track's cans (capped at 40% — the cap is calibrated with the drain
   // cap so a PERFECT chain stays sustainable in the deep game while a
-  // 1-in-10 miss rate slowly bleeds out; see LAP_FUEL).
+  // 1-in-10 miss rate slowly bleeds out; see LAP_FUEL). The divisor rides
+  // the score scale — halved when the score formula went to ×0.5, so the
+  // per-km ramp is unchanged.
   // Big cans (every 10th) resist at half the rate — the relief valve must
   // survive into the late game. Cans are hidden in golden-ratio order
   // over their ordinal, so the hidden ones stay evenly spread instead of
@@ -1534,7 +1536,7 @@ export function createEngine(opts: {
     if (!pk) return true;
     if (pk.ordinal < 0) return true; // mercy can: never scarcity-hidden
     if (pk.golden) return true; // golden can: a gift is never hidden
-    const hidden = Math.min(0.4, Math.floor(state.score / 3000) * 0.01);
+    const hidden = Math.min(0.4, Math.floor(state.score / 1500) * 0.01);
     if (hidden <= 0) return true;
     return (
       (pk.ordinal * 0.6180339887498949) % 1 >= (pk.big ? hidden / 2 : hidden)
@@ -1920,10 +1922,11 @@ export function createEngine(opts: {
       }
     }
 
-    // score: metres driven, multiplied when cruising fast AND clean —
-    // off-road or respawning drops the multiplier back to x1. The 170+
-    // tier exists to keep flat-out driving worth the fuel and the risk:
-    // without it the optimal strategy collapses to a steady 150 cruise
+    // score: metres driven at HALF rate, multiplied when cruising fast
+    // AND clean — off-road or respawning drops the multiplier back to x1.
+    // The 170+ tier exists to keep flat-out driving worth the fuel and the
+    // risk: without it the optimal strategy collapses to a steady 150
+    // cruise. (×0.5 scale: keeps 100k a marquee number — ~22 min flat out)
     const kmh = (state.speed / MAX_SPEED) * 180;
     state.multiplier =
       state.offRoad || state.respawn > 0
@@ -1935,7 +1938,7 @@ export function createEngine(opts: {
             : kmh > 110
               ? 2
               : 1;
-    state.score += ((kmh * dt) / 3.6) * state.multiplier;
+    state.score += ((kmh * dt) / 3.6) * state.multiplier * 0.5;
 
     // record chase: each leaderboard top crossed fires the centre banner
     // once — targets arrive ascending, so the first is always the next

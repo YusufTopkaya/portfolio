@@ -13,17 +13,19 @@ export interface RacerBracket {
   color: string;
 }
 
-// descending by threshold so `find` walks from the top
+// descending by threshold so `find` walks from the top. Rounded halves
+// of the original scale (score accrues at ×0.5): GRANDMASTER sits on
+// the marquee 100k, CHALLENGER keeps the 25-minute anchor at 120k
 export const RACER_BRACKETS: RacerBracket[] = [
-  { name: "CHALLENGER", short: "CHA", min: 240000, color: "#ffd94a" },
-  { name: "GRANDMASTER", short: "GM", min: 215000, color: "#e5484d" },
-  { name: "MASTER", short: "MAS", min: 185000, color: "#a45cff" },
-  { name: "DIAMOND", short: "DIA", min: 155000, color: "#7ee7ff" },
-  { name: "EMERALD", short: "EME", min: 125000, color: "#3ddc84" },
-  { name: "PLATINUM", short: "PLA", min: 100000, color: "#4fd1c5" },
-  { name: "GOLD", short: "GLD", min: 70000, color: "#ffc93c" },
-  { name: "SILVER", short: "SIL", min: 40000, color: "#c0c8d0" },
-  { name: "BRONZE", short: "BRO", min: 15000, color: "#c08457" },
+  { name: "CHALLENGER", short: "CHA", min: 120000, color: "#ffd94a" },
+  { name: "GRANDMASTER", short: "GM", min: 100000, color: "#e5484d" },
+  { name: "MASTER", short: "MAS", min: 85000, color: "#a45cff" },
+  { name: "DIAMOND", short: "DIA", min: 70000, color: "#7ee7ff" },
+  { name: "EMERALD", short: "EME", min: 60000, color: "#3ddc84" },
+  { name: "PLATINUM", short: "PLA", min: 50000, color: "#4fd1c5" },
+  { name: "GOLD", short: "GLD", min: 35000, color: "#ffc93c" },
+  { name: "SILVER", short: "SIL", min: 20000, color: "#c0c8d0" },
+  { name: "BRONZE", short: "BRO", min: 10000, color: "#c08457" },
   { name: "IRON", short: "IRO", min: 0, color: "#8a8f98" },
 ];
 

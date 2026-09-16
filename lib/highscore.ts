@@ -17,14 +17,15 @@ interface StoreFile {
 }
 
 // v3: the difficulty squeeze (drainGain ×1.9 deep-game cap) made old
-// scores incomparable — they were earned on the easy flat-cap economy
-const STORE_VERSION = 3;
+// scores incomparable — they were earned on the easy flat-cap economy.
+// v4: score accrual halved (×0.5) so 100k is the marquee number
+const STORE_VERSION = 4;
 const MAX_SCORES = 50;
 const MAX_STORED = 300; // hard cap on the file, incl. entries kept for period boards
 const RETENTION_MS = 40 * 24 * 60 * 60 * 1000; // keep recent entries for period boards
 const NONCE_TTL_MS = 30 * 60 * 1000;
-const MAX_SCORE_PER_SEC = 300; // generous plausibility bound: 200/s flat out
-// at the x4 multiplier, plus crest-hop bonuses on top
+const MAX_SCORE_PER_SEC = 150; // generous plausibility bound: 100/s flat out
+// at the x4 multiplier on the halved (×0.5) score scale
 const MIN_DURATION_SEC = 3;
 
 const STORE_PATH =
