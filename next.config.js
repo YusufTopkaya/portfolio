@@ -5,8 +5,11 @@ const withPWA = require("@ducanh2912/next-pwa").default({
   skipWaiting: true,
   // Exclude source maps and other unnecessary files
   buildExcludes: [/middleware-manifest\.json$/],
-  // Runtime caching strategies
-  runtimeCaching: [
+  // NOTE: this next-pwa version only reads runtimeCaching from inside
+  // workboxOptions — a top-level runtimeCaching is silently ignored and
+  // the plugin's default rules are used instead.
+  workboxOptions: {
+    runtimeCaching: [
     {
       urlPattern: /^https:\/\/fonts\.(?:gstatic|googleapis)\.com\/.*/i,
       handler: "CacheFirst",
@@ -143,6 +146,23 @@ const withPWA = require("@ducanh2912/next-pwa").default({
       },
     },
     {
+      // Leaderboards and live quotes must NEVER come from the SW cache:
+      // the generic /api/ rule below is NetworkFirst with a 24 h cache and
+      // a 10 s network timeout, so on a flaky connection it serves the
+      // board as it was BEFORE your run — a fresh all-time #1 once hid
+      // from its own author on the ALL tab while the uncached period tabs
+      // (never visited before, nothing to fall back to) showed it fine
+      urlPattern: ({ url }) => {
+        const isSameOrigin = self.origin === url.origin;
+        return (
+          isSameOrigin &&
+          (url.pathname.startsWith("/api/highscore") ||
+            url.pathname.startsWith("/api/stocks"))
+        );
+      },
+      handler: "NetworkOnly",
+    },
+    {
       urlPattern: ({ url }) => {
         const isSameOrigin = self.origin === url.origin;
         return isSameOrigin && url.pathname.startsWith("/api/");
@@ -172,7 +192,8 @@ const withPWA = require("@ducanh2912/next-pwa").default({
         networkTimeoutSeconds: 10,
       },
     },
-  ],
+    ],
+  },
 });
 
 /** @type {import('next').NextConfig} */
