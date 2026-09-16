@@ -624,8 +624,10 @@ export function createRacerAudio(): RacerAudio {
       if (!boost && boostWasOn) noiseBurst(t, 0.3, 3400, 1300, 0.11, 1.6);
       boostWasOn = boost;
       if (boostGain) {
+        // EXPERIMENT: full exhaust underneath + the boost voice layered on
+        // top (louder than the original garnish mix, nothing ducks)
         boostGain.gain.setTargetAtTime(
-          boost ? (0.05 + loadSmooth * 0.035) * quiet : 0,
+          boost ? (0.08 + loadSmooth * 0.04) * quiet : 0,
           t,
           0.06,
         );

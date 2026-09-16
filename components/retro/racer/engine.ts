@@ -168,9 +168,10 @@ const streakReward = (streak: number): number => {
   const lap = streak % 10 === 0 ? 10 : streak % 10; // position in the ladder
   return lap === 10 ? 5 : lap === 5 ? 3 : lap === 3 ? 1.5 : 0;
 };
-// km driven per difficulty level — every step sharpens curves, steepens
-// hills and pushes the gas cans wider (see curveGain/hillGain/canSpread)
-const LEVEL_EVERY_KM = 2;
+// km driven per difficulty level — a tight ladder: the drain multiplier
+// hits its cap by ~12 km (~4 min flat out) instead of stretching a soft
+// early game, so runs stay arcade-short and scores can't balloon
+const LEVEL_EVERY_KM = 1.5;
 const FAR_OFFROAD = 2.5; // |playerX| at/above this = stranded past the trees (2.5, not 2.0: a run-off window so a slide can be caught before the respawn teleport)
 const LANES = 3;
 
@@ -2270,6 +2271,32 @@ export function createEngine(opts: {
               Math.round(destW),
               Math.round((visibleH / destH) * destH),
             );
+          } else {
+            // fully hidden behind a crest — the can itself can't draw
+            // (clip culls it), so a rally-style pennant on a thin pole
+            // pokes over the hill line at the can's spot: fuel you can't
+            // see is fuel you can't plan for
+            const px = Math.round(destX + destW / 2);
+            const hillY = Math.round(segment.clip || 0);
+            const poleH = Math.max(6, Math.round(destH * 1.4));
+            const poleW = Math.max(1, Math.round(destW * 0.08));
+            ctx.fillStyle = "#141611";
+            ctx.fillRect(px, hillY - poleH, poleW, poleH);
+            const fw = Math.max(3, Math.round(destW * 0.55));
+            const fh = Math.max(2, Math.round(destW * 0.34));
+            const sway = Math.round(
+              Math.sin(state.time * 6 + segment.index) *
+                Math.max(1, destW * 0.08),
+            );
+            ctx.fillStyle = "#ffd75e";
+            ctx.fillRect(px + poleW + sway, hillY - poleH, fw, fh);
+            ctx.fillStyle = "#e2703a";
+            ctx.fillRect(
+              px + poleW + sway + fw,
+              hillY - poleH,
+              Math.max(1, Math.round(fw * 0.45)),
+              Math.max(1, Math.round(fh * 0.7)),
+            );
           }
         }
       }
@@ -2651,10 +2678,8 @@ export function createEngine(opts: {
       }
       // "+1" floats up off the fuel gauge — dark outline so it reads
       // against both the light LCD panel and the dark road behind it.
-      // A pickup that overflowed the tank names the reason: OVERFLOW,
-      // so the driver knows where the BOOST seconds came from
-      const overflowFx = lastOverflowAt === lastPickupAt;
-      const fxText = overflowFx ? "OVERFLOW" : "+1";
+      // (A full-tank pickup's OVERFLOW reason gets the centre banner below)
+      const fxText = "+1";
       const p = fxAge / 0.8;
       const tx = Math.round(gaugePos.x);
       const ty = Math.round(gaugePos.y - 4 * ui - p * 14 * ui);
@@ -2662,28 +2687,22 @@ export function createEngine(opts: {
       ctx.font = `bold ${Math.round(9 * ui)}px monospace`;
       ctx.fillStyle = "#141611";
       ctx.fillText(fxText, tx + 1, ty + 1);
-      ctx.fillStyle = overflowFx ? "#e2703a" : "#d7ff9e";
+      ctx.fillStyle = "#d7ff9e";
       ctx.fillText(fxText, tx, ty);
       ctx.globalAlpha = 1;
     }
 
-    // BOOST active: blinking readout of the seconds left. Desktop keeps
-    // it above the gauge; portrait phones get a big centred one — a corner
-    // tag is unreadable on a small screen held at arm's length (and it
-    // would fight the streak HUD for the corner anyway)
+    // BOOST active: blinking readout of the seconds left, big and centred
+    // at the top of the screen — the arcade spot where the games that
+    // invented this trope put it, and readable on any form factor
     if (state.boostT > 0 && !state.gameOver) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
       if (Math.floor(state.time * 3) % 2 === 0) {
-        const portraitHud = height > width;
         const msg = `BOOST ${state.boostT.toFixed(1)}s`;
-        ctx.font = `bold ${Math.round((portraitHud ? 12 : 7) * ui)}px monospace`;
+        ctx.font = `bold ${Math.round(12 * ui)}px monospace`;
         const tw = ctx.measureText(msg).width;
-        const bx = portraitHud
-          ? Math.round(width / 2 - tw / 2)
-          : Math.round(gaugePos.x);
-        const by = portraitHud
-          ? Math.round(height * 0.14)
-          : Math.round(gaugePos.y - 8 * ui);
+        const bx = Math.round(width / 2 - tw / 2);
+        const by = Math.round(height * 0.14);
         ctx.fillStyle = "#141611";
         ctx.fillText(msg, bx + 1, by + 1);
         ctx.fillStyle = "#e2703a";
@@ -2889,6 +2908,28 @@ export function createEngine(opts: {
       ctx.fillText(sub, sx + 2, sy + 2);
       ctx.fillStyle = "#e2703a";
       ctx.fillText(sub, sx, sy);
+      ctx.globalAlpha = 1;
+    }
+
+    // OVERFLOW banner: a full-tank pickup's waste burns as BOOST — the
+    // same centre-screen face as the LEVEL banner, so the driver learns
+    // where the boost seconds came from. Shorter beat, accent orange
+    const ovAge = state.time - lastOverflowAt;
+    if (ovAge < 1.4 && !state.gameOver) {
+      const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      const msg = "OVERFLOW";
+      ctx.font = `bold ${Math.round(11 * ui)}px monospace`;
+      const tw = ctx.measureText(msg).width;
+      const tx = Math.round(width / 2 - tw / 2);
+      const ty = Math.round(height * 0.3);
+      ctx.globalAlpha = Math.max(
+        0,
+        Math.min(1, Math.min(ovAge / 0.15, (1.4 - ovAge) / 0.4)),
+      );
+      ctx.fillStyle = "#141611";
+      ctx.fillText(msg, tx + 2, ty + 2);
+      ctx.fillStyle = "#e2703a";
+      ctx.fillText(msg, tx, ty);
       ctx.globalAlpha = 1;
     }
   }
