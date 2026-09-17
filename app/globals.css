@@ -1379,14 +1379,18 @@ html.crt-boot::after {
   gap: 3px;
 }
 
-/* fixed three-column grid: name / gem / score. The score column MUST be
-   a fixed width — with auto width a 4-digit score narrows its row and the
-   gem column drifts right on exactly those rows (the lingering "kayık").
-   6ch covers every realistic score; an absurd 7th digit would overflow
-   leftwards off a right-aligned cell without moving the gem column */
+/* fixed three-column grid: name / gem / score, centred as ONE compact
+   block inside the LCD (justify-content: center) — a 1fr name column
+   left-aligns short initials and strands an empty gap before the gem
+   ("solu boş"). Both outer widths are fixed: with auto width a 4-digit
+   score narrows its row and the gem column drifts right on exactly those
+   rows (the lingering "kayık"). 6ch covers every realistic score; an
+   absurd 7th digit would overflow leftwards off a right-aligned cell
+   without moving the gem column */
 .racer-leaderboard li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 12px 6ch;
+  grid-template-columns: 8ch 12px 6ch;
+  justify-content: center;
   align-items: center;
   column-gap: 10px;
   font-size: 7px;
