@@ -138,27 +138,27 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
 
     // gas cans on the tarmac: spaced ~5-11 s of driving apart, so a tank
     // (the run's death clock) only stretches when the driver goes and
-    // gets them. Every 10th can is BIG — worth 3 gauge dots, drawn
-    // larger, and it resists scarcity hiding at half rate (see engine).
-    // ~3% of regular cans are GOLDEN — 3 dots + 1 s of BOOST, never
-    // scarcity-hidden; big cans keep their own identity
+    // gets them. 6% of cans are BIG — worth 2 gauge dots, drawn larger,
+    // and they resist scarcity hiding at half rate (see engine). 1.5% of
+    // regular cans are GOLDEN — 3 dots + 1 s of BOOST, never scarcity-
+    // hidden; big cans keep their own identity
     if (i >= nextCanAt) {
       nextCanAt = i + 180 + Math.floor(rng() * 200);
-      const big = canOrdinal % 10 === 9;
+      const big = rng() < 0.06;
       const canX = rng() * 1.4 - 0.7;
       seg.pickup = {
         x: canX,
         big,
-        golden: !big && rng() < 0.03,
+        golden: !big && rng() < 0.015,
         ordinal: canOrdinal,
       };
       canOrdinal++;
       // schedule this can's pothole(s). PREMIUM cans (big/golden) ALWAYS
-      // sit in a two-hole corridor: either along the can's line (thread
-      // past one, grab, dodge the next) or flanking it (dead-centre is
-      // safe, a wide line clips). Regular cans keep the old single hole:
-      // ~40% BAIT parked just off the can's line, the rest scatter
-      // anywhere in the following can window
+      // sit between TWO holes on the can's line through space: vertical
+      // (one before, one after), horizontal (flanked left+right) or
+      // DIAGONAL (opposite sides before/after — a forced slalom). Regular
+      // cans keep the single hole: 50% BAIT parked just off the can's
+      // line, the rest scatter anywhere in the following can window
       const clampX = (hx: number) => Math.max(-0.8, Math.min(0.8, hx));
       const placeHole = (idx: number, hx: number) => {
         if (idx >= i) {
@@ -173,17 +173,24 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
         }
       };
       if (big || seg.pickup.golden) {
-        if (rng() < 0.5) {
+        const pattern = rng();
+        if (pattern < 1 / 3) {
           // vertical corridor: one hole before, one after, on the line
           placeHole(i - 5, canX);
           placeHole(i + 5, canX);
-        } else {
+        } else if (pattern < 2 / 3) {
           // horizontal corridor: the can flanked left and right
           const hs = rng() > 0.5 ? 1 : -1;
           placeHole(i - 1, canX + hs * 0.55);
           placeHole(i + 1, canX - hs * 0.55);
+        } else {
+          // diagonal corridor: opposite sides before/after — thread the
+          // slalom, the can sits at the crossing point
+          const ds = rng() > 0.5 ? 1 : -1;
+          placeHole(i - 4, canX + ds * 0.5);
+          placeHole(i + 4, canX - ds * 0.5);
         }
-      } else if (rng() < 0.4) {
+      } else if (rng() < 0.5) {
         const dx = (rng() > 0.5 ? 1 : -1) * (0.4 + rng() * 0.25);
         pendingHoles.set(i + 2 + Math.floor(rng() * 3), {
           x: clampX(canX + dx),

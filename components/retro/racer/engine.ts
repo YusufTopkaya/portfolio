@@ -158,11 +158,13 @@ const FUEL_DRAIN_IDLE = 0.09; // gauge dots per second, the clock itself
 // (speedPercent²), deliberately too weak to bend the economy curve
 const FUEL_DRAIN_SPEED = 0.04;
 // overflow fuel (a can grabbed with a near-full tank) burns off as BOOST
-// instead of going to waste: 1.25 s per wasted dot, top speed 180 → ~194 km/h
-// with a harder pull — full-tank can chains stay worth steering for
-const BOOST_TOP = 1.08;
+// instead of going to waste: 1.5 s per wasted dot, top speed 180 → ~202 km/h
+// with a harder pull — full-tank can chains stay worth steering for, and
+// the extra reach is what lets a hot boost chain actually bridge the gap
+// to the NEXT can before the clock kills it
+const BOOST_TOP = 1.12;
 const BOOST_ACCEL = 1.3;
-const BOOST_PER_DOT = 1.25;
+const BOOST_PER_DOT = 1.5;
 // every boost grant ADDS to the shared pool (chaining a fresh can into the
 // last fraction of a running boost stacks), capped at 10 s so a perfect
 // chain can't bank minutes of free speed
@@ -1904,7 +1906,7 @@ export function createEngine(opts: {
           Math.abs(state.playerX - pk.x * canSpread) < 0.24 &&
           state.speed > MAX_SPEED * 0.02
         ) {
-          const amount = pk.golden || pk.big ? 3 : 1;
+          const amount = pk.golden ? 3 : pk.big ? 2 : 1;
           // a can grabbed with a near-full tank doesn't go to waste:
           // the overflow burns off as BOOST seconds instead
           const overflow = state.fuel + amount - FUEL_MAX;
@@ -1975,9 +1977,9 @@ export function createEngine(opts: {
       }
       // mercy can: below 1.5 dots with nothing collectible in the next ~90
       // segments, one can materialises on a reachable line ~60 segments
-      // out — once per dry spell, and only in the early game (level ≤
-      // MERCY_MAX_LEVEL): past that the economy must carry the run
-      if (state.fuel >= 2) mercyUsed = false;
+      // out — ONCE per run, ever (mercyUsed never re-arms), and only in
+      // the early game (level ≤ MERCY_MAX_LEVEL): past that the economy
+      // must carry the run
       if (
         state.fuel < 1.5 &&
         !mercyUsed &&
@@ -2615,7 +2617,27 @@ export function createEngine(opts: {
             Math.round(glowR * 2),
             Math.round(glowR * 2),
           );
+          // the light cone itself (the "huni"): a soft trapezoid widening
+          // from the head down to the road, fading as it falls
+          const poolY = segment.p1.screen.y;
           const prx = destW * 0.55;
+          const cone = ctx.createLinearGradient(0, headY, 0, poolY);
+          cone.addColorStop(
+            0,
+            `rgba(255,236,170,${(0.28 * skySt.night).toFixed(3)})`,
+          );
+          cone.addColorStop(
+            1,
+            `rgba(255,240,190,${(0.05 * skySt.night).toFixed(3)})`,
+          );
+          ctx.fillStyle = cone;
+          ctx.beginPath();
+          ctx.moveTo(headX - destW * 0.12, headY);
+          ctx.lineTo(headX + destW * 0.12, headY);
+          ctx.lineTo(headX + prx, poolY);
+          ctx.lineTo(headX - prx, poolY);
+          ctx.closePath();
+          ctx.fill();
           ctx.fillStyle = `rgba(255,240,190,${(0.14 * skySt.night).toFixed(3)})`;
           ctx.beginPath();
           ctx.ellipse(
