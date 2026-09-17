@@ -19,7 +19,9 @@ interface StoreFile {
 // v3: the difficulty squeeze (drainGain ×1.9 deep-game cap) made old
 // scores incomparable — they were earned on the easy flat-cap economy.
 // v4: score accrual halved (×0.5) so 100k is the marquee number
-const STORE_VERSION = 4;
+// v5: the 3-heart damage ladder (3rd crash = run over) plus the hot-chain
+// boost economy changed what a run is worth — old scores predate both
+const STORE_VERSION = 5;
 const MAX_SCORES = 50;
 const MAX_STORED = 300; // hard cap on the file, incl. entries kept for period boards
 const RETENTION_MS = 40 * 24 * 60 * 60 * 1000; // keep recent entries for period boards
