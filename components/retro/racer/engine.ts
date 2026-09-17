@@ -199,7 +199,7 @@ const MERCY_MAX_LEVEL = 5;
 // where the browser chrome already crowds the glass. The streak HUD
 // anchors off TOUCH_CLUSTER_TOP + 52 (the cluster's bottom edge)
 const TOUCH_CLUSTER_TOP = 16;
-const FAR_OFFROAD = 0.9375; // |playerX| at/above this = stranded: 0.625× the old 1.5 (the 4→2.5 ask) — the centre rides the far rumble strip at most, so half the car over the grass is already a respawn; side effect: roadside pines (offset ≥ ~1.14) are now unreachable decor, the grass-slowdown band (offRoad > 1.1) never engages
+const FAR_OFFROAD = 1.15; // |playerX| at/above this = stranded: just past the rumble strips (road edge ~1.1) — half the car over the grass is a respawn WITH or WITHOUT a tree there, and roadside pines (offset ≥ ~1.15) stay reachable so the tree crash rule lives
 const LANES = 3;
 
 const COLORS = {

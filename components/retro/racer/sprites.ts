@@ -401,7 +401,7 @@ export async function loadCarFrames(): Promise<CarFrames> {
   };
 }
 
-/* ── roadside objects: pine, sign, pole (pixel art, drawn once) ── */
+/* ── roadside objects: pine, bush, rock, pole, chevrons (pixel art, drawn once) ── */
 
 function canvas24(
   w: number,
@@ -435,19 +435,57 @@ function makePine(): HTMLCanvasElement {
   return c;
 }
 
-function makeSign(): HTMLCanvasElement {
-  const [c, ctx] = canvas24(40, 56);
+function makeBush(): HTMLCanvasElement {
+  const [c, ctx] = canvas24(40, 28);
   if (!ctx) return c;
-  ctx.fillStyle = "#777";
-  ctx.fillRect(18, 30, 4, 26);
-  ctx.fillStyle = "#f4f4f4";
-  ctx.fillRect(2, 4, 36, 26);
-  ctx.fillStyle = "#e87722";
-  ctx.fillRect(2, 4, 36, 4);
-  ctx.fillStyle = "#20242e";
-  ctx.font = "bold 9px monospace";
-  ctx.fillText("26", 7, 18);
-  ctx.fillText("427", 5, 27);
+  // low blobby shrub — quiet filler that never reads as "information"
+  const blob = (x: number, y: number, r: number, col: string) => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  blob(12, 18, 9, "#1e5c2a");
+  blob(26, 16, 11, "#267034");
+  blob(20, 12, 8, "#2e7a37");
+  blob(33, 20, 6, "#1e5c2a");
+  ctx.fillStyle = "#143f1e";
+  ctx.fillRect(3, 24, 34, 3);
+  return c;
+}
+
+function makeRock(): HTMLCanvasElement {
+  const [c, ctx] = canvas24(36, 24);
+  if (!ctx) return c;
+  // chunky boulder: mid body, lit top-left face, shaded right face
+  ctx.fillStyle = "#4e4e56";
+  ctx.beginPath();
+  ctx.moveTo(2, 22);
+  ctx.lineTo(6, 8);
+  ctx.lineTo(16, 2);
+  ctx.lineTo(28, 5);
+  ctx.lineTo(34, 16);
+  ctx.lineTo(32, 22);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#77777f";
+  ctx.beginPath();
+  ctx.moveTo(6, 20);
+  ctx.lineTo(9, 9);
+  ctx.lineTo(17, 4);
+  ctx.lineTo(22, 6);
+  ctx.lineTo(14, 20);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#3a3a41";
+  ctx.beginPath();
+  ctx.moveTo(22, 6);
+  ctx.lineTo(28, 7);
+  ctx.lineTo(32, 16);
+  ctx.lineTo(30, 20);
+  ctx.lineTo(14, 20);
+  ctx.closePath();
+  ctx.fill();
   return c;
 }
 
@@ -463,12 +501,43 @@ function makePole(): HTMLCanvasElement {
   return c;
 }
 
+function makeChevron(dir: 1 | -1): HTMLCanvasElement {
+  const [c, ctx] = canvas24(44, 40);
+  if (!ctx) return c;
+  // rally curve-warning board: black-edged amber board, two black
+  // chevrons pointing the way the road bends, on a gray pole
+  ctx.fillStyle = "#5a5a62";
+  ctx.fillRect(20, 22, 4, 18);
+  ctx.fillStyle = "#141611";
+  ctx.fillRect(0, 0, 44, 22);
+  ctx.fillStyle = "#ffb03a";
+  ctx.fillRect(2, 2, 40, 18);
+  ctx.fillStyle = "#141611";
+  for (let k = 0; k < 2; k++) {
+    const cx = dir > 0 ? 8 + k * 14 : 36 - k * 14;
+    ctx.beginPath();
+    ctx.moveTo(cx, 5);
+    ctx.lineTo(cx + 8 * dir, 11);
+    ctx.lineTo(cx, 17);
+    ctx.lineTo(cx + 4 * dir, 11);
+    ctx.closePath();
+    ctx.fill();
+  }
+  return c;
+}
+
 export function makeRoadside(): RoadsideSprite[] {
   return [
     // pines tower over the car — a roadside tree reads as a TREE, not a bonsai
     { image: makePine(), w: 48, h: 72, offset: 0, scale: 6.2 },
-    { image: makeSign(), w: 40, h: 56, offset: 0, scale: 1.8 },
+    { image: makeBush(), w: 40, h: 28, offset: 0, scale: 1.6 },
+    { image: makeRock(), w: 36, h: 24, offset: 0, scale: 1.5 },
     { image: makePole(), w: 20, h: 64, offset: 0, scale: 2.2 },
+    // curve-warning chevrons (4 = points right, 5 = left): never spawned
+    // by the random roadside mix — the generator plants them only around
+    // medium/hard bends, on the outside edge
+    { image: makeChevron(1), w: 44, h: 40, offset: 0, scale: 1.9 },
+    { image: makeChevron(-1), w: 44, h: 40, offset: 0, scale: 1.9 },
   ];
 }
 

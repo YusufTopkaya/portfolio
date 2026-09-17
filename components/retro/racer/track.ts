@@ -92,14 +92,17 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
     generated++;
     prevY = y;
 
-    // roadside objects: every few segments, 75% chance of a tree/sign/
-    // pole just off the road edge (offset 1.15-1.9 half-widths) — close
-    // offsets are what let sprites whiz past at arcade size
+    // roadside objects: every few segments, 75% chance of a pine/bush/
+    // rock/pole just off the road edge (offset 1.15-1.9 half-widths) —
+    // close offsets are what let sprites whiz past at arcade size. The
+    // old plate sign is gone (it spammed meaninglessly); chevrons never
+    // spawn here — they are curve infrastructure, planted by addRoad
     if (i >= nextSpriteAt) {
       nextSpriteAt = i + 2 + Math.floor(rng() * 4);
       if (rng() >= 0.25) {
+        const pick = rng();
         seg.sprites.push({
-          sprite: Math.floor(rng() * 3),
+          sprite: pick < 0.3 ? 0 : pick < 0.6 ? 1 : pick < 0.8 ? 2 : 3,
           offset: (rng() > 0.5 ? 1 : -1) * (1.15 + rng() * 0.75),
         });
       }
@@ -171,6 +174,7 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
   ) => {
     const startY = lastY;
     const endY = startY + dy * SEGMENT_LENGTH;
+    const startIdx = generated;
     const total = enter + hold + leave;
     // cosine easeInOut peaks at (π/2)·avg → need total ≥ (π/2)·|dy| / MAX_GRADE
     const minTotal = Math.ceil(((Math.PI / 2) * Math.abs(dy)) / MAX_GRADE);
@@ -192,6 +196,25 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
       );
     }
     lastY = endY;
+    // curve-warning chevrons (medium/hard bends only): one on the
+    // approach, two through the bend — all on the OUTSIDE edge with the
+    // arrows pointing the way the road turns. Rally language, not
+    // decoration: the landing grip ramp and the curve gains make an
+    // unwarned hard bend genuinely dangerous
+    if (Math.abs(curve) >= CURVES.medium) {
+      const outSide = curve > 0 ? -1 : 1; // outside of the bend
+      const chev = curve > 0 ? 4 : 5; // chevron pointing with the turn
+      const mark = (idx: number) => {
+        if (idx < 0) return;
+        const target = segments[idx % CAPACITY];
+        if (target && target.index === idx && target.sprites.length < 2) {
+          target.sprites.push({ sprite: chev, offset: outSide * 1.25 });
+        }
+      };
+      mark(startIdx - 18); // approach warning
+      mark(startIdx + Math.floor(e * 0.4)); // into the bend
+      mark(startIdx + e + Math.floor(h * 0.5)); // mid-hold
+    }
   };
 
   /** Jake Gordon's addLowRollingHills, verbatim from the v3-hills article.
