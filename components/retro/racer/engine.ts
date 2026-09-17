@@ -92,8 +92,18 @@ export interface Segment {
       (±1 = edge). big: every 10th can — worth 3 gauge dots, drawn larger,
       and resists scarcity hiding at half rate. golden: rare (~3%) regular
       can — 3 dots + 1 s BOOST, never scarcity-hidden. ordinal: position
-      in the can sequence, drives the golden-ratio hiding pattern */
-  pickup?: { x: number; big?: boolean; golden?: boolean; ordinal: number };
+      in the can sequence, drives the golden-ratio hiding pattern.
+      missed: set once the pickup point has left the can's segment
+      without grabbing it — the break must fire exactly once (below
+      ~130 km/h the car needs 2+ frames to cross a segment, and the
+      pickup scan would re-fire the break every frame otherwise) */
+  pickup?: {
+    x: number;
+    big?: boolean;
+    golden?: boolean;
+    ordinal: number;
+    missed?: boolean;
+  };
   /** pothole on the tarmac, x in road half-width units (±1 = edge). One
       per gas can; ~40% are bait holes parked just off a can's line so the
       greedy straight line clips them. Falling in costs 1 fuel dot and
@@ -2115,8 +2125,9 @@ export function createEngine(opts: {
         if (state.respawn > 0) break;
         const pk = seg.pickup;
         // scarcity-hidden cans aren't on the road — passing them neither
-        // counts nor breaks a streak
-        if (!pk || !pickupActive(seg)) continue;
+        // counts nor breaks a streak. A missed can is dead weight — its
+        // break already fired once, never again
+        if (!pk || pk.missed || !pickupActive(seg)) continue;
         if (
           Math.abs(state.playerX - pk.x * canSpread) < 0.24 &&
           // a dry tank waives the speed gate: the coast-over-checkpoint
@@ -2125,11 +2136,19 @@ export function createEngine(opts: {
           (state.speed > MAX_SPEED * 0.02 || state.fuel <= 0)
         ) {
           grabCan(seg);
-        } else {
-          // an active can was on this segment and we drove past it —
-          // the chain is broken... unless a shield charge eats the
-          // break (then the HUD flashes the save instead of burning
-          // the can away)
+        } else if (si < nextPickupSeg) {
+          // the can is fully behind the pickup point — missed, and the
+          // chain is broken... unless a shield charge eats the break
+          // (then the HUD flashes the save instead of burning the can
+          // away). Fire EXACTLY ONCE: below ~130 km/h the car needs 2+
+          // frames to cross a segment, and the scan window keeps the
+          // segment in range the whole time — without the missed mark
+          // the break re-fired every frame, draining EVERY shield
+          // charge and then the streak for a single skipped can.
+          // (si === nextPickupSeg defers: a car still ON the can's
+          // segment — stopped beside it, or rolling in too slow for
+          // the speed gate — gets its grab chance until it leaves)
+          pk.missed = true;
           if (state.streak > 0) {
             if (shieldCharges > 0) {
               shieldCharges--;
