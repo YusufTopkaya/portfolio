@@ -165,10 +165,11 @@ const FUEL_DRAIN_SPEED = 0.04;
 const BOOST_TOP = 1.12;
 const BOOST_ACCEL = 1.3;
 const BOOST_PER_DOT = 1.5;
-// every boost grant ADDS to the shared pool (chaining a fresh can into the
-// last fraction of a running boost stacks), capped at 10 s so a perfect
-// chain can't bank minutes of free speed
-const BOOST_MAX_T = 10;
+// every boost grant ADDS to the shared pool with NO ceiling — chaining a
+// fresh can into the last fraction of a running boost stacks, and a hot
+// streak can bank a long run of free speed. The drain keeps ticking at
+// the normal rate through it, so a huge pool is pace you've earned, not
+// time you've stolen
 // golden can: 3 dots + a flat 1 s of BOOST — a small sweet bonus that
 // doesn't overshadow the streak ladder
 const GOLDEN_BOOST_T = 1;
@@ -1914,16 +1915,13 @@ export function createEngine(opts: {
             // floor at half a second: a can grabbed at 7.01 dots only
             // overflows 0.01, but the steer still cost something — a
             // 0.02 s boost would be an insult, not a reward
-            state.boostT = Math.min(
-              BOOST_MAX_T,
-              state.boostT + Math.max(overflow * BOOST_PER_DOT, 0.5),
-            );
+            state.boostT += Math.max(overflow * BOOST_PER_DOT, 0.5);
             lastBoostSource = "overflow";
           }
           if (pk.golden) {
             // golden can: a flat 1 s of BOOST on top of the 3 dots —
             // the label outranks an overflow grant from the same pickup
-            state.boostT = Math.min(BOOST_MAX_T, state.boostT + GOLDEN_BOOST_T);
+            state.boostT += GOLDEN_BOOST_T;
             lastBoostSource = "golden";
           }
           state.fuel = Math.min(FUEL_MAX, state.fuel + amount);
@@ -1947,7 +1945,7 @@ export function createEngine(opts: {
           // promise, this is the payoff)
           const reward = streakReward(state.streak);
           if (reward) {
-            state.boostT = Math.min(BOOST_MAX_T, state.boostT + reward);
+            state.boostT += reward;
             lastBoostSource = "streak";
             lastStreakAt = state.time;
             lastStreakTier = state.streak;
@@ -1959,10 +1957,7 @@ export function createEngine(opts: {
             if (state.streak % 10 === 0) {
               const lapOverflow = state.fuel + LAP_FUEL - FUEL_MAX;
               if (lapOverflow > 0) {
-                state.boostT = Math.min(
-                  BOOST_MAX_T,
-                  state.boostT + Math.max(lapOverflow * BOOST_PER_DOT, 0.5),
-                );
+                state.boostT += Math.max(lapOverflow * BOOST_PER_DOT, 0.5);
               }
               state.fuel = Math.min(FUEL_MAX, state.fuel + LAP_FUEL);
             }
