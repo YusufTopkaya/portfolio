@@ -1564,15 +1564,20 @@ export function createEngine(opts: {
   // off the top speed, stacking multiplicatively — a crumpled car is a
   // slower car for the rest of the run
   let damageMul = 1;
+  // centre banner state for the crash cost readout (cause + penalties)
+  let lastCrashAt = -10;
+  let lastCrashCause: "pothole" | "tree" | "offroad" = "offroad";
   // shared crash: stranded off-road, a pothole or a roadside pine all
   // cost the same — centre-line respawn, CRASH_FUEL dots, a broken
   // chain, and 7% less top speed for good
-  const crashRespawn = () => {
+  const crashRespawn = (cause: "pothole" | "tree" | "offroad") => {
     state.respawn = RESPAWN_TIME;
     state.speed = 0;
     state.playerX = 0;
     state.fuel = Math.max(0, state.fuel - CRASH_FUEL);
     damageMul *= 1 - CRASH_SPEED_LOSS;
+    lastCrashAt = state.time;
+    lastCrashCause = cause;
     if (state.streak > 0) lastStreakLostAt = state.time;
     state.streak = 0;
     // a crash mid-hop must not land the teleported car into a squash +
@@ -1883,12 +1888,13 @@ export function createEngine(opts: {
       // a skipped one would be tunnelled through without a sound
       for (let si = prevPickupSeg; si <= nextPickupSeg; si++) {
         const seg = segments[ringSlot(si)];
-        // pothole: falling in costs the same as running stranded — 1 dot,
-        // a centre-line respawn and a broken chain. Consumed on impact, so
-        // the standstill right after the respawn can't re-trigger it.
-        // AIRBORNE cars clear holes (the wheels are off the tarmac) — but
-        // landing ON one still counts: airT zeroes in the hop block above
-        // before this scan runs, so a touchdown on the hole segment hits
+        // pothole: falling in costs the same as running stranded —
+        // CRASH_FUEL dots, a centre-line respawn and a broken chain.
+        // Consumed on impact, so the standstill right after the respawn
+        // can't re-trigger it. AIRBORNE cars clear holes (the wheels are
+        // off the tarmac) — but landing ON one still counts: airT zeroes
+        // in the hop block above before this scan runs, so a touchdown
+        // on the hole segment hits
         const hole = seg.hole;
         if (
           hole &&
@@ -1897,7 +1903,7 @@ export function createEngine(opts: {
           state.speed > MAX_SPEED * 0.02
         ) {
           seg.hole = undefined;
-          crashRespawn();
+          crashRespawn("pothole");
           break;
         }
         // roadside pines are solid: this far off the line to clip one and
@@ -1909,7 +1915,7 @@ export function createEngine(opts: {
             Math.abs(state.playerX - s.offset) < 0.2 &&
             state.speed > MAX_SPEED * 0.02
           ) {
-            crashRespawn();
+            crashRespawn("tree");
             break;
           }
         }
@@ -2022,7 +2028,7 @@ export function createEngine(opts: {
       // centre line at a standstill with a breathing fade-in — a
       // CRASH_FUEL-dot penalty plus permanent speed damage, so crashing
       // directly shortens AND slows the run
-      if (Math.abs(state.playerX) >= FAR_OFFROAD) crashRespawn();
+      if (Math.abs(state.playerX) >= FAR_OFFROAD) crashRespawn("offroad");
     }
 
     // score: metres driven at HALF rate, multiplied when cruising fast
@@ -2631,7 +2637,7 @@ export function createEngine(opts: {
           // the light cone itself (the "huni"): a soft trapezoid widening
           // from the head down to the road, fading as it falls
           const poolY = segment.p1.screen.y;
-          const prx = destW * 0.55;
+          const prx = destW * 0.75;
           const cone = ctx.createLinearGradient(0, headY, 0, poolY);
           cone.addColorStop(
             0,
@@ -2643,8 +2649,8 @@ export function createEngine(opts: {
           );
           ctx.fillStyle = cone;
           ctx.beginPath();
-          ctx.moveTo(headX - destW * 0.12, headY);
-          ctx.lineTo(headX + destW * 0.12, headY);
+          ctx.moveTo(headX - destW * 0.16, headY);
+          ctx.lineTo(headX + destW * 0.16, headY);
           ctx.lineTo(headX + prx, poolY);
           ctx.lineTo(headX - prx, poolY);
           ctx.closePath();
@@ -3206,6 +3212,66 @@ export function createEngine(opts: {
       }
     }
 
+    // persistent crash-damage badge: a tiny side-view hatchback + the
+    // share of top speed the car still has. Appears with the first crash
+    // and never leaves — the damage is permanent, so is the badge. Same
+    // left column as the streak can, parked under its popup zone
+    if (damageMul < 0.999 && !state.gameOver) {
+      const uiBase = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      const ui =
+        uiBase * (height > width ? 2.5 : opts.clusterTopLeft ? 1.4 : 1);
+      const margin = Math.round(8 * ui);
+      const streakBy = opts.clusterTopLeft
+        ? Math.round((TOUCH_CLUSTER_TOP + 52) * uiBase + 10 * ui)
+        : margin;
+      const dx0 = margin;
+      const dy0 = streakBy + Math.round(34 * ui);
+      const s = ui;
+      // little side-view Twingo: orange body, dark glass band, two wheels
+      ctx.fillStyle = "#141611";
+      ctx.fillRect(
+        dx0 + Math.round(2.5 * s),
+        dy0 + Math.round(4.5 * s),
+        Math.round(3 * s),
+        Math.round(3 * s),
+      );
+      ctx.fillRect(
+        dx0 + Math.round(10.5 * s),
+        dy0 + Math.round(4.5 * s),
+        Math.round(3 * s),
+        Math.round(3 * s),
+      );
+      ctx.fillStyle = "#e2703a";
+      ctx.fillRect(
+        dx0,
+        dy0 + Math.round(2 * s),
+        Math.round(16 * s),
+        Math.round(3 * s),
+      );
+      ctx.fillRect(
+        dx0 + Math.round(3 * s),
+        dy0,
+        Math.round(9 * s),
+        Math.round(2 * s),
+      );
+      ctx.fillStyle = "#141611";
+      ctx.fillRect(
+        dx0 + Math.round(4 * s),
+        dy0 + Math.round(0.5 * s),
+        Math.round(7 * s),
+        Math.max(1, Math.round(1 * s)),
+      );
+      const pct = `${Math.round(damageMul * 100)}%`;
+      ctx.font = `bold ${Math.round(8 * ui)}px monospace`;
+      const ptx = dx0 + Math.round(16 * s) + Math.round(4 * ui);
+      const pty = dy0 + Math.round(6.5 * s);
+      ctx.fillStyle = "#141611";
+      ctx.fillText(pct, ptx + 1, pty + 1);
+      ctx.fillStyle =
+        damageMul > 0.85 ? "#f4f4f4" : damageMul > 0.7 ? "#ffb03a" : "#e5484d";
+      ctx.fillText(pct, ptx, pty);
+    }
+
     // collected cans in flight to the streak icon: the exact sprite copy
     // (golden tint and big-can size included) arcs over the world and
     // docks onto the HUD jerrycan, shrinking as it goes — docking fires
@@ -3280,6 +3346,34 @@ export function createEngine(opts: {
         ctx.fillStyle = "#e2703a";
         ctx.fillText(msg, tx, ty);
       }
+    }
+
+    // crash banner: the cause and what it just cost, centre screen in the
+    // LEVEL banner's face but danger red — the player must SEE the -2 gas
+    // and the permanent speed loss, not discover them on the gauge
+    const crashAge = state.time - lastCrashAt;
+    if (crashAge < 1.8 && !state.gameOver) {
+      const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      const label =
+        lastCrashCause === "pothole"
+          ? "POTHOLE!"
+          : lastCrashCause === "tree"
+            ? "TREE!"
+            : "OFF ROAD!";
+      const msg = `${label} -${CRASH_FUEL} GAS -7% SPEED`;
+      ctx.font = `bold ${Math.round(10 * ui)}px monospace`;
+      const tw = ctx.measureText(msg).width;
+      const tx = Math.round(width / 2 - tw / 2);
+      const ty = Math.round(height * 0.36);
+      ctx.globalAlpha = Math.max(
+        0,
+        Math.min(1, Math.min(crashAge / 0.15, (1.8 - crashAge) / 0.5)),
+      );
+      ctx.fillStyle = "#141611";
+      ctx.fillText(msg, tx + 2, ty + 2);
+      ctx.fillStyle = "#e5484d";
+      ctx.fillText(msg, tx, ty);
+      ctx.globalAlpha = 1;
     }
 
     // level banner: a brief LEVEL X flash when a new distance level turns
