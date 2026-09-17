@@ -1072,6 +1072,14 @@ html.crt-boot::after {
   margin-top: 2px;
 }
 
+/* countdown to the next daily track (midnight TR time), dimmer than the
+   verdict so it reads as a footnote */
+.racer-trackstats-reset {
+  font-size: 6px;
+  color: #9fb97a;
+  text-align: center;
+}
+
 /* touch pause trigger: top-right, just left of the ✕ close button — the
    top-left corner belongs to the LCD cluster on touch devices (portrait
    phones), so the button must not live there. Only shows on coarse

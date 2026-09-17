@@ -49,6 +49,20 @@ function computeBuf(): { w: number; h: number } {
     : { w: 300, h: Math.min(560, Math.round(300 / aspect)) };
 }
 
+/* Turkey is permanently on UTC+3 (no DST since 2016), so the daily
+   track flips at midnight TR time and the title-screen countdown can
+   speak the player's own clock */
+const TR_OFFSET_MS = 3 * 3600000;
+const turkeyDay = () => Math.floor((Date.now() + TR_OFFSET_MS) / 86400000);
+
+/** "HH:MM:SS" until the next TR midnight — the daily track reset */
+function resetCountdown(): string {
+  const next = (turkeyDay() + 1) * 86400000 - TR_OFFSET_MS;
+  const s = Math.max(0, Math.floor((next - Date.now()) / 1000));
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
+}
+
 /* leaderboard bracket gem: a hand-drawn 9×9 pixel diamond rendered as a
    crisp-edges SVG. The previous rotated-square approach anti-aliased at
    the fractional offsets produced by the panel's translate(-50%,-50%)
@@ -757,10 +771,30 @@ export function TwingoRacer() {
   useEffect(() => {
     if (!open || screen !== "title" || trackStats) return;
     const id = window.setTimeout(() => {
-      setTrackStats(analyzeTrack(Math.floor(Date.now() / 86400000), 3000));
+      setTrackStats(analyzeTrack(turkeyDay(), 3000));
     }, 60);
     return () => window.clearTimeout(id);
   }, [open, screen, trackStats]);
+
+  /* small countdown under the track card: time to the next daily reset
+     (midnight TR time). A rollover while the title sits open re-rates
+     the fresh day */
+  const [resetIn, setResetIn] = useState("");
+  useEffect(() => {
+    if (!open || screen !== "title") return;
+    let day = turkeyDay();
+    const tick = () => {
+      setResetIn(resetCountdown());
+      const d = turkeyDay();
+      if (d !== day) {
+        day = d;
+        setTrackStats(null);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [open, screen]);
 
   /* engine boot + game loop, alive only while a run is on screen — the
      title screen is a static image and never boots the engine */
@@ -862,12 +896,13 @@ export function TwingoRacer() {
         if (cancelled) return;
         cockpitReadyRef.current = cockpit !== null;
         setCockpitReady(cockpit !== null);
-        // daily seed: everyone races the same layout on the same UTC day,
-        // so same-day highscores are comparable — a fresh track every day.
+        // daily seed: everyone races the same layout on the same Turkey-
+        // time day (midnight TR, UTC+3), so same-day highscores are
+        // comparable — a fresh track every day.
         // The seeded generator deals sections forever under its geometric
         // limits (alternating curve sides, sea-level-sprung hills)
         const { segments, extend, firstIndex, generated } =
-          createTrackGenerator(Math.floor(Date.now() / 86400000));
+          createTrackGenerator(turkeyDay());
         engineRef.current = createEngine({
           segments,
           extend,
@@ -1411,6 +1446,7 @@ export function TwingoRacer() {
               <span className="racer-trackstats-verdict">
                 {trackStats.verdict}
               </span>
+              <span className="racer-trackstats-reset">RESET {resetIn}</span>
             </div>
           )}
           {titleSettingsOpen &&
