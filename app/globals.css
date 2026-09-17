@@ -1288,14 +1288,13 @@ html.crt-boot::after {
   color: #9fb97a;
 }
 
-/* league gem: a rotated square in the bracket colour */
+/* league gem: a crisp-edges pixel SVG diamond in the bracket colour
+   (a rotated square anti-aliased at fractional offsets and wobbled) */
 .racer-lb-gem {
-  width: 7px;
-  height: 7px;
-  transform: rotate(45deg);
+  width: 9px;
+  height: 9px;
   align-self: center;
   flex: none;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.35);
 }
 
 .racer-playagain {
@@ -1377,7 +1376,7 @@ html.crt-boot::after {
   align-items: center;
   gap: 10px;
   font-size: 7px;
-  line-height: 1.4;
+  line-height: 10px;
   color: #2a3d1f;
 }
 

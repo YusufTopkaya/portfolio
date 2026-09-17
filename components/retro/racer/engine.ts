@@ -1588,7 +1588,7 @@ export function createEngine(opts: {
     if (!pk) return true;
     if (pk.ordinal < 0) return true; // mercy can: never scarcity-hidden
     if (pk.golden) return true; // golden can: a gift is never hidden
-    const hidden = Math.min(0.4, Math.floor(state.score / 1500) * 0.01);
+    const hidden = Math.min(0.4, Math.floor(state.score / 1500) * 0.005);
     if (hidden <= 0) return true;
     return (
       (pk.ordinal * 0.6180339887498949) % 1 >= (pk.big ? hidden / 2 : hidden)

@@ -49,6 +49,36 @@ function computeBuf(): { w: number; h: number } {
     : { w: 300, h: Math.min(560, Math.round(300 / aspect)) };
 }
 
+/* leaderboard bracket gem: a hand-drawn 9×9 pixel diamond rendered as a
+   crisp-edges SVG. The previous rotated-square approach anti-aliased at
+   the fractional offsets produced by the panel's translate(-50%,-50%)
+   centering, so identical rows looked vertically misaligned. */
+const GEM_PATH =
+  "M4 0h1v1h1v1h1v1h1v1h1v1H8v1H7v1H6v1H5v1H4v-1H3v-1H2v-1H1v-1H0v-1H1v-1H2v-1H3v-1H4v-1Z";
+
+function BracketGem({ score }: { score: number }) {
+  const b = bracketForScore(score);
+  return (
+    <span
+      className="racer-lb-gem-wrap"
+      data-bracket={b.name}
+      style={{ "--gem-color": b.color } as CSSProperties}
+    >
+      <svg
+        className="racer-lb-gem"
+        role="img"
+        aria-label={b.name}
+        width="9"
+        height="9"
+        viewBox="0 0 9 9"
+        shapeRendering="crispEdges"
+      >
+        <path d={GEM_PATH} fill={b.color} />
+      </svg>
+    </span>
+  );
+}
+
 export function TwingoRacer() {
   const [open, setOpen] = useState(false);
   /* the overlay opens on the title screen; the engine only boots once
@@ -1400,24 +1430,7 @@ export function TwingoRacer() {
                       <span className="racer-lb-name">
                         {String(i + 1).padStart(2, "0")}. {s.name}
                       </span>
-                      <span
-                        className="racer-lb-gem-wrap"
-                        data-bracket={bracketForScore(s.score).name}
-                        style={
-                          {
-                            "--gem-color": bracketForScore(s.score).color,
-                          } as CSSProperties
-                        }
-                      >
-                        <span
-                          className="racer-lb-gem"
-                          role="img"
-                          aria-label={bracketForScore(s.score).name}
-                          style={{
-                            background: bracketForScore(s.score).color,
-                          }}
-                        />
-                      </span>
+                      <BracketGem score={s.score} />
                       <span className="racer-lb-score">{s.score}</span>
                     </li>
                   ))}
@@ -1646,24 +1659,7 @@ export function TwingoRacer() {
                   <span className="racer-lb-name">
                     {String(i + 1).padStart(2, "0")}. {s.name}
                   </span>
-                  <span
-                    className="racer-lb-gem-wrap"
-                    data-bracket={bracketForScore(s.score).name}
-                    style={
-                      {
-                        "--gem-color": bracketForScore(s.score).color,
-                      } as CSSProperties
-                    }
-                  >
-                    <span
-                      className="racer-lb-gem"
-                      role="img"
-                      aria-label={bracketForScore(s.score).name}
-                      style={{
-                        background: bracketForScore(s.score).color,
-                      }}
-                    />
-                  </span>
+                  <BracketGem score={s.score} />
                   <span className="racer-lb-score">{s.score}</span>
                 </li>
               ))}
