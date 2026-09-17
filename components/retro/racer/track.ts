@@ -79,8 +79,12 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
   // generation — same rhythm the old one-shot loop track used
   let canOrdinal = 0;
   let nextCanAt = 60; // never on the opening straight
-  let nextHoleAt = 150; // potholes start a beat after the first cans
   let nextSpriteAt = 16;
+  // potholes ride on the can rhythm (one per can): every can placement
+  // schedules exactly one hole ahead — ~40% are BAIT holes parked just off
+  // the can's line so the greedy straight line to the can clips them,
+  // the rest scatter anywhere in the following can window
+  const pendingHoles = new Map<number, { x: number }>();
 
   const addSegment = (curve: number, y: number) => {
     const seg = makeSegment(generated, curve, prevY, y);
@@ -110,23 +114,36 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
     if (i >= nextCanAt) {
       nextCanAt = i + 180 + Math.floor(rng() * 200);
       const big = canOrdinal % 10 === 9;
+      const canX = rng() * 1.4 - 0.7;
       seg.pickup = {
-        x: rng() * 1.4 - 0.7,
+        x: canX,
         big,
         golden: !big && rng() < 0.03,
         ordinal: canOrdinal,
       };
       canOrdinal++;
+      // schedule this can's pothole. Bait: just beside the can's line a
+      // couple segments on — a dead-centre grab is safe, but the lazy
+      // straight line clips the hole (hit radius 0.28, grab radius 0.24).
+      // Scatter: anywhere in the next can window
+      if (rng() < 0.4) {
+        const dx = (rng() > 0.5 ? 1 : -1) * (0.4 + rng() * 0.25);
+        pendingHoles.set(i + 2 + Math.floor(rng() * 3), {
+          x: Math.max(-0.8, Math.min(0.8, canX + dx)),
+        });
+      } else {
+        pendingHoles.set(i + 30 + Math.floor(rng() * 300), {
+          x: rng() * 1.6 - 0.8,
+        });
+      }
     }
 
-    // potholes on the tarmac: exactly the cans' spacing rhythm, so the road
-    // carries one hole per can — the fast line is never free. Never shares
-    // a segment with a can (a hole under a pickup would be a cheap shot)
-    if (i >= nextHoleAt) {
-      nextHoleAt = i + 180 + Math.floor(rng() * 200);
-      if (!seg.pickup) {
-        seg.hole = { x: rng() * 1.6 - 0.8 };
-      }
+    // a scheduled pothole materialises here — dropped if a can owns the
+    // segment (a hole under a pickup would be a cheap shot)
+    const ph = pendingHoles.get(i);
+    if (ph) {
+      pendingHoles.delete(i);
+      if (!seg.pickup) seg.hole = ph;
     }
 
     segments[i % CAPACITY] = seg;

@@ -93,7 +93,8 @@ export interface Segment {
       in the can sequence, drives the golden-ratio hiding pattern */
   pickup?: { x: number; big?: boolean; golden?: boolean; ordinal: number };
   /** pothole on the tarmac, x in road half-width units (±1 = edge). One
-      per gas can (same spacing rhythm): falling in costs 1 fuel dot and
+      per gas can; ~40% are bait holes parked just off a can's line so the
+      greedy straight line clips them. Falling in costs 1 fuel dot and
       respawns the car, exactly like running far off-road */
   hole?: { x: number };
   color: typeof COLORS.light | typeof COLORS.dark;
@@ -2423,19 +2424,23 @@ export function createEngine(opts: {
         }
       }
 
-      // pothole: a dark patch flat on the tarmac — the grey rim reads from
-      // afar, the near-black core sells the depth. Culled with the road
-      // line itself when a crest hides the segment
+      // pothole: a RECESSED mouth in the tarmac, not a raised disc — a
+      // near-black ellipse with a thin lit lip on the camera-facing edge
+      // (light catches the wall that faces the viewer). Depth comes from
+      // the segment's own screen thickness (a flat disc on the road plane
+      // projects as a sliver), and the rim is clamped so it never spills
+      // past the road edge. Culled with the road line behind crests
       if (segment.hole) {
         const scale = segment.p1.screen.scale;
-        const hy = segment.p1.screen.y;
-        const rx = scale * 0.34 * ROAD_WIDTH * (width / 2);
-        if (rx >= 2 && (!segment.clip || hy <= segment.clip)) {
-          const hx =
-            segment.p1.screen.x +
-            scale * segment.hole.x * ROAD_WIDTH * (width / 2);
-          const ry = Math.max(1, rx * 0.24);
-          ctx.fillStyle = "#4a4a52";
+        const y1 = segment.p1.screen.y;
+        const y2 = segment.p2.screen.y;
+        const roadW = scale * ROAD_WIDTH * (width / 2);
+        const rx = Math.min(0.26, 1 - Math.abs(segment.hole.x)) * roadW;
+        if (rx >= 2 && (!segment.clip || y1 <= segment.clip)) {
+          const hx = segment.p1.screen.x + segment.hole.x * roadW;
+          const ry = Math.max(1, Math.min(rx * 0.35, (y1 - y2) * 0.45));
+          const hy = y1 - ry * 0.5;
+          ctx.fillStyle = "#0a0a0c";
           ctx.beginPath();
           ctx.ellipse(
             Math.round(hx),
@@ -2447,18 +2452,19 @@ export function createEngine(opts: {
             Math.PI * 2,
           );
           ctx.fill();
-          ctx.fillStyle = "#0a0a0c";
+          ctx.strokeStyle = "rgba(140,140,150,0.7)";
+          ctx.lineWidth = Math.max(1, Math.round(ry * 0.25));
           ctx.beginPath();
           ctx.ellipse(
             Math.round(hx),
-            Math.round(hy - ry * 0.15),
-            Math.max(1, Math.round(rx * 0.78)),
-            Math.max(1, Math.round(ry * 0.7)),
+            Math.round(hy),
+            Math.round(rx),
+            Math.round(ry),
             0,
-            0,
-            Math.PI * 2,
+            0.15 * Math.PI,
+            0.85 * Math.PI,
           );
-          ctx.fill();
+          ctx.stroke();
         }
       }
 
