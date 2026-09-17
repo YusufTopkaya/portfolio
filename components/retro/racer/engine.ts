@@ -92,6 +92,10 @@ export interface Segment {
       can — 3 dots + 1 s BOOST, never scarcity-hidden. ordinal: position
       in the can sequence, drives the golden-ratio hiding pattern */
   pickup?: { x: number; big?: boolean; golden?: boolean; ordinal: number };
+  /** pothole on the tarmac, x in road half-width units (±1 = edge). One
+      per gas can (same spacing rhythm): falling in costs 1 fuel dot and
+      respawns the car, exactly like running far off-road */
+  hole?: { x: number };
   color: typeof COLORS.light | typeof COLORS.dark;
   clip: number;
 }
@@ -131,7 +135,7 @@ const GRAVITY_MAX_GRADE = 0.6;
 const ROLL_DRAG = 0.3;
 const OFFROAD_DECEL = -MAX_SPEED * 0.75;
 const OFFROAD_LIMIT = MAX_SPEED / 4;
-const CENTRIFUGAL = 0.36;
+const CENTRIFUGAL = 0.4;
 // speed bleed per unit of cornering overload (|p·curve·CENTRIFUGAL| − 1)
 // — tire scrub as a fraction of top speed per second
 const TIRE_SCRUB = 0.23;
@@ -158,25 +162,27 @@ const FUEL_DRAIN_SPEED = 0.04;
 const BOOST_TOP = 1.08;
 const BOOST_ACCEL = 1.3;
 const BOOST_PER_DOT = 1.25;
-// streak rewards pay up to +3.5 s on their own, so the shared pool tops at 7
-const BOOST_MAX_T = 7;
+// every boost grant ADDS to the shared pool (chaining a fresh can into the
+// last fraction of a running boost stacks), capped at 10 s so a perfect
+// chain can't bank minutes of free speed
+const BOOST_MAX_T = 10;
 // golden can: 3 dots + a flat 1 s of BOOST — a small sweet bonus that
 // doesn't overshadow the streak ladder
 const GOLDEN_BOOST_T = 1;
-// fuel-chain streak ladder, repeating every 10 cans: +1 s at 3, +2 s at
-// 5, +3.5 s at each multiple of 10 (10/20/30…). A full clean lap pays 6.5 s,
-// which beats the 6 s a player earns by DELIBERATELY breaking a chain
-// after 10 and re-farming 3/5 (3 s per 5 cans) — staying clean always
-// wins, so there's never an incentive to drop a combo on purpose.
-// On top of the seconds, a completed lap pays +2 fuel dots (LAP_FUEL):
-// the deep-game economy is calibrated so a PERFECT chain is sustainable
-// forever while even a 1-in-10 miss rate slowly bleeds out — and the lap
-// bonus is exactly the margin a misser never earns, since a single miss
-// resets the streak before the lap completes
+// fuel-chain streak ladder, repeating every 10 cans: +3 s at 3, +5 s at
+// 5, +8 s at each multiple of 10 (10/20/30…). A full clean lap pays 16 s —
+// the same 16 s (3+5 twice) a player earns by DELIBERATELY breaking a chain
+// after the lap and re-farming 3/5, so the seconds no longer punish
+// breaking — the LAP_FUEL dots below do: a completed lap pays +2 fuel,
+// and a single miss resets the streak before the lap completes, so staying
+// clean still strictly wins (the deep-game economy is calibrated so a
+// PERFECT chain is sustainable forever while even a 1-in-10 miss rate
+// slowly bleeds out — the lap bonus is exactly the margin a misser never
+// earns)
 const LAP_FUEL = 2;
 const streakReward = (streak: number): number => {
   const lap = streak % 10 === 0 ? 10 : streak % 10; // position in the ladder
-  return lap === 10 ? 3.5 : lap === 5 ? 2 : lap === 3 ? 1 : 0;
+  return lap === 10 ? 8 : lap === 5 ? 5 : lap === 3 ? 3 : 0;
 };
 // km driven per difficulty level — a tight ladder: the ×1.5 knee arrives
 // by ~12 km and the drain multiplier then keeps creeping +2.5%/level to
@@ -192,7 +198,7 @@ const MERCY_MAX_LEVEL = 5;
 // where the browser chrome already crowds the glass. The streak HUD
 // anchors off TOUCH_CLUSTER_TOP + 52 (the cluster's bottom edge)
 const TOUCH_CLUSTER_TOP = 16;
-const FAR_OFFROAD = 2.5; // |playerX| at/above this = stranded past the trees (2.5, not 2.0: a run-off window so a slide can be caught before the respawn teleport)
+const FAR_OFFROAD = 1.5; // |playerX| at/above this = stranded on the grass: barely past the rumble strips (road edge ~1.1) — a small escape margin to catch a slide with counter-steer, then the respawn teleport fires
 const LANES = 3;
 
 const COLORS = {
@@ -1384,9 +1390,11 @@ export function createEngine(opts: {
   /** fired when the car drives through a gas can (big = the 3-dot every-
       10th ones, golden = the rare 3-dot + boost ones) */
   onPickup?: (big: boolean, golden?: boolean) => void;
-  /** fired when a streak ladder step is crossed (+1/+2/+3.5 s at 3/5/each
+  /** fired when a streak ladder step is crossed (+3/+5/+8 s at 3/5/each
       multiple of 10 — the ladder repeats every 10 cans) */
   onStreak?: (streak: number) => void;
+  /** fired on a crash respawn (stranded off-road or pothole) */
+  onCrash?: () => void;
   /** dev-only (e2e probes): collect per-render road diagnostics into
       `probe` — off in production so the game ships zero per-frame garbage */
   debug?: boolean;
@@ -1738,7 +1746,10 @@ export function createEngine(opts: {
     // pin AT the stranded threshold: the respawn check below fires the same
     // frame the car maxes out past the trees (a tighter clamp here — the old
     // ±2.2 — made FAR_OFFROAD unreachable and the teleport never happened)
-    state.playerX = Math.max(-FAR_OFFROAD, Math.min(FAR_OFFROAD, state.playerX));
+    state.playerX = Math.max(
+      -FAR_OFFROAD,
+      Math.min(FAR_OFFROAD, state.playerX),
+    );
     state.speed = Math.max(0, Math.min(MAX_SPEED * boostTop, state.speed));
 
     // crest hop: the road falling away steeply right after a steep climb
@@ -1810,6 +1821,25 @@ export function createEngine(opts: {
       // a skipped one would be tunnelled through without a sound
       for (let si = prevPickupSeg; si <= nextPickupSeg; si++) {
         const seg = segments[ringSlot(si)];
+        // pothole: falling in costs the same as running stranded — 1 dot,
+        // a centre-line respawn and a broken chain. Consumed on impact, so
+        // the standstill right after the respawn can't re-trigger it
+        const hole = seg.hole;
+        if (
+          hole &&
+          Math.abs(state.playerX - hole.x) < 0.28 &&
+          state.speed > MAX_SPEED * 0.02
+        ) {
+          seg.hole = undefined;
+          state.respawn = RESPAWN_TIME;
+          state.speed = 0;
+          state.playerX = 0;
+          state.fuel = Math.max(0, state.fuel - 1);
+          if (state.streak > 0) lastStreakLostAt = state.time;
+          state.streak = 0;
+          opts.onCrash?.();
+          break;
+        }
         const pk = seg.pickup;
         // scarcity-hidden cans aren't on the road — passing them neither
         // counts nor breaks a streak
@@ -1911,8 +1941,8 @@ export function createEngine(opts: {
           }
         }
       }
-      // stranded way off the road, past the roadside trees: respawn on
-      // the centre line at a standstill with a breathing fade-in — and a
+      // stranded on the grass past the rumble strips: respawn on the
+      // centre line at a standstill with a breathing fade-in — and a
       // 1-dot fuel penalty, so crashing directly shortens the run
       if (Math.abs(state.playerX) >= FAR_OFFROAD) {
         state.respawn = RESPAWN_TIME;
@@ -1922,6 +1952,7 @@ export function createEngine(opts: {
         // a crash breaks the fuel chain too
         if (state.streak > 0) lastStreakLostAt = state.time;
         state.streak = 0;
+        opts.onCrash?.();
       }
     }
 
@@ -2293,7 +2324,7 @@ export function createEngine(opts: {
       const segment = segments[ringSlot(baseSegment.index + n)];
       if (segment.index !== baseSegment.index + n) continue; // stale ring slot
       const pk = segment.pickup;
-      if (!pk && segment.sprites.length === 0) continue;
+      if (!pk && !segment.hole && segment.sprites.length === 0) continue;
 
       // gas cans hover above the tarmac of their segment, bobbing gently
       // so they catch the eye; big cans (every 10th, worth 3 dots) are
@@ -2408,6 +2439,45 @@ export function createEngine(opts: {
               Math.max(1, Math.round(fh * 0.7)),
             );
           }
+        }
+      }
+
+      // pothole: a dark patch flat on the tarmac — the grey rim reads from
+      // afar, the near-black core sells the depth. Culled with the road
+      // line itself when a crest hides the segment
+      if (segment.hole) {
+        const scale = segment.p1.screen.scale;
+        const hy = segment.p1.screen.y;
+        const rx = scale * 0.34 * ROAD_WIDTH * (width / 2);
+        if (rx >= 2 && (!segment.clip || hy <= segment.clip)) {
+          const hx =
+            segment.p1.screen.x +
+            scale * segment.hole.x * ROAD_WIDTH * (width / 2);
+          const ry = Math.max(1, rx * 0.24);
+          ctx.fillStyle = "#4a4a52";
+          ctx.beginPath();
+          ctx.ellipse(
+            Math.round(hx),
+            Math.round(hy),
+            Math.round(rx),
+            Math.round(ry),
+            0,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+          ctx.fillStyle = "#0a0a0c";
+          ctx.beginPath();
+          ctx.ellipse(
+            Math.round(hx),
+            Math.round(hy - ry * 0.15),
+            Math.max(1, Math.round(rx * 0.78)),
+            Math.max(1, Math.round(ry * 0.7)),
+            0,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
         }
       }
 

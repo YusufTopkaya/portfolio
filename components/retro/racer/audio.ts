@@ -70,9 +70,11 @@ export interface RacerAudio {
     boost: boolean,
   ): void;
   pickup(big: boolean, golden?: boolean): void;
-  /** streak ladder step crossed (+2/+4/+8 s at 3/5/each 10 — repeats
+  /** streak ladder step crossed (+3/+5/+8 s at 3/5/each 10 — repeats
       every 10 cans) — rising fanfare, deeper steps climb higher */
   streak(streak: number): void;
+  /** crash respawn (stranded off-road / pothole): deep thud + rattle */
+  crash(): void;
   menuMove(): void;
   menuSelect(): void;
   gameOver(): void;
@@ -782,6 +784,34 @@ export function createRacerAudio(): RacerAudio {
       for (const [i, f] of notes.entries()) {
         blip(t + i * 0.07, f, 0.12, "square", 0.14, menuBus ?? undefined);
       }
+    },
+
+    crash() {
+      if (!ctx || !engineBus) return;
+      const t = ctx.currentTime;
+      // body hit: a deep lowpassed thud, then a short metallic rattle —
+      // suspension bottoming out in the hole / on the grass
+      const thud = makeNoise(ctx);
+      const f1 = ctx.createBiquadFilter();
+      f1.type = "lowpass";
+      f1.frequency.value = 120;
+      const g1 = ctx.createGain();
+      g1.gain.setValueAtTime(0.5, t);
+      g1.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+      thud.connect(f1).connect(g1).connect(engineBus);
+      thud.start(t);
+      thud.stop(t + 0.3);
+      const rattle = makeNoise(ctx);
+      const f2 = ctx.createBiquadFilter();
+      f2.type = "bandpass";
+      f2.frequency.value = 1800;
+      f2.Q.value = 2;
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.12, t + 0.02);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      rattle.connect(f2).connect(g2).connect(engineBus);
+      rattle.start(t + 0.02);
+      rattle.stop(t + 0.24);
     },
 
     menuMove() {

@@ -855,6 +855,7 @@ export function TwingoRacer() {
             .matches,
           onPickup: (big, golden) => audioRef.current?.pickup(big, golden),
           onStreak: (tier) => audioRef.current?.streak(tier),
+          onCrash: () => audioRef.current?.crash(),
           debug: process.env.NODE_ENV !== "production",
         });
         setView(engineRef.current.state.view);
@@ -1398,6 +1399,7 @@ export function TwingoRacer() {
                       </span>
                       <span
                         className="racer-lb-gem"
+                        role="img"
                         title={bracketForScore(s.score).name}
                         aria-label={bracketForScore(s.score).name}
                         style={{ background: bracketForScore(s.score).color }}
@@ -1632,6 +1634,7 @@ export function TwingoRacer() {
                   </span>
                   <span
                     className="racer-lb-gem"
+                    role="img"
                     title={bracketForScore(s.score).name}
                     aria-label={bracketForScore(s.score).name}
                     style={{ background: bracketForScore(s.score).color }}

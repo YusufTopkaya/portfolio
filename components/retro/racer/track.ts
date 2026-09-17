@@ -79,6 +79,7 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
   // generation — same rhythm the old one-shot loop track used
   let canOrdinal = 0;
   let nextCanAt = 60; // never on the opening straight
+  let nextHoleAt = 150; // potholes start a beat after the first cans
   let nextSpriteAt = 16;
 
   const addSegment = (curve: number, y: number) => {
@@ -116,6 +117,16 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
         ordinal: canOrdinal,
       };
       canOrdinal++;
+    }
+
+    // potholes on the tarmac: exactly the cans' spacing rhythm, so the road
+    // carries one hole per can — the fast line is never free. Never shares
+    // a segment with a can (a hole under a pickup would be a cheap shot)
+    if (i >= nextHoleAt) {
+      nextHoleAt = i + 180 + Math.floor(rng() * 200);
+      if (!seg.pickup) {
+        seg.hole = { x: rng() * 1.6 - 0.8 };
+      }
     }
 
     segments[i % CAPACITY] = seg;
