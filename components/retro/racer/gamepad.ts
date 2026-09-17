@@ -12,6 +12,8 @@
 export type PadAction =
   | "up"
   | "down"
+  | "left"
+  | "right"
   | "confirm"
   | "back"
   | "pause"
@@ -46,7 +48,8 @@ const BTN_DRIGHT = 15;
 // previous-frame snapshot for edge detection (module-level: the pad is a
 // singleton for our purposes — the first connected pad is THE pad)
 let prev = { a: false, b: false, y: false, sel: false, start: false };
-let prevMenuAxis = 0; // -1 / 0 / 1
+let prevMenuAxisY = 0; // -1 / 0 / 1
+let prevMenuAxisX = 0;
 
 const applyDeadzone = (v: number): number => {
   if (Math.abs(v) < DEADZONE) return 0;
@@ -66,7 +69,8 @@ export function pollPad(): PadState | null {
   const pad = currentPad();
   if (!pad) {
     prev = { a: false, b: false, y: false, sel: false, start: false };
-    prevMenuAxis = 0;
+    prevMenuAxisY = 0;
+    prevMenuAxisX = 0;
     return null;
   }
   const b = (i: number) => pad.buttons[i];
@@ -89,18 +93,28 @@ export function pollPad(): PadState | null {
   edge("y", held(BTN_Y), "camera");
   edge("sel", held(BTN_SELECT), "restart");
   edge("start", held(BTN_START), "pause");
-  // menu steps (d-pad up/down + left stick Y) fire once per press — a
-  // held direction must not machine-gun the menus
+  // menu steps (d-pad + left stick) fire once per press — a held
+  // direction must not machine-gun the menus. The consumer suppresses
+  // left/right while driving (they double as the keyboard steer keys)
   const stickY = pad.axes[1] ?? 0;
-  const menuAxis =
+  const menuAxisY =
     stickY < -STICK_MENU_STEP || held(BTN_DUP)
       ? -1
       : stickY > STICK_MENU_STEP || held(BTN_DDOWN)
         ? 1
         : 0;
-  if (menuAxis === -1 && prevMenuAxis !== -1) pressed.add("up");
-  if (menuAxis === 1 && prevMenuAxis !== 1) pressed.add("down");
-  prevMenuAxis = menuAxis;
+  if (menuAxisY === -1 && prevMenuAxisY !== -1) pressed.add("up");
+  if (menuAxisY === 1 && prevMenuAxisY !== 1) pressed.add("down");
+  prevMenuAxisY = menuAxisY;
+  const menuAxisX =
+    stickX < -0.5 || held(BTN_DLEFT)
+      ? -1
+      : stickX > 0.5 || held(BTN_DRIGHT)
+        ? 1
+        : 0;
+  if (menuAxisX === -1 && prevMenuAxisX !== -1) pressed.add("left");
+  if (menuAxisX === 1 && prevMenuAxisX !== 1) pressed.add("right");
+  prevMenuAxisX = menuAxisX;
 
   return {
     steer,

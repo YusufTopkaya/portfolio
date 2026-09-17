@@ -281,11 +281,13 @@ export function TwingoRacer() {
      the engine input each frame; padConnected drives the hints HUD */
   const padInputRef = useRef<PadState | null>(null);
   const [padConnected, setPadConnected] = useState(false);
+  const screenRef = useRef(screen);
 
   pausedRef.current = paused;
   pauseMenuRef.current = pauseMenu;
   pauseSelRef.current = pauseSel;
   showFpsRef.current = showFps;
+  screenRef.current = screen;
 
   /* each run gets a fresh single-use submit token; PLAY AGAIN re-issues.
      On failure the leaderboard UI stays hidden and the game just plays.
@@ -746,6 +748,8 @@ export function TwingoRacer() {
     const keyFor: Record<PadAction, string> = {
       up: "ArrowUp",
       down: "ArrowDown",
+      left: "ArrowLeft",
+      right: "ArrowRight",
       confirm: "Enter",
       back: "Escape",
       pause: "Escape",
@@ -764,7 +768,36 @@ export function TwingoRacer() {
         setPadConnected(now);
       }
       if (!pad) return;
+      // the quick-pause overlay (PAUSED — …) resumes on ANY pad press,
+      // like its click/tap — and must NOT also dispatch the press as a
+      // synthetic Escape, or the pause menu would open right on top
+      if (
+        pad.pressed.size > 0 &&
+        screenRef.current === "playing" &&
+        pausedRef.current &&
+        !pauseMenuRef.current &&
+        !gameOverRef.current
+      ) {
+        setPaused(false);
+        return;
+      }
+      // while actually driving, the d-pad/stick are steering ONLY: their
+      // menu arrows double as the keyboard drive keys, and a synthetic
+      // keydown without a keyup would latch gas/brake/steer on
+      const driving =
+        screenRef.current === "playing" &&
+        !pausedRef.current &&
+        !pauseMenuRef.current &&
+        !gameOverRef.current;
       for (const action of pad.pressed) {
+        if (
+          driving &&
+          (action === "up" ||
+            action === "down" ||
+            action === "left" ||
+            action === "right")
+        )
+          continue;
         window.dispatchEvent(
           new KeyboardEvent("keydown", { key: keyFor[action] }),
         );
@@ -1033,11 +1066,12 @@ export function TwingoRacer() {
       };
       if (down && ev.key === "Escape") {
         // ESC peels one layer at a time: settings panel → pause menu →
-        // (during a run) open the pause menu — never on top of the
-        // game-over overlay (its own buttons rule there)
+        // game over back to the title → (during a run) open the pause
+        // menu
         if (pauseSettingsOpenRef.current) setPauseSettingsOpen(false);
         else if (pauseMenuRef.current) resumeFromPause();
-        else if (!gameOverRef.current) openPauseMenu();
+        else if (gameOverRef.current) quitToTitle();
+        else openPauseMenu();
         return;
       }
       // pause menu keyboard control: ↑/↓ arm an option, Enter/Space runs it
@@ -1360,7 +1394,9 @@ export function TwingoRacer() {
       >
         BACK
       </button>
-      <div className="racer-pausemenu-hint">↑↓ ROW ◀▶ ADJUST</div>
+      <div className="racer-pausemenu-hint">
+        {padConnected ? "D-PAD ROW / ADJUST" : "↑↓ ROW ◀▶ ADJUST"}
+      </div>
     </div>
   );
 
@@ -1607,7 +1643,11 @@ export function TwingoRacer() {
       )}
       {paused && !pauseMenu && (
         <div className="racer-paused font-pixel" role="status">
-          PAUSED — CLICK TO RESUME
+          {padConnected
+            ? "PAUSED — PRESS START"
+            : coarse
+              ? "PAUSED — TAP TO RESUME"
+              : "PAUSED — CLICK TO RESUME"}
         </div>
       )}
       {pauseMenu && screen === "playing" && (
@@ -1719,7 +1759,11 @@ export function TwingoRacer() {
           )}
           {pauseSettingsOpen &&
             settingsPanel(() => setPauseSettingsOpen(false))}
-          {!coarse && <div className="racer-pausemenu-hint">ESC — RESUME</div>}
+          {!coarse && (
+            <div className="racer-pausemenu-hint">
+              {padConnected ? "A SELECT — B RESUME" : "ESC — RESUME"}
+            </div>
+          )}
         </div>
       )}
       {gameOver && screen === "playing" && (
@@ -1830,6 +1874,13 @@ export function TwingoRacer() {
               QUIT
             </button>
           </div>
+          {!coarse && (
+            <div className="racer-pausemenu-hint">
+              {padConnected
+                ? "SEL — PLAY AGAIN · B — QUIT"
+                : "R — PLAY AGAIN · ESC — QUIT"}
+            </div>
+          )}
         </div>
       )}
 
