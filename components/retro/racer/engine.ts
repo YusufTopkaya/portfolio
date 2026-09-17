@@ -2607,6 +2607,19 @@ export function createEngine(opts: {
       ctx.fillStyle = "#ffd75e";
       ctx.fillText("?", tx, ty);
     };
+    // blind-zone candidates: objects so close their projection lands under
+    // the car sprite (chase) / the dash (cockpit) or straight off the
+    // bottom edge on a steep descent — crest-legal yet invisible. Occluder
+    // rects only exist AFTER the object loop (car/dash draw later), so
+    // candidates are collected here and the colour-coded markers drawn
+    // after the ambient dim (green = fuel, red = hole)
+    const blindObjs: {
+      cx: number;
+      top: number;
+      bottom: number;
+      w: number;
+      kind: "can" | "hole";
+    }[] = [];
     for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
       const segment = segments[ringSlot(baseSegment.index + n)];
       if (segment.index !== baseSegment.index + n) continue; // stale ring slot
@@ -2699,6 +2712,16 @@ export function createEngine(opts: {
               Math.round(destW),
               Math.round((visibleH / destH) * destH),
             );
+            // low on the screen — possibly sliding under the car/dash
+            if (destY + visibleH > height * 0.45) {
+              blindObjs.push({
+                cx: destX + destW / 2,
+                top: destY,
+                bottom: destY + visibleH,
+                w: destW,
+                kind: "can",
+              });
+            }
           } else {
             // fully hidden behind a crest — the can itself can't draw
             // (clip culls it), so the shared mystery "?" bobs over the
@@ -2757,6 +2780,17 @@ export function createEngine(opts: {
             0.85 * Math.PI,
           );
           ctx.stroke();
+          // a near hole can sink under the car sprite / off the bottom
+          // edge on a descent before the driver ever sees it
+          if (hy + ry > height * 0.45) {
+            blindObjs.push({
+              cx: hx,
+              top: hy - ry,
+              bottom: hy + ry,
+              w: rx * 2,
+              kind: "hole",
+            });
+          }
         } else if (rx >= 2) {
           // crest-hidden: the same bobbing "?" the cans use — fuel or
           // hole, you only find out past the crest
@@ -2884,6 +2918,10 @@ export function createEngine(opts: {
     // cockpit dash placement, captured in the first-person branch so the
     // instrument cluster can be painted onto the dash art afterwards
     let dashGeom: { x: number; y: number; w: number; h: number } | null = null;
+    // chase view: the car sprite's roof line and half width, captured so
+    // the blind-zone markers know what the sprite occludes
+    let carRoofY: number | null = null;
+    let carHalfW = 0;
     // speed streaks hug the road edges; cockpit view needs them UNDER the
     // dash, so each branch calls this at the right moment
     const drawStreaks = () => {
@@ -2944,6 +2982,8 @@ export function createEngine(opts: {
       const carX = width / 2 - destW / 2 + shakeX;
       const carY =
         height - destH - Math.round(height * 0.04) + bounce - lift + dip;
+      carRoofY = carY;
+      carHalfW = destW * 0.5;
 
       // respawn: the car breathes in and out of existence for a moment
       const carAlpha =
@@ -3183,6 +3223,39 @@ export function createEngine(opts: {
     if (sunsetGlow > 0.01) {
       ctx.fillStyle = `rgba(226,112,58,${(0.07 * sunsetGlow).toFixed(3)})`;
       ctx.fillRect(0, 0, width, height);
+    }
+
+    // blind-zone markers: an object can be past the crest yet still
+    // invisible — under the car sprite (chase), below the dash (cockpit)
+    // or off the bottom edge on a steep descent — so a dead-centre
+    // approach never learns WHAT it is. Only then (hills don't matter
+    // here) the mystery "?" stays lit over the occluder, colour-coded:
+    // green = fuel, red = hole. Drawn after the ambient dim so it stays
+    // legible at night — at this range it IS an instrument
+    if (blindObjs.length > 0) {
+      const coverTop = cockpitMode
+        ? (dashGeom?.y ?? height)
+        : (carRoofY ?? height);
+      const coverHalf = cockpitMode ? width : carHalfW;
+      for (const o of blindObjs) {
+        const hTotal = o.bottom - o.top;
+        if (hTotal <= 0) continue;
+        const overlapX = Math.abs(o.cx - width / 2) < coverHalf + o.w * 0.5;
+        const occludedFrom = Math.min(overlapX ? coverTop : Infinity, height);
+        if ((o.bottom - Math.max(o.top, occludedFrom)) / hTotal <= 0.55)
+          continue;
+        const fs = Math.max(8, Math.round(width * 0.028));
+        const bob = Math.round(
+          Math.sin(state.time * 6 + o.cx * 0.13) * fs * 0.12,
+        );
+        const mx = Math.max(fs * 0.4, Math.min(width - fs * 0.4, o.cx));
+        const ty = Math.round(coverTop - 3 - bob);
+        ctx.font = `bold ${fs}px monospace`;
+        ctx.fillStyle = "#141611";
+        ctx.fillText("?", Math.round(mx - fs * 0.3) + 1, ty + 1);
+        ctx.fillStyle = o.kind === "can" ? "#7ddc4f" : "#ff5252";
+        ctx.fillText("?", Math.round(mx - fs * 0.3), ty);
+      }
     }
     // pickup feedback window — sparkle burst + gauge flash + rising "+1"
     const fxAge = state.time - lastPickupAt;
