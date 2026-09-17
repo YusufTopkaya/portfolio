@@ -199,7 +199,7 @@ const MERCY_MAX_LEVEL = 5;
 // where the browser chrome already crowds the glass. The streak HUD
 // anchors off TOUCH_CLUSTER_TOP + 52 (the cluster's bottom edge)
 const TOUCH_CLUSTER_TOP = 16;
-const FAR_OFFROAD = 1.5; // |playerX| at/above this = stranded on the grass: barely past the rumble strips (road edge ~1.1) — a small escape margin to catch a slide with counter-steer, then the respawn teleport fires
+const FAR_OFFROAD = 0.9375; // |playerX| at/above this = stranded: 0.625× the old 1.5 (the 4→2.5 ask) — the centre rides the far rumble strip at most, so half the car over the grass is already a respawn; side effect: roadside pines (offset ≥ ~1.14) are now unreachable decor, the grass-slowdown band (offRoad > 1.1) never engages
 const LANES = 3;
 
 const COLORS = {
@@ -2376,6 +2376,25 @@ export function createEngine(opts: {
 
     // ── roadside sprites, far to near (painter's algorithm; Lou: keep
     //    them sorted by z and scale by the line's projection factor) ──
+    // crest-hidden objects (a can OR a hole) share ONE mystery marker: a
+    // bobbing pixel "?" poking over the hill line at the object's x — no
+    // colour coding, the fuel-or-hole gamble is the point
+    const drawCrestMystery = (
+      x: number,
+      hillY: number,
+      size: number,
+      phase: number,
+    ) => {
+      const fs = Math.max(7, Math.round(size));
+      const bob = Math.round(Math.sin(state.time * 5 + phase) * fs * 0.12);
+      const tx = Math.round(x - fs * 0.3);
+      const ty = hillY - 2 - bob;
+      ctx.font = `bold ${fs}px monospace`;
+      ctx.fillStyle = "#141611";
+      ctx.fillText("?", tx + 1, ty + 1);
+      ctx.fillStyle = "#ffd75e";
+      ctx.fillText("?", tx, ty);
+    };
     for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
       const segment = segments[ringSlot(baseSegment.index + n)];
       if (segment.index !== baseSegment.index + n) continue; // stale ring slot
@@ -2470,29 +2489,14 @@ export function createEngine(opts: {
             );
           } else {
             // fully hidden behind a crest — the can itself can't draw
-            // (clip culls it), so a rally-style pennant on a thin pole
-            // pokes over the hill line at the can's spot: fuel you can't
-            // see is fuel you can't plan for
-            const px = Math.round(destX + destW / 2);
-            const hillY = Math.round(segment.clip || 0);
-            const poleH = Math.max(6, Math.round(destH * 1.4));
-            const poleW = Math.max(1, Math.round(destW * 0.08));
-            ctx.fillStyle = "#141611";
-            ctx.fillRect(px, hillY - poleH, poleW, poleH);
-            const fw = Math.max(3, Math.round(destW * 0.55));
-            const fh = Math.max(2, Math.round(destW * 0.34));
-            const sway = Math.round(
-              Math.sin(state.time * 6 + segment.index) *
-                Math.max(1, destW * 0.08),
-            );
-            ctx.fillStyle = "#ffd75e";
-            ctx.fillRect(px + poleW + sway, hillY - poleH, fw, fh);
-            ctx.fillStyle = "#e2703a";
-            ctx.fillRect(
-              px + poleW + sway + fw,
-              hillY - poleH,
-              Math.max(1, Math.round(fw * 0.45)),
-              Math.max(1, Math.round(fh * 0.7)),
+            // (clip culls it), so the shared mystery "?" bobs over the
+            // hill line at the can's spot: something is there, fuel or
+            // a hole — you only find out past the crest
+            drawCrestMystery(
+              destX + destW / 2,
+              Math.round(segment.clip || 0),
+              destW,
+              segment.index,
             );
           }
         }
@@ -2503,9 +2507,9 @@ export function createEngine(opts: {
       // (light catches the wall that faces the viewer). Depth comes from
       // the segment's own screen thickness (a flat disc on the road plane
       // projects as a sliver), and the rim is clamped so it never spills
-      // past the road edge. A hole fully hidden behind a crest gets the
-      // cans' pennant treatment in DANGER red instead — falling into a
-      // hole you never saw is cheap, and the yellow flag means fuel
+      // past the road edge. A hole fully hidden behind a crest shows the
+      // SAME mystery "?" the cans use — falling into a hole you never saw
+      // is cheap, but knowing exactly which it was killed the gamble
       if (segment.hole) {
         const scale = segment.p1.screen.scale;
         const y1 = segment.p1.screen.y;
@@ -2542,28 +2546,9 @@ export function createEngine(opts: {
           );
           ctx.stroke();
         } else if (rx >= 2) {
-          // crest-hidden: thin pole + red flag poking over the hill line,
-          // gently swaying like the fuel pennant
-          const px = Math.round(hx);
-          const hillY = Math.round(segment.clip);
-          const poleH = Math.max(6, Math.round(rx * 0.35));
-          const poleW = Math.max(1, Math.round(rx * 0.03));
-          ctx.fillStyle = "#141611";
-          ctx.fillRect(px, hillY - poleH, poleW, poleH);
-          const fw = Math.max(3, Math.round(rx * 0.22));
-          const fh = Math.max(2, Math.round(rx * 0.13));
-          const sway = Math.round(
-            Math.sin(state.time * 6 + segment.index) * Math.max(1, rx * 0.04),
-          );
-          ctx.fillStyle = "#e5484d";
-          ctx.fillRect(px + poleW + sway, hillY - poleH, fw, fh);
-          ctx.fillStyle = "#20242e";
-          ctx.fillRect(
-            px + poleW + sway + fw,
-            hillY - poleH,
-            Math.max(1, Math.round(fw * 0.45)),
-            Math.max(1, Math.round(fh * 0.7)),
-          );
+          // crest-hidden: the same bobbing "?" the cans use — fuel or
+          // hole, you only find out past the crest
+          drawCrestMystery(hx, Math.round(segment.clip), rx, segment.index);
         }
       }
 
