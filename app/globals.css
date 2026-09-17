@@ -1379,17 +1379,25 @@ html.crt-boot::after {
   gap: 3px;
 }
 
+/* fixed three-column grid: name / gem / score. The score column MUST be
+   a fixed width — with auto width a 4-digit score narrows its row and the
+   gem column drifts right on exactly those rows (the lingering "kayık").
+   6ch covers every realistic score; an absurd 7th digit would overflow
+   leftwards off a right-aligned cell without moving the gem column */
 .racer-leaderboard li {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12px 6ch;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
   font-size: 7px;
   line-height: 10px;
   color: #2a3d1f;
 }
 
 .racer-lb-name {
-  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .racer-lb-score {
