@@ -679,7 +679,6 @@ function drawFuelGauge(
   fuel: number,
   time: number,
   flash: boolean,
-  frozen: boolean,
 ): { x: number; y: number } {
   // pump body
   const bw = 6 * ui;
@@ -723,15 +722,7 @@ function drawFuelGauge(
     ctx.beginPath();
     ctx.arc(cx, dotsY, r, 0, Math.PI * 2);
     if (i < lit) {
-      if (frozen) {
-        // BOOST freezes the tank drain — the lit dots frost over ice-blue
-        // with a pale ring so the freeze reads at a glance
-        ctx.fillStyle = "#aee3ff";
-        ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.lineWidth = Math.max(1, 0.7 * ui);
-        ctx.stroke();
-      } else if (low && i === lit - 1) {
+      if (low && i === lit - 1) {
         ctx.fillStyle = blinkOn ? "#e2703a" : "rgba(226,112,58,0.3)";
       } else if (flash) {
         // pickup feedback: the whole gauge pops orange for a beat
@@ -739,7 +730,7 @@ function drawFuelGauge(
       } else {
         ctx.fillStyle = segColor;
       }
-      if (!frozen) ctx.fill();
+      ctx.fill();
     } else {
       ctx.strokeStyle = segColor;
       ctx.lineWidth = Math.max(1, 0.7 * ui);
@@ -766,7 +757,6 @@ function renderCluster(
   fuel: number,
   time: number,
   flash: boolean,
-  frozen: boolean,
   topLeft = false,
 ): { x: number; y: number } {
   const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
@@ -844,7 +834,6 @@ function renderCluster(
     fuel,
     time,
     flash,
-    frozen,
   );
 }
 
@@ -863,7 +852,6 @@ function renderDashCluster(
   fuel: number,
   time: number,
   flash: boolean,
-  frozen: boolean,
 ): { x: number; y: number } {
   const u = h / 19; // the baked screen is 19px tall on the 480x270 master
   ctx.fillStyle = "#23522d";
@@ -930,20 +918,12 @@ function renderDashCluster(
     ctx.beginPath();
     ctx.arc(Math.round(cx), Math.round(dotsY), r, 0, Math.PI * 2);
     if (i < lit) {
-      if (frozen) {
-        ctx.fillStyle = "#aee3ff";
-        ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.lineWidth = Math.max(1, 0.5 * u);
-        ctx.stroke();
+      if (low && i === lit - 1) {
+        ctx.fillStyle = blinkOn ? "#e2703a" : "rgba(226,112,58,0.3)";
       } else {
-        if (low && i === lit - 1) {
-          ctx.fillStyle = blinkOn ? "#e2703a" : "rgba(226,112,58,0.3)";
-        } else {
-          ctx.fillStyle = flash ? "#e2703a" : segColor;
-        }
-        ctx.fill();
+        ctx.fillStyle = flash ? "#e2703a" : segColor;
       }
+      ctx.fill();
     } else {
       ctx.strokeStyle = segColor;
       ctx.lineWidth = Math.max(1, 0.5 * u);
@@ -1797,10 +1777,11 @@ export function createEngine(opts: {
     // the tank is a clock that ticks a little faster every level: nearly
     // flat per second, so pace beats crawling. At zero the engine dies
     // and the car coasts — a can grabbed while coasting still revives it
-    // (OutRun's coast-over-checkpoint mercy). BOOST halves the burn
-    // (a reward, not a free pass); the 0.3 s pickup grace after any can
-    // still freezes it fully so a fresh tank never feels instantly eaten
-    const drainFactor = pickupGrace > 0 ? 0 : state.boostT > 0 ? 0.5 : 1;
+    // (OutRun's coast-over-checkpoint mercy). BOOST is pure speed and
+    // risk: the burn runs at the normal rate through it. Only the 0.3 s
+    // pickup grace after any can freezes the drain fully, so a fresh
+    // tank never feels instantly eaten
+    const drainFactor = pickupGrace > 0 ? 0 : 1;
     const fuelDrain =
       dt *
       (FUEL_DRAIN_IDLE + FUEL_DRAIN_SPEED * speedPercent * speedPercent) *
@@ -2823,7 +2804,6 @@ export function createEngine(opts: {
             state.fuel,
             state.time,
             fxAge < 0.5,
-            state.boostT > 0,
           )
         : renderCluster(
             ctx,
@@ -2834,7 +2814,6 @@ export function createEngine(opts: {
             state.fuel,
             state.time,
             fxAge < 0.5,
-            state.boostT > 0,
             opts.clusterTopLeft,
           );
 
