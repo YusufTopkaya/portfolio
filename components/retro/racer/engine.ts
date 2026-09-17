@@ -2807,7 +2807,9 @@ export function createEngine(opts: {
         if (destW < 2) continue;
         const destX =
           segment.p1.screen.x +
-          scale * s.offset * ROAD_WIDTH * (width / 2) -
+          // def offset re-centres asymmetric art (the lamp arm reaches
+          // inward; its mast must stay on the verge line)
+          scale * (s.offset + sprite.offset) * ROAD_WIDTH * (width / 2) -
           destW / 2;
         const destY = segment.p1.screen.y - destH;
         let visibleH = destH;
@@ -2838,7 +2840,8 @@ export function createEngine(opts: {
           visibleH > destH * 0.5
         ) {
           const armDir = s.sprite === 3 ? 1 : -1;
-          const headX = destX + (armDir > 0 ? destW * 0.79 : destW * 0.21);
+          // head centre in the 52px art: 45.5/52 (arm-right) / 5.5/52
+          const headX = destX + (armDir > 0 ? destW * 0.875 : destW * 0.106);
           const headY = destY + destH * 0.15;
           const glowR = destW * 0.45;
           const lg = ctx.createRadialGradient(
@@ -2862,9 +2865,10 @@ export function createEngine(opts: {
             Math.round(glowR * 2),
           );
           // the light cone itself (the "huni"): a soft trapezoid widening
-          // from the head down to the road, fading as it falls
+          // from the head down to the road, fading as it falls — a real
+          // cobra head throws a broad pool, not a pencil beam
           const poolY = segment.p1.screen.y;
-          const prx = destW * 0.75;
+          const prx = destW * 1.0;
           const cone = ctx.createLinearGradient(0, headY, 0, poolY);
           cone.addColorStop(
             0,
@@ -2876,8 +2880,8 @@ export function createEngine(opts: {
           );
           ctx.fillStyle = cone;
           ctx.beginPath();
-          ctx.moveTo(headX - destW * 0.16, headY);
-          ctx.lineTo(headX + destW * 0.16, headY);
+          ctx.moveTo(headX - destW * 0.2, headY);
+          ctx.lineTo(headX + destW * 0.2, headY);
           ctx.lineTo(headX + prx, poolY);
           ctx.lineTo(headX - prx, poolY);
           ctx.closePath();
@@ -3229,7 +3233,8 @@ export function createEngine(opts: {
     // invisible — under the car sprite (chase), below the dash (cockpit)
     // or off the bottom edge on a steep descent — so a dead-centre
     // approach never learns WHAT it is. Only then (hills don't matter
-    // here) the mystery "?" stays lit over the occluder, colour-coded:
+    // here) an EXCLAMATION marks it over the occluder — not the crest's
+    // amber "?", so the two never read as the same signal — colour-coded:
     // green = fuel, red = hole. Drawn after the ambient dim so it stays
     // legible at night — at this range it IS an instrument
     if (blindObjs.length > 0) {
@@ -3252,9 +3257,9 @@ export function createEngine(opts: {
         const ty = Math.round(coverTop - 3 - bob);
         ctx.font = `bold ${fs}px monospace`;
         ctx.fillStyle = "#141611";
-        ctx.fillText("?", Math.round(mx - fs * 0.3) + 1, ty + 1);
+        ctx.fillText("!", Math.round(mx - fs * 0.3) + 1, ty + 1);
         ctx.fillStyle = o.kind === "can" ? "#7ddc4f" : "#ff5252";
-        ctx.fillText("?", Math.round(mx - fs * 0.3), ty);
+        ctx.fillText("!", Math.round(mx - fs * 0.3), ty);
       }
     }
     // pickup feedback window — sparkle burst + gauge flash + rising "+1"

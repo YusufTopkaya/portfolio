@@ -492,22 +492,27 @@ function makeRock(): HTMLCanvasElement {
 }
 
 function makePole(dir: 1 | -1): HTMLCanvasElement {
-  const [c, ctx] = canvas24(28, 72);
+  const [c, ctx] = canvas24(52, 72);
   if (!ctx) return c;
-  // cobra-head street light: vertical mast + arm reaching OVER the road
-  // (an inverted L), dark head by day — the warm glow and the pool on
-  // the tarmac are painted at render time, only after dark. dir = +1
-  // arm reaches right (pole planted on the LEFT verge), -1 the mirror
-  const mastX = dir > 0 ? 4 : 20;
-  const headX = dir > 0 ? 18 : 2;
-  ctx.fillStyle = "#4a4a52";
-  ctx.fillRect(mastX, 6, 4, 66);
-  ctx.fillRect(Math.min(mastX, headX), 6, Math.abs(headX - mastX) + 8, 3);
-  // head housing + the unlit lens underneath
-  ctx.fillStyle = "#2c2c31";
-  ctx.fillRect(headX, 9, 8, 4);
-  ctx.fillStyle = "#4c4c54";
-  ctx.fillRect(headX + 1, 12, 6, 2);
+  // cobra-head street light: tall mast + a LONG stepped arm reaching over
+  // the tarmac like real motorway lamps — the head hangs above the road
+  // edge, not the grass (the old 28px art's arm ended off the shoulder).
+  // dir = +1 arm reaches right (pole planted on the LEFT verge), -1 the
+  // mirror. The mast deliberately hugs one edge; the def `offset`
+  // compensates so the mast still lands on the generator's ±1.35 verge
+  // line and only the arm reaches inward (head at ~±0.98 half-widths)
+  const px = (x: number, y: number, w: number, h: number, col: string) => {
+    ctx.fillStyle = col;
+    ctx.fillRect(dir > 0 ? x : 52 - w - x, y, w, h);
+  };
+  px(4, 6, 4, 66, "#4a4a52"); // mast
+  // stepped arm: three runs rising gently toward the road
+  px(8, 6, 15, 2, "#4a4a52");
+  px(23, 5, 14, 2, "#4a4a52");
+  px(37, 4, 12, 2, "#4a4a52");
+  // head housing + the unlit lens underneath (lit only after dark, at render)
+  px(42, 7, 8, 4, "#2c2c31");
+  px(43, 11, 6, 2, "#4c4c54");
   return c;
 }
 
@@ -546,14 +551,16 @@ export function makeRoadside(): RoadsideSprite[] {
     // (6, right verge) so the arm always reaches over the tarmac. Scale
     // is proportioned off the pine (6.2 ≈ a 12-15 m tree): a real cobra
     // mast is 8-10 m, so ~0.78× the tree — anything smaller reads as a
-    // toy next to it
-    { image: makePole(1), w: 28, h: 72, offset: 0, scale: 4.8 },
+    // toy next to it. The def `offset` re-centres the asymmetric art so
+    // the mast lands exactly on the generator's ±1.35 verge line:
+    // 0.375×(52·4.2·4.8/2200) ≈ 0.188 half-widths
+    { image: makePole(1), w: 52, h: 72, offset: 0.188, scale: 4.8 },
     // curve-warning chevrons (4 = points right, 5 = left): never spawned
     // by the random roadside mix — the generator plants them only around
     // medium/hard bends, on the outside edge
     { image: makeChevron(1), w: 48, h: 44, offset: 0, scale: 2.6 },
     { image: makeChevron(-1), w: 48, h: 44, offset: 0, scale: 2.6 },
-    { image: makePole(-1), w: 28, h: 72, offset: 0, scale: 4.8 },
+    { image: makePole(-1), w: 52, h: 72, offset: -0.188, scale: 4.8 },
   ];
 }
 
