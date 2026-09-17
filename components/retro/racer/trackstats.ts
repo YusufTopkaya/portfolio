@@ -94,3 +94,11 @@ export function analyzeTrack(seed: number, meters = 3000): TrackStats | null {
             : "BALANCED";
   return { curves, hills, fuel, verdict };
 }
+
+/** composite 1-10 difficulty from the three star axes (3-15 total) —
+    the engine scales its score-based can-hiding rate with this: 1% per
+    1500 pts on a 1 (chill day), 0.1% on a 10 (cruel day), so the daily
+    layout's luck can't swing the fuel economy between days */
+export function trackDifficulty(s: TrackStats): number {
+  return 1 + ((s.curves + s.hills + s.fuel - 3) * 9) / 12;
+}

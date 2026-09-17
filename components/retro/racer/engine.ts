@@ -1415,6 +1415,10 @@ export function createEngine(opts: {
   /** dev-only (e2e probes): collect per-render road diagnostics into
       `probe` — off in production so the game ships zero per-frame garbage */
   debug?: boolean;
+  /** the day's composite track difficulty 1-10 (from `analyzeTrack`) —
+      scales the score-based can-hiding rate between 1% (easy) and 0.1%
+      (cruel) per 1500 pts so daily map luck can't swing the leaderboard */
+  mapDifficulty?: number;
 }): RacerEngine {
   const {
     segments,
@@ -1432,6 +1436,15 @@ export function createEngine(opts: {
   // mutable so resize() can re-fit the renderer when the device rotates
   let width = opts.width ?? RACER_WIDTH;
   let height = opts.height ?? RACER_HEIGHT;
+  /* score-based scarcity scales with the day's rated difficulty (1-10,
+     from the TODAY'S TRACK analysis): an easy map hides cans at 1% per
+     1500 pts so a chill day doesn't print free records, a cruel map at
+     0.1% — on a hard day the road itself is the hardship, not the can
+     lottery. Unknown difficulty (analysis failed) parks at the mid rate */
+  const scarcityStep = (() => {
+    const d = Math.min(10, Math.max(1, opts.mapDifficulty ?? 5.5));
+    return 0.01 - ((d - 1) / 9) * 0.009;
+  })();
   // ring window over the infinite track: ~10 s of flat-out driving stays
   // generated ahead, old slots are overwritten by the generator (render
   // reads 180 ahead, the rearview mirror walks 20 behind — ample cushion)
@@ -1572,12 +1585,13 @@ export function createEngine(opts: {
     profile: [],
     segDiag: [],
   };
-  // scarcity ramps with score: every 1500 points hides another 1% of the
-  // track's cans (capped at 40% — the cap is calibrated with the drain
+  // scarcity ramps with score: every 1500 points hides another slice of
+  // the track's cans (capped at 40% — the cap is calibrated with the drain
   // cap so a PERFECT chain stays sustainable in the deep game while a
-  // 1-in-10 miss rate slowly bleeds out; see LAP_FUEL). The divisor rides
-  // the score scale — halved when the score formula went to ×0.5, so the
-  // per-km ramp is unchanged.
+  // 1-in-10 miss rate slowly bleeds out; see LAP_FUEL). The slice size is
+  // `scarcityStep`: 1% on the easiest daily maps down to 0.1% on cruel
+  // ones, so the fuel lottery can't widen the score gap between days.
+  // The divisor rides the score scale (score accrues at ×0.5).
   // Big cans (every 10th) resist at half the rate — the relief valve must
   // survive into the late game. Cans are hidden in golden-ratio order
   // over their ordinal, so the hidden ones stay evenly spread instead of
@@ -1588,7 +1602,7 @@ export function createEngine(opts: {
     if (!pk) return true;
     if (pk.ordinal < 0) return true; // mercy can: never scarcity-hidden
     if (pk.golden) return true; // golden can: a gift is never hidden
-    const hidden = Math.min(0.4, Math.floor(state.score / 1500) * 0.005);
+    const hidden = Math.min(0.4, Math.floor(state.score / 1500) * scarcityStep);
     if (hidden <= 0) return true;
     return (
       (pk.ordinal * 0.6180339887498949) % 1 >= (pk.big ? hidden / 2 : hidden)

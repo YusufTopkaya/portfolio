@@ -37,7 +37,11 @@ import {
   tintGold,
 } from "./racer/sprites";
 import { createTrackGenerator } from "./racer/track";
-import { analyzeTrack, type TrackStats } from "./racer/trackstats";
+import {
+  analyzeTrack,
+  type TrackStats,
+  trackDifficulty,
+} from "./racer/trackstats";
 
 /** render buffer: landscape keeps the native 480×270, portrait phones get
     a taller buffer so the game fills the screen instead of letterboxing
@@ -903,6 +907,10 @@ export function TwingoRacer() {
         // limits (alternating curve sides, sea-level-sprung hills)
         const { segments, extend, firstIndex, generated } =
           createTrackGenerator(turkeyDay());
+        // the difficulty card is normally rated while the title sits open;
+        // an impatient START within that beat re-rates here synchronously
+        // (same seed, same result) so scarcity never falls back blind
+        const stats = trackStats ?? analyzeTrack(turkeyDay(), 3000);
         engineRef.current = createEngine({
           segments,
           extend,
@@ -916,6 +924,7 @@ export function TwingoRacer() {
           view: "chase",
           width: buf.w,
           height: buf.h,
+          mapDifficulty: stats ? trackDifficulty(stats) : undefined,
           clusterTopLeft: window.matchMedia("(pointer: coarse)").matches,
           reduceMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
             .matches,
