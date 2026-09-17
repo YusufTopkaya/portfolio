@@ -75,8 +75,8 @@ export interface RacerAudio {
   streak(streak: number): void;
   /** crash respawn (stranded off-road / pothole): deep thud + rattle */
   crash(): void;
-  /** third crash = fatal: the engine sputters and dies — slowing putters
-      and a final cough as the run ends in a driverless coast */
+  /** third crash = fatal: a classic arcade explosion — noise burst with
+      a collapsing lowpass over a pitch-diving square boom */
   breakdown(): void;
   menuMove(): void;
   menuSelect(): void;
@@ -820,40 +820,44 @@ export function createRacerAudio(): RacerAudio {
     breakdown() {
       if (!ctx || !engineBus) return;
       const t = ctx.currentTime;
-      // dying engine: a handful of low putters with widening gaps (the
-      // firing rate stalling out), each weaker than the last, then one
-      // final unfiltered cough of noise — silence after that is the
-      // gameOver() fade's job
-      const putters: [number, number, number][] = [
-        // offset, frequency, volume
-        [0, 90, 0.3],
-        [0.16, 74, 0.26],
-        [0.38, 58, 0.22],
-        [0.68, 44, 0.17],
-        [1.1, 32, 0.12],
-      ];
-      for (const [off, freq, vol] of putters) {
-        const osc = ctx.createOscillator();
-        osc.type = "square";
-        osc.frequency.value = freq;
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(vol, t + off);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.12);
-        osc.connect(g).connect(engineBus);
-        osc.start(t + off);
-        osc.stop(t + off + 0.14);
-      }
-      const cough = makeNoise(ctx);
-      const f = ctx.createBiquadFilter();
-      f.type = "lowpass";
-      f.frequency.value = 400;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.3, t + 1.45);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.9);
-      cough.connect(f).connect(g).connect(engineBus);
-      cough.start(t + 1.4);
-      cough.stop(t + 2.0);
+      // old-Atari explosion: a white-noise burst whose lowpass collapses
+      // from bright crackle to a muffled whomp, over a square-wave boom
+      // pitch-diving into the sub range — then silence (the gameOver()
+      // fade's job)
+      const blast = makeNoise(ctx);
+      const bf = ctx.createBiquadFilter();
+      bf.type = "lowpass";
+      bf.frequency.setValueAtTime(3200, t);
+      bf.frequency.exponentialRampToValueAtTime(90, t + 0.85);
+      const bg = ctx.createGain();
+      bg.gain.setValueAtTime(0.6, t);
+      bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+      blast.connect(bf).connect(bg).connect(engineBus);
+      blast.start(t);
+      blast.stop(t + 1.0);
+      const boom = ctx.createOscillator();
+      boom.type = "square";
+      boom.frequency.setValueAtTime(120, t);
+      boom.frequency.exponentialRampToValueAtTime(28, t + 0.55);
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0.28, t);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+      boom.connect(og).connect(engineBus);
+      boom.start(t);
+      boom.stop(t + 0.65);
+      // debris: a second, smaller crackle a beat later
+      const debris = makeNoise(ctx);
+      const df = ctx.createBiquadFilter();
+      df.type = "bandpass";
+      df.frequency.value = 900;
+      df.Q.value = 1.2;
+      const dg = ctx.createGain();
+      dg.gain.setValueAtTime(0.0001, t);
+      dg.gain.exponentialRampToValueAtTime(0.18, t + 0.18);
+      dg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      debris.connect(df).connect(dg).connect(engineBus);
+      debris.start(t + 0.15);
+      debris.stop(t + 0.55);
     },
 
     menuMove() {

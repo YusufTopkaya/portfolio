@@ -153,7 +153,11 @@ const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
 const CRASH_FUEL = 2;
 const CRASH_SPEED_STEPS = [0.03, 0.05, 0.07];
 const CRASH_MAX = 3; // hearts — the third crash is fatal
-const DYING_TIME = 2.2; // seconds of driverless coast after the fatal hit
+const DYING_TIME = 2.2; // total seconds between the fatal hit and game over
+// the wreck doesn't coast forever: a hard linear decel (on top of the
+// normal rolling drag) brings it to a standstill within this window,
+// then the smoke hangs for the remainder of DYING_TIME
+const DYING_STOP_T = 1.66;
 const PICKUP_GRACE_T = 0.3; // fuel burns free for this long after a can grab
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank is the run's death clock, OutRun-style: the drain is (nearly)
@@ -182,6 +186,10 @@ const BOOST_PER_DOT = 1.5;
 // golden can: 3 dots + a flat 2 s of BOOST — a small sweet bonus that
 // doesn't overshadow the streak ladder
 const GOLDEN_BOOST_T = 2;
+// hot-chain bonus: a NON-streak can (any size, golden included) grabbed
+// while a boost is still burning adds a flat +0.5 s — the pace reward
+// that lets a flat-out driver bridge one boost into the next
+const BOOST_CHAIN_T = 0.5;
 // fuel-chain streak ladder, repeating every 10 cans: +4 s at 3, +6 s at
 // 5, +9 s at each multiple of 10 (10/20/30…). A full clean lap pays 19 s —
 // the 20 s (4+6 twice) a player earns by DELIBERATELY breaking a chain
@@ -1662,9 +1670,11 @@ export function createEngine(opts: {
   function update(dt: number, input: RacerInput) {
     if (state.gameOver) return;
     if (dying) {
-      // fatal crash: the driver's foot is off everything — the car just
-      // rolls out on momentum (ROLL_DRAG below) until the timer runs out
+      // fatal crash: the driver's foot is off everything — a hard linear
+      // decel (plus the rolling drag below) parks the wreck within
+      // DYING_STOP_T, then the smoke hangs until the timer runs out
       input = { left: false, right: false, gas: false, brake: false };
+      state.speed = Math.max(0, state.speed - (MAX_SPEED / DYING_STOP_T) * dt);
       dyingT -= dt;
       if (dyingT <= 0) {
         state.gameOver = true;
@@ -1963,6 +1973,9 @@ export function createEngine(opts: {
           state.speed > MAX_SPEED * 0.02
         ) {
           const amount = pk.golden ? 3 : pk.big ? 2 : 1;
+          // captured BEFORE this pickup's own grants: a can driven
+          // through while a boost still burns is a hot-chain grab
+          const hadBoost = state.boostT > 0;
           // a can grabbed with a near-full tank doesn't go to waste:
           // the overflow burns off as BOOST seconds instead
           const overflow = state.fuel + amount - FUEL_MAX;
@@ -2016,6 +2029,11 @@ export function createEngine(opts: {
               }
               state.fuel = Math.min(FUEL_MAX, state.fuel + LAP_FUEL);
             }
+          } else if (hadBoost) {
+            // hot chain: a non-streak can grabbed mid-boost stretches the
+            // burn a touch — the reward for keeping the pace up between
+            // ladder steps
+            state.boostT += BOOST_CHAIN_T;
           }
           opts.onPickup?.(pk.big ?? false, pk.golden ?? false);
         } else {
@@ -2815,31 +2833,6 @@ export function createEngine(opts: {
         Math.round(destW),
         Math.round(destH),
       );
-      ctx.globalAlpha = 1;
-
-      // crash scars: procedural dents and scrapes over the bodywork, one
-      // batch per lost heart — no extra sprites, the damage is painted
-      // straight onto the car in body-relative coordinates
-      if (crashes > 0) {
-        const scars: [number, number, number, number][] = [
-          [0.14, 0.55, 0.12, 0.07], // rear-left quarter scrape
-          [0.74, 0.62, 0.1, 0.06], // rear-right quarter scrape
-          [0.3, 0.78, 0.16, 0.08], // bumper bash
-          [0.58, 0.82, 0.12, 0.06], // bumper bash 2
-          [0.4, 0.4, 0.2, 0.05], // tailgate crease
-        ];
-        ctx.fillStyle = "rgba(20,20,25,0.45)";
-        const n = crashes === 1 ? 2 : scars.length;
-        for (let i = 0; i < n; i++) {
-          const [fx, fy, fw, fh] = scars[i];
-          ctx.fillRect(
-            Math.round(carX + destW * fx),
-            Math.round(carY + destH * fy),
-            Math.round(destW * fw),
-            Math.max(1, Math.round(destH * fh)),
-          );
-        }
-      }
       ctx.globalAlpha = 1;
 
       // stop lamps: taillights + the high-level LED strip on the roofline
