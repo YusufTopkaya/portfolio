@@ -11,6 +11,7 @@
  * framework-free.
  */
 
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScoreEntry, ScorePeriod } from "@/lib/highscore";
 import {
@@ -1400,12 +1401,23 @@ export function TwingoRacer() {
                         {String(i + 1).padStart(2, "0")}. {s.name}
                       </span>
                       <span
-                        className="racer-lb-gem"
-                        role="img"
-                        title={bracketForScore(s.score).name}
-                        aria-label={bracketForScore(s.score).name}
-                        style={{ background: bracketForScore(s.score).color }}
-                      />
+                        className="racer-lb-gem-wrap"
+                        data-bracket={bracketForScore(s.score).name}
+                        style={
+                          {
+                            "--gem-color": bracketForScore(s.score).color,
+                          } as CSSProperties
+                        }
+                      >
+                        <span
+                          className="racer-lb-gem"
+                          role="img"
+                          aria-label={bracketForScore(s.score).name}
+                          style={{
+                            background: bracketForScore(s.score).color,
+                          }}
+                        />
+                      </span>
                       <span className="racer-lb-score">{s.score}</span>
                     </li>
                   ))}
@@ -1635,12 +1647,23 @@ export function TwingoRacer() {
                     {String(i + 1).padStart(2, "0")}. {s.name}
                   </span>
                   <span
-                    className="racer-lb-gem"
-                    role="img"
-                    title={bracketForScore(s.score).name}
-                    aria-label={bracketForScore(s.score).name}
-                    style={{ background: bracketForScore(s.score).color }}
-                  />
+                    className="racer-lb-gem-wrap"
+                    data-bracket={bracketForScore(s.score).name}
+                    style={
+                      {
+                        "--gem-color": bracketForScore(s.score).color,
+                      } as CSSProperties
+                    }
+                  >
+                    <span
+                      className="racer-lb-gem"
+                      role="img"
+                      aria-label={bracketForScore(s.score).name}
+                      style={{
+                        background: bracketForScore(s.score).color,
+                      }}
+                    />
+                  </span>
                   <span className="racer-lb-score">{s.score}</span>
                 </li>
               ))}

@@ -1374,10 +1374,59 @@ html.crt-boot::after {
 
 .racer-leaderboard li {
   display: flex;
-  justify-content: space-between;
-  gap: 18px;
+  align-items: center;
+  gap: 10px;
   font-size: 7px;
+  line-height: 1.4;
   color: #2a3d1f;
+}
+
+.racer-lb-name {
+  flex: 1;
+}
+
+.racer-lb-score {
+  text-align: right;
+}
+
+/* gem wrapper: a fixed-width middle column, so every gem sits on the
+   same vertical line — space-between used to let it drift with the
+   name/score widths (the "kayık" look). Also carries the hover tooltip */
+.racer-lb-gem-wrap {
+  position: relative;
+  width: 12px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* retro league tooltip: desktop pointers only — touch never hovers.
+   Pure CSS, no native title bubble: dark LCD panel, bracket-coloured
+   border, pixel font inherited from the row */
+@media (hover: hover) and (pointer: fine) {
+  .racer-lb-gem-wrap {
+    cursor: help;
+  }
+  .racer-lb-gem-wrap::after {
+    content: attr(data-bracket);
+    position: absolute;
+    bottom: calc(100% + 7px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 6px;
+    background: #0d1f0a;
+    border: 2px solid var(--gem-color, #d7ff9e);
+    color: #d7ff9e;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 6;
+    transition: opacity 0.12s steps(2, jump-none);
+  }
+  .racer-lb-gem-wrap:hover::after {
+    opacity: 1;
+  }
 }
 
 .racer-leaderboard li.racer-lb-me {
