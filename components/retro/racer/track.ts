@@ -80,6 +80,10 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
   let canOrdinal = 0;
   let nextCanAt = 60; // never on the opening straight
   let nextSpriteAt = 16;
+  // cobra-head lamps are motorway furniture, not scatter: exact spacing,
+  // a fixed verge offset, sides strictly alternating
+  let nextLampAt = 24;
+  let lampSide = rng() > 0.5 ? 1 : -1;
   // potholes ride on the can rhythm (one per can): every can placement
   // schedules exactly one hole ahead — ~40% are BAIT holes parked just off
   // the can's line so the greedy straight line to the can clips them,
@@ -93,19 +97,17 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
     prevY = y;
 
     // roadside objects: every few segments, 75% chance of a pine/bush/
-    // rock/pole just off the road edge (offset 1.15-1.9 half-widths) —
-    // close offsets are what let sprites whiz past at arcade size. Pines
-    // often get shrubs huddled at their base; cobra-head lamps pick the
-    // arm variant that reaches over the tarmac (3 = arm from the left
-    // verge, 6 = from the right). The old plate sign is gone (it spammed
-    // meaninglessly); chevrons never spawn here — they are curve
-    // infrastructure, planted by addRoad
+    // rock just off the road edge (offset 1.15-1.9 half-widths) — close
+    // offsets are what let sprites whiz past at arcade size. Pines often
+    // get shrubs huddled at their base. Lamps do NOT live here — they
+    // run on their own exact rhythm below; chevrons never spawn here
+    // either — they are curve infrastructure, planted by addRoad
     if (i >= nextSpriteAt) {
       nextSpriteAt = i + 2 + Math.floor(rng() * 4);
       if (rng() >= 0.25) {
         const pick = rng();
         const offset = (rng() > 0.5 ? 1 : -1) * (1.15 + rng() * 0.75);
-        if (pick < 0.3) {
+        if (pick < 0.35) {
           seg.sprites.push({ sprite: 0, offset });
           const shrubs = Math.floor(rng() * 3); // 0-2 bushes at the base
           for (let b = 0; b < shrubs; b++) {
@@ -116,12 +118,22 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
             });
           }
         } else {
-          seg.sprites.push({
-            sprite: pick < 0.6 ? 1 : pick < 0.8 ? 2 : offset > 0 ? 6 : 3,
-            offset,
-          });
+          seg.sprites.push({ sprite: pick < 0.7 ? 1 : 2, offset });
         }
       }
+    }
+
+    // street lights: every 40 segments exactly, always at the same verge
+    // offset, the side strictly alternating — never staggered, never
+    // scattered. The arm variant reaches over the tarmac (3 = pole on
+    // the left verge, 6 = on the right)
+    if (i >= nextLampAt) {
+      nextLampAt = i + 40;
+      seg.sprites.push({
+        sprite: lampSide > 0 ? 6 : 3,
+        offset: lampSide * 1.35,
+      });
+      lampSide = -lampSide;
     }
 
     // gas cans on the tarmac: spaced ~5-11 s of driving apart, so a tank
@@ -141,14 +153,40 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
         ordinal: canOrdinal,
       };
       canOrdinal++;
-      // schedule this can's pothole. Bait: just beside the can's line a
-      // couple segments on — a dead-centre grab is safe, but the lazy
-      // straight line clips the hole (hit radius 0.28, grab radius 0.24).
-      // Scatter: anywhere in the next can window
-      if (rng() < 0.4) {
+      // schedule this can's pothole(s). PREMIUM cans (big/golden) ALWAYS
+      // sit in a two-hole corridor: either along the can's line (thread
+      // past one, grab, dodge the next) or flanking it (dead-centre is
+      // safe, a wide line clips). Regular cans keep the old single hole:
+      // ~40% BAIT parked just off the can's line, the rest scatter
+      // anywhere in the following can window
+      const clampX = (hx: number) => Math.max(-0.8, Math.min(0.8, hx));
+      const placeHole = (idx: number, hx: number) => {
+        if (idx >= i) {
+          pendingHoles.set(idx, { x: clampX(hx) });
+          return;
+        }
+        // behind the write head: mutate the ring directly (still ~600
+        // segments ahead of the car, so nothing pops in late)
+        const t = segments[idx % CAPACITY];
+        if (t && t.index === idx && !t.pickup && !t.hole) {
+          t.hole = { x: clampX(hx) };
+        }
+      };
+      if (big || seg.pickup.golden) {
+        if (rng() < 0.5) {
+          // vertical corridor: one hole before, one after, on the line
+          placeHole(i - 5, canX);
+          placeHole(i + 5, canX);
+        } else {
+          // horizontal corridor: the can flanked left and right
+          const hs = rng() > 0.5 ? 1 : -1;
+          placeHole(i - 1, canX + hs * 0.55);
+          placeHole(i + 1, canX - hs * 0.55);
+        }
+      } else if (rng() < 0.4) {
         const dx = (rng() > 0.5 ? 1 : -1) * (0.4 + rng() * 0.25);
         pendingHoles.set(i + 2 + Math.floor(rng() * 3), {
-          x: Math.max(-0.8, Math.min(0.8, canX + dx)),
+          x: clampX(canX + dx),
         });
       } else {
         pendingHoles.set(i + 30 + Math.floor(rng() * 300), {

@@ -543,14 +543,17 @@ export function makeRoadside(): RoadsideSprite[] {
     { image: makeBush(), w: 48, h: 36, offset: 0, scale: 2.2 },
     { image: makeRock(), w: 36, h: 24, offset: 0, scale: 1.5 },
     // cobra-head lamps come in arm-right (3, left verge) and arm-left
-    // (6, right verge) so the arm always reaches over the tarmac
-    { image: makePole(1), w: 28, h: 72, offset: 0, scale: 2.2 },
+    // (6, right verge) so the arm always reaches over the tarmac. Scale
+    // is proportioned off the pine (6.2 ≈ a 12-15 m tree): a real cobra
+    // mast is 8-10 m, so ~0.78× the tree — anything smaller reads as a
+    // toy next to it
+    { image: makePole(1), w: 28, h: 72, offset: 0, scale: 4.8 },
     // curve-warning chevrons (4 = points right, 5 = left): never spawned
     // by the random roadside mix — the generator plants them only around
     // medium/hard bends, on the outside edge
     { image: makeChevron(1), w: 48, h: 44, offset: 0, scale: 2.6 },
     { image: makeChevron(-1), w: 48, h: 44, offset: 0, scale: 2.6 },
-    { image: makePole(-1), w: 28, h: 72, offset: 0, scale: 2.2 },
+    { image: makePole(-1), w: 28, h: 72, offset: 0, scale: 4.8 },
   ];
 }
 
