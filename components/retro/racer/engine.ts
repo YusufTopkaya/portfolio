@@ -146,10 +146,14 @@ const GEAR_TOPS = [45, 80, 115, 150, 180];
 const SHIFT_TIME = 0.28;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
 // crash cost (off-road, pothole, tree — all share crashRespawn): 2 fuel
-// dots AND permanent engine damage — every crash knocks 7% off the top
-// speed, stacking multiplicatively for the rest of the run
+// dots AND permanent engine damage on a 3-heart ladder — each crash
+// knocks a growing share off the top speed (multiplicative), and the
+// third crash kills the engine outright: controls cut, a dying coast,
+// then game over
 const CRASH_FUEL = 2;
-const CRASH_SPEED_LOSS = 0.07;
+const CRASH_SPEED_STEPS = [0.03, 0.05, 0.07];
+const CRASH_MAX = 3; // hearts — the third crash is fatal
+const DYING_TIME = 2.2; // seconds of driverless coast after the fatal hit
 const PICKUP_GRACE_T = 0.3; // fuel burns free for this long after a can grab
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank is the run's death clock, OutRun-style: the drain is (nearly)
@@ -1384,6 +1388,9 @@ export function createEngine(opts: {
   onStreak?: (streak: number) => void;
   /** fired on a crash respawn (stranded off-road or pothole) */
   onCrash?: () => void;
+  /** fired on the THIRD crash — the engine dies: the run ends in a
+      driverless coast, so play the breakdown sputter instead of crash() */
+  onBreakdown?: () => void;
   /** dev-only (e2e probes): collect per-render road diagnostics into
       `probe` — off in production so the game ships zero per-frame garbage */
   debug?: boolean;
@@ -1560,31 +1567,48 @@ export function createEngine(opts: {
   // can't
   let appliedSteer = 0;
 
-  // permanent crash damage: every crashRespawn knocks CRASH_SPEED_LOSS
-  // off the top speed, stacking multiplicatively — a crumpled car is a
-  // slower car for the rest of the run
+  // permanent crash damage on a 3-heart ladder: every crashRespawn knocks
+  // CRASH_SPEED_STEPS[crashes-1] off the top speed, stacking
+  // multiplicatively — a crumpled car is a slower car for the rest of the
+  // run, and the third heart lost kills the engine for good
+  let crashes = 0;
   let damageMul = 1;
+  // fatal-crash coast: controls are cut, the car rolls out on its own
+  // momentum under a smoke cloud, then game over
+  let dying = false;
+  let dyingT = 0;
   // centre banner state for the crash cost readout (cause + penalties)
   let lastCrashAt = -10;
   let lastCrashCause: "pothole" | "tree" | "offroad" = "offroad";
   // shared crash: stranded off-road, a pothole or a roadside pine all
-  // cost the same — centre-line respawn, CRASH_FUEL dots, a broken
-  // chain, and 7% less top speed for good
+  // cost the same — CRASH_FUEL dots, a broken chain, a heart. The first
+  // two also mean a centre-line respawn; the third is fatal and lets the
+  // car coast out where it crashed
   const crashRespawn = (cause: "pothole" | "tree" | "offroad") => {
-    state.respawn = RESPAWN_TIME;
-    state.speed = 0;
-    state.playerX = 0;
+    if (dying) return; // already coasting to the end — no double jeopardy
+    crashes++;
     state.fuel = Math.max(0, state.fuel - CRASH_FUEL);
-    damageMul *= 1 - CRASH_SPEED_LOSS;
+    damageMul *= 1 - CRASH_SPEED_STEPS[Math.min(crashes - 1, CRASH_MAX - 1)];
     lastCrashAt = state.time;
     lastCrashCause = cause;
     if (state.streak > 0) lastStreakLostAt = state.time;
     state.streak = 0;
-    // a crash mid-hop must not land the teleported car into a squash +
-    // grip penalty it never earned
+    // a crash mid-hop must not land the car into a squash + grip penalty
+    // it never earned
     airT = 0;
     landT = 0;
     gripT = 0;
+    if (crashes >= CRASH_MAX) {
+      // fatal: no teleport, no speed cut — keep the momentum and let the
+      // dead engine bleed it off for a beat of drama before game over
+      dying = true;
+      dyingT = DYING_TIME;
+      opts.onBreakdown?.();
+      return;
+    }
+    state.respawn = RESPAWN_TIME;
+    state.speed = 0;
+    state.playerX = 0;
     opts.onCrash?.();
   };
 
@@ -1637,6 +1661,16 @@ export function createEngine(opts: {
 
   function update(dt: number, input: RacerInput) {
     if (state.gameOver) return;
+    if (dying) {
+      // fatal crash: the driver's foot is off everything — the car just
+      // rolls out on momentum (ROLL_DRAG below) until the timer runs out
+      input = { left: false, right: false, gas: false, brake: false };
+      dyingT -= dt;
+      if (dyingT <= 0) {
+        state.gameOver = true;
+        return;
+      }
+    }
     pendingSteer =
       input.steer !== undefined
         ? Math.max(-1, Math.min(1, input.steer))
@@ -2783,6 +2817,31 @@ export function createEngine(opts: {
       );
       ctx.globalAlpha = 1;
 
+      // crash scars: procedural dents and scrapes over the bodywork, one
+      // batch per lost heart — no extra sprites, the damage is painted
+      // straight onto the car in body-relative coordinates
+      if (crashes > 0) {
+        const scars: [number, number, number, number][] = [
+          [0.14, 0.55, 0.12, 0.07], // rear-left quarter scrape
+          [0.74, 0.62, 0.1, 0.06], // rear-right quarter scrape
+          [0.3, 0.78, 0.16, 0.08], // bumper bash
+          [0.58, 0.82, 0.12, 0.06], // bumper bash 2
+          [0.4, 0.4, 0.2, 0.05], // tailgate crease
+        ];
+        ctx.fillStyle = "rgba(20,20,25,0.45)";
+        const n = crashes === 1 ? 2 : scars.length;
+        for (let i = 0; i < n; i++) {
+          const [fx, fy, fw, fh] = scars[i];
+          ctx.fillRect(
+            Math.round(carX + destW * fx),
+            Math.round(carY + destH * fy),
+            Math.round(destW * fw),
+            Math.max(1, Math.round(destH * fh)),
+          );
+        }
+      }
+      ctx.globalAlpha = 1;
+
       // stop lamps: taillights + the high-level LED strip on the roofline
       // glow red while the brake pedal is down — like a real car they
       // stay lit at a standstill. Anchors come from the frame itself:
@@ -2853,6 +2912,35 @@ export function createEngine(opts: {
                 shakeX,
             ),
             Math.round(carY + destH - puffH * 0.7),
+            Math.round(puffW),
+            Math.round(puffH),
+          );
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // engine damage smoke: a thin, steady wisp on the last heart; a
+      // dense rising cloud while the dead engine coasts out. Puffs rise
+      // from the car and fade with their phase so the column reads as
+      // drifting upward rather than a static sprite
+      if ((crashes === CRASH_MAX - 1 || dying) && car.smoke.length > 0) {
+        const puffs = dying ? 3 : 1;
+        for (let i = 0; i < puffs; i++) {
+          const phase = (state.time * (dying ? 1.6 : 0.9) + i / puffs) % 1;
+          const puff =
+            car.smoke[(Math.floor(state.time * 10) + i * 2) % car.smoke.length];
+          const puffW = destW * (dying ? 0.34 : 0.18) * (0.6 + phase);
+          const puffH = (puff.h / puff.w) * puffW;
+          ctx.globalAlpha = (dying ? 0.85 : 0.4) * (1 - phase);
+          ctx.drawImage(
+            puff.image,
+            Math.round(
+              width / 2 -
+                puffW / 2 +
+                shakeX +
+                Math.sin(phase * 6 + i * 2.1) * destW * 0.06,
+            ),
+            Math.round(carY + destH * 0.1 - phase * destH * 0.9),
             Math.round(puffW),
             Math.round(puffH),
           );
@@ -3212,11 +3300,11 @@ export function createEngine(opts: {
       }
     }
 
-    // persistent crash-damage badge: a tiny side-view hatchback + the
-    // share of top speed the car still has. Appears with the first crash
-    // and never leaves — the damage is permanent, so is the badge. Same
-    // left column as the streak can, parked under its popup zone
-    if (damageMul < 0.999 && !state.gameOver) {
+    // heart meter: 3 pixel hearts, one per crash the car can still take —
+    // full red while intact, a hollow outline once lost. Always on screen
+    // (arcade convention): same left column as the streak can, parked
+    // under its popup zone
+    if (!state.gameOver) {
       const uiBase = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
       const ui =
         uiBase * (height > width ? 2.5 : opts.clusterTopLeft ? 1.4 : 1);
@@ -3224,52 +3312,44 @@ export function createEngine(opts: {
       const streakBy = opts.clusterTopLeft
         ? Math.round((TOUCH_CLUSTER_TOP + 52) * uiBase + 10 * ui)
         : margin;
-      const dx0 = margin;
-      const dy0 = streakBy + Math.round(34 * ui);
-      const s = ui;
-      // little side-view Twingo: orange body, dark glass band, two wheels
-      ctx.fillStyle = "#141611";
-      ctx.fillRect(
-        dx0 + Math.round(2.5 * s),
-        dy0 + Math.round(4.5 * s),
-        Math.round(3 * s),
-        Math.round(3 * s),
-      );
-      ctx.fillRect(
-        dx0 + Math.round(10.5 * s),
-        dy0 + Math.round(4.5 * s),
-        Math.round(3 * s),
-        Math.round(3 * s),
-      );
-      ctx.fillStyle = "#e2703a";
-      ctx.fillRect(
-        dx0,
-        dy0 + Math.round(2 * s),
-        Math.round(16 * s),
-        Math.round(3 * s),
-      );
-      ctx.fillRect(
-        dx0 + Math.round(3 * s),
-        dy0,
-        Math.round(9 * s),
-        Math.round(2 * s),
-      );
-      ctx.fillStyle = "#141611";
-      ctx.fillRect(
-        dx0 + Math.round(4 * s),
-        dy0 + Math.round(0.5 * s),
-        Math.round(7 * s),
-        Math.max(1, Math.round(1 * s)),
-      );
-      const pct = `${Math.round(damageMul * 100)}%`;
-      ctx.font = `bold ${Math.round(8 * ui)}px monospace`;
-      const ptx = dx0 + Math.round(16 * s) + Math.round(4 * ui);
-      const pty = dy0 + Math.round(6.5 * s);
-      ctx.fillStyle = "#141611";
-      ctx.fillText(pct, ptx + 1, pty + 1);
-      ctx.fillStyle =
-        damageMul > 0.85 ? "#f4f4f4" : damageMul > 0.7 ? "#ffb03a" : "#e5484d";
-      ctx.fillText(pct, ptx, pty);
+      const ps = Math.max(1, Math.round(1.6 * ui)); // heart pixel size
+      const hy0 = streakBy + Math.round(34 * ui);
+      // 7x6: full silhouette and the hollow outline of the same heart
+      const HEART_FULL = [
+        ".XX.XX.",
+        "XXXXXXX",
+        "XXXXXXX",
+        ".XXXXX.",
+        "..XXX..",
+        "...X...",
+      ];
+      const HEART_RING = [
+        ".XX.XX.",
+        "X..X..X",
+        "X.....X",
+        ".X...X.",
+        "..X.X..",
+        "...X...",
+      ];
+      const stamp = (map: string[], hx: number, style: string) => {
+        ctx.fillStyle = style;
+        for (let r = 0; r < map.length; r++)
+          for (let c = 0; c < map[r].length; c++)
+            if (map[r][c] === "X")
+              ctx.fillRect(hx + c * ps, hy0 + r * ps, ps, ps);
+      };
+      for (let i = 0; i < CRASH_MAX; i++) {
+        const hx = margin + i * Math.round(9 * ps);
+        if (i < CRASH_MAX - crashes) {
+          stamp(HEART_FULL, hx, "#e5484d");
+          stamp(HEART_RING, hx, "#141611");
+        } else {
+          // lost heart: just the outline, slightly faded
+          ctx.globalAlpha = 0.75;
+          stamp(HEART_RING, hx, "#141611");
+          ctx.globalAlpha = 1;
+        }
+      }
     }
 
     // collected cans in flight to the streak icon: the exact sprite copy
@@ -3360,7 +3440,10 @@ export function createEngine(opts: {
           : lastCrashCause === "tree"
             ? "TREE!"
             : "OFF ROAD!";
-      const msg = `${label} -${CRASH_FUEL} GAS -7% SPEED`;
+      const msg =
+        crashes >= CRASH_MAX
+          ? `${label} ENGINE DEAD!`
+          : `${label} -${CRASH_FUEL} GAS -${Math.round(CRASH_SPEED_STEPS[Math.min(crashes - 1, CRASH_MAX - 1)] * 100)}% SPEED`;
       ctx.font = `bold ${Math.round(10 * ui)}px monospace`;
       const tw = ctx.measureText(msg).width;
       const tx = Math.round(width / 2 - tw / 2);

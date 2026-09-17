@@ -75,6 +75,9 @@ export interface RacerAudio {
   streak(streak: number): void;
   /** crash respawn (stranded off-road / pothole): deep thud + rattle */
   crash(): void;
+  /** third crash = fatal: the engine sputters and dies — slowing putters
+      and a final cough as the run ends in a driverless coast */
+  breakdown(): void;
   menuMove(): void;
   menuSelect(): void;
   gameOver(): void;
@@ -812,6 +815,45 @@ export function createRacerAudio(): RacerAudio {
       rattle.connect(f2).connect(g2).connect(engineBus);
       rattle.start(t + 0.02);
       rattle.stop(t + 0.24);
+    },
+
+    breakdown() {
+      if (!ctx || !engineBus) return;
+      const t = ctx.currentTime;
+      // dying engine: a handful of low putters with widening gaps (the
+      // firing rate stalling out), each weaker than the last, then one
+      // final unfiltered cough of noise — silence after that is the
+      // gameOver() fade's job
+      const putters: [number, number, number][] = [
+        // offset, frequency, volume
+        [0, 90, 0.3],
+        [0.16, 74, 0.26],
+        [0.38, 58, 0.22],
+        [0.68, 44, 0.17],
+        [1.1, 32, 0.12],
+      ];
+      for (const [off, freq, vol] of putters) {
+        const osc = ctx.createOscillator();
+        osc.type = "square";
+        osc.frequency.value = freq;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(vol, t + off);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.12);
+        osc.connect(g).connect(engineBus);
+        osc.start(t + off);
+        osc.stop(t + off + 0.14);
+      }
+      const cough = makeNoise(ctx);
+      const f = ctx.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.value = 400;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.3, t + 1.45);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.9);
+      cough.connect(f).connect(g).connect(engineBus);
+      cough.start(t + 1.4);
+      cough.stop(t + 2.0);
     },
 
     menuMove() {
