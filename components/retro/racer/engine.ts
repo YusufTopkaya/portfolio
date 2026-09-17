@@ -153,6 +153,9 @@ const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
 const CRASH_FUEL = 2;
 const CRASH_SPEED_STEPS = [0.03, 0.05, 0.07];
 const CRASH_MAX = 3; // hearts — the third crash is fatal
+// potholes swept under and just ahead of a crash respawn — a hole
+// parked where the car materialises would punish the same mistake twice
+const RESPAWN_CLEAR_SEGMENTS = 8;
 const DYING_TIME = 2.2; // total seconds between the fatal hit and game over
 // the wreck doesn't coast forever: a hard linear decel (on top of the
 // normal rolling drag) brings it to a standstill within this window,
@@ -1617,6 +1620,14 @@ export function createEngine(opts: {
     state.respawn = RESPAWN_TIME;
     state.speed = 0;
     state.playerX = 0;
+    // no double jeopardy: sweep every pothole under and just ahead of the
+    // respawn spot — a hole on the car's own segment is invisible under
+    // the sprite, and one a couple of segments out is unreadable from a
+    // standstill; either would punish the same mistake twice
+    const carSeg = Math.floor((state.position + PLAYER_Z) / SEGMENT_LENGTH);
+    for (let i = 0; i < RESPAWN_CLEAR_SEGMENTS; i++) {
+      segments[ringSlot(carSeg + i)].hole = undefined;
+    }
     opts.onCrash?.();
   };
 
