@@ -3197,12 +3197,14 @@ export function createEngine(opts: {
       ctx.globalAlpha = 1;
     }
 
-    // BOOST active: blinking readout of the seconds left, big and centred
-    // at the top of the screen — the arcade spot where the games that
-    // invented this trope put it, and readable on any form factor
+    // BOOST active: readout of the seconds left, big and centred at the
+    // top of the screen — the arcade spot where the games that invented
+    // this trope put it. SOLID while it burns: a countdown that vanishes
+    // half the time reads as "boost ended" whenever two glances in a row
+    // land on an off-phase. Only the last 3 s blink (urgency, faster)
     if (state.boostT > 0 && !state.gameOver) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
-      if (Math.floor(state.time * 3) % 2 === 0) {
+      if (state.boostT > 3 || Math.floor(state.time * 6) % 2 === 0) {
         const src =
           lastBoostSource === "streak"
             ? "STREAK"
