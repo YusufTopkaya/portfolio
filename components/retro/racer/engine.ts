@@ -1548,17 +1548,24 @@ export function createEngine(opts: {
     state.fuel = Math.max(0, state.fuel - 1);
     if (state.streak > 0) lastStreakLostAt = state.time;
     state.streak = 0;
+    // a crash mid-hop must not land the teleported car into a squash +
+    // grip penalty it never earned
+    airT = 0;
+    landT = 0;
+    gripT = 0;
     opts.onCrash?.();
   };
 
   // crest airtime: clearing a hilltop fast pops the car off the tarmac
-  // for a beat, then the suspension squashes on touchdown. Purely
-  // cosmetic — the physics underneath keep rolling unchanged
+  // for a beat, then the suspension squashes on touchdown — and the tires
+  // need a moment to bite again: grip comes back over a short ramp after
+  // every landing (softened steering + extra slide, "hafif" tuning)
   let prevSlope = 0;
   let lastSteepClimbAt = -10; // engine time of the last steep climb segment
   let airT = 0; // time left airborne
   let airDur = 0; // total airtime of the current hop
   let landT = 0; // landing squash timer
+  let gripT = 0; // post-landing grip recovery timer (ramps 0.5 → 1 over 0.4 s)
 
   // prebuilt backdrop layers — rebuilt by resize() after a rotation.
   // The sky itself is NOT prebuilt: it is drawn procedurally every frame
@@ -1608,6 +1615,10 @@ export function createEngine(opts: {
             : 0;
     const playerSegment = findSegment(state.position + PLAYER_Z);
     const speedPercent = state.speed / MAX_SPEED;
+    // post-landing grip recovery: after a crest hop touches down the tires
+    // take a beat to bite — grip ramps 0.5 → 1 over 0.4 s (hafif tuning)
+    gripT = Math.max(0, gripT - dt);
+    const landGrip = 1 - 0.5 * (gripT / 0.4);
     // GTA-ish steering, between arcade and sim: the chassis response lags
     // the wheel just a touch and lateral authority falls with speed —
     // nimble flicks at 60 km/h, a weighted lane-drift at 180. The lag is
@@ -1668,7 +1679,7 @@ export function createEngine(opts: {
       levelUpAt = state.time;
     }
 
-    state.playerX += dx * appliedSteer;
+    state.playerX += dx * appliedSteer * landGrip;
     // centrifugal push on curves (Jake Gordon), tuned so every bend has a
     // real grip-limited corner speed — the balance p·curve·grip·CENTRIFUGAL
     // = 1 gives easy ≈ flat-out, medium ≈ 125→96 km/h, hard ≈ 85→64 km/h
@@ -1681,8 +1692,11 @@ export function createEngine(opts: {
     // slide-speed cap: a blown corner drifts the car out over ~a second
     // (net 1.3 units/s against full lock) — enough time to feel it and
     // catch the slide, never an instant eject past the trees. The scrub
-    // keeps using the raw force so the speed bleed stays honest
-    const lateral = Math.max(-1.6, Math.min(1.6, lateralRaw));
+    // keeps using the raw force so the speed bleed stays honest. Right
+    // after a landing the tires haven't bitten yet: the push swells by
+    // 1/landGrip (≤ ×2 for 0.4 s) while steering authority shrinks, so a
+    // crest straight into a bend slides wide before it answers
+    const lateral = Math.max(-1.6, Math.min(1.6, lateralRaw / landGrip));
     state.playerX -= dx * lateral;
     const scrub = Math.max(0, Math.abs(lateralRaw) - 1);
     if (scrub > 0 && state.speed > 0) {
@@ -1788,7 +1802,14 @@ export function createEngine(opts: {
     prevSlope = slope;
     if (airT > 0) {
       airT = Math.max(0, airT - dt);
-      if (airT === 0) landT = 0.24;
+      if (airT === 0) {
+        landT = 0.24;
+        // touchdown: the tires are unloaded and take a beat to bite —
+        // grip ramps 0.5 → 1 over 0.4 s (softened steering + extra
+        // slide), so a crest into a corner is a real risk moment while
+        // a straight landing only feels briefly spongy
+        gripT = 0.4;
+      }
     } else if (landT > 0) {
       landT = Math.max(0, landT - dt);
     }
