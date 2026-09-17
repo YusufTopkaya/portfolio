@@ -857,6 +857,7 @@ export function TwingoRacer() {
           onStreak: (tier) => audioRef.current?.streak(tier),
           onCrash: () => audioRef.current?.crash(),
           onBreakdown: () => audioRef.current?.breakdown(),
+          onBracket: () => audioRef.current?.bracket(),
           debug: process.env.NODE_ENV !== "production",
         });
         setView(engineRef.current.state.view);

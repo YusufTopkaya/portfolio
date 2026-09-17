@@ -25,6 +25,8 @@
  * canvas 2d context.
  */
 
+import { RACER_BRACKETS } from "./brackets";
+
 export interface RacerInput {
   left: boolean;
   right: boolean;
@@ -156,6 +158,10 @@ const CRASH_MAX = 3; // hearts — the third crash is fatal
 // potholes swept under and just ahead of a crash respawn — a hole
 // parked where the car materialises would punish the same mistake twice
 const RESPAWN_CLEAR_SEGMENTS = 8;
+// bracket-crossing reward (each tier once per run): a lost heart back,
+// or — at full hearts — a streak shield with this many charges. Every
+// streak break the shield eats costs one charge instead of the chain
+const SHIELD_MAX = 3;
 const DYING_TIME = 2.2; // total seconds between the fatal hit and game over
 // the wreck doesn't coast forever: a hard linear decel (on top of the
 // normal rolling drag) brings it to a standstill within this window,
@@ -1402,6 +1408,10 @@ export function createEngine(opts: {
   /** fired on the THIRD crash — the engine dies: the run ends in a
       driverless coast, so play the breakdown sputter instead of crash() */
   onBreakdown?: () => void;
+  /** fired when the score crosses into a higher league bracket (once per
+      tier per run) — the engine grants +1 heart or a streak shield, this
+      is the fanfare hook */
+  onBracket?: (name: string) => void;
   /** dev-only (e2e probes): collect per-render road diagnostics into
       `probe` — off in production so the game ships zero per-frame garbage */
   debug?: boolean;
@@ -1492,6 +1502,20 @@ export function createEngine(opts: {
   let lastStreakSecs = 0;
   // engine time of the last broken chain — drives the burn-out animation
   let lastStreakLostAt = -10;
+  // streak shield: charges left, and the last time one ate a break (for
+  // the HUD flash). Granted at SHIELD_MAX by a bracket crossed at full
+  // hearts — see the bracket reward in update()
+  let shieldCharges = 0;
+  let shieldSavedAt = -10;
+  // bracket reward ladder: index into RACER_BRACKETS (descending mins) of
+  // the tier the score currently sits in — crossing into the NEXT tier up
+  // pays +1 heart (a lost one only; the speed damage is permanent) or,
+  // at full hearts, a full streak shield
+  let bracketIdx = RACER_BRACKETS.length - 1; // IRON at score 0
+  let lastBracketAt = -10;
+  let lastBracketName = "";
+  let lastBracketColor = "#ffd94a";
+  let lastBracketGrant: "heart" | "shield" = "heart";
   // mercy can: one rescue can per dry spell, injected by update() when
   // the tank runs below 1.5 dots with nothing collectible ahead
   let mercyUsed = false;
@@ -1602,8 +1626,21 @@ export function createEngine(opts: {
     damageMul *= 1 - CRASH_SPEED_STEPS[Math.min(crashes - 1, CRASH_MAX - 1)];
     lastCrashAt = state.time;
     lastCrashCause = cause;
-    if (state.streak > 0) lastStreakLostAt = state.time;
-    state.streak = 0;
+    // the shield eats the chain break too (a charge instead of the
+    // streak) — the heart, fuel and speed penalties still land
+    if (state.streak > 0) {
+      if (shieldCharges > 0) {
+        shieldCharges--;
+        shieldSavedAt = state.time;
+      } else {
+        lastStreakLostAt = state.time;
+        state.streak = 0;
+      }
+    }
+    // a crash kills the boost: the chain is broken, so is the free
+    // speed — without this the boost pull (huge at low km/h) rocketed
+    // the respawned car back to top speed in barely a second
+    state.boostT = 0;
     // a crash mid-hop must not land the car into a squash + grip penalty
     // it never earned
     airT = 0;
@@ -2049,9 +2086,18 @@ export function createEngine(opts: {
           opts.onPickup?.(pk.big ?? false, pk.golden ?? false);
         } else {
           // an active can was on this segment and we drove past it —
-          // the chain is broken (and the HUD gets to burn the can away)
-          if (state.streak > 0) lastStreakLostAt = state.time;
-          state.streak = 0;
+          // the chain is broken... unless a shield charge eats the
+          // break (then the HUD flashes the save instead of burning
+          // the can away)
+          if (state.streak > 0) {
+            if (shieldCharges > 0) {
+              shieldCharges--;
+              shieldSavedAt = state.time;
+            } else {
+              lastStreakLostAt = state.time;
+              state.streak = 0;
+            }
+          }
         }
       }
       // mercy can: below 1.5 dots with nothing collectible in the next ~90
@@ -2111,6 +2157,26 @@ export function createEngine(opts: {
               ? 2
               : 1;
     state.score += ((kmh * dt) / 3.6) * state.multiplier * 0.5;
+
+    // bracket reward: crossing into the next league tier (once per tier
+    // per run — the index only ever climbs) pays +1 heart back, or a
+    // full streak shield when the hearts are already topped up. The
+    // crumpled chassis keeps its speed loss either way
+    if (bracketIdx > 0 && state.score >= RACER_BRACKETS[bracketIdx - 1].min) {
+      bracketIdx--;
+      const b = RACER_BRACKETS[bracketIdx];
+      lastBracketAt = state.time;
+      lastBracketName = b.name;
+      lastBracketColor = b.color;
+      if (crashes > 0) {
+        crashes--;
+        lastBracketGrant = "heart";
+      } else {
+        shieldCharges = SHIELD_MAX;
+        lastBracketGrant = "shield";
+      }
+      opts.onBracket?.(b.name);
+    }
 
     // record chase: each leaderboard top crossed fires the centre banner
     // once — targets arrive ascending, so the first is always the next
@@ -3157,7 +3223,10 @@ export function createEngine(opts: {
     const lostAge = state.time - lastStreakLostAt;
     const STREAK_BURN_T = 0.9; // burn-out animation length on a broken chain
     if (
-      (state.streak >= 1 || stAge < 1.2 || lostAge < STREAK_BURN_T) &&
+      (state.streak >= 1 ||
+        stAge < 1.2 ||
+        lostAge < STREAK_BURN_T ||
+        shieldCharges > 0) &&
       !state.gameOver
     ) {
       const uiBase = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
@@ -3234,6 +3303,34 @@ export function createEngine(opts: {
           Math.round(gr * 2),
         );
       }
+      // streak shield: a yellow-green guardian ring around the jerrycan,
+      // one pip per charge left dotted along its top-right arc. Pulses
+      // gently so it reads as a living ward, not part of the can art
+      if (shieldCharges > 0) {
+        const cx = bx + iconW / 2;
+        const cy = by + iconH / 2;
+        const rr = iconW * 1.05;
+        const pulse = 0.55 + 0.25 * Math.sin(state.time * 4);
+        ctx.strokeStyle = `rgba(163,230,53,${(pulse * 0.35).toFixed(3)})`;
+        ctx.lineWidth = Math.max(2, Math.round(3 * ui));
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(190,242,100,${pulse.toFixed(3)})`;
+        ctx.lineWidth = Math.max(1, Math.round(1.2 * ui));
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+        ctx.stroke();
+        for (let i = 0; i < SHIELD_MAX; i++) {
+          const a = ((-25 - i * 25) * Math.PI) / 180;
+          const px = cx + Math.cos(a) * rr;
+          const py = cy + Math.sin(a) * rr;
+          ctx.fillStyle = i < shieldCharges ? "#bef264" : "rgba(20,22,17,0.45)";
+          ctx.beginPath();
+          ctx.arc(px, py, Math.max(1, 1.3 * ui), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
       if (state.streak >= 1) {
         // flame tongues rising behind the can, flickering on engine time.
         // They track the ladder lap: growing through each 10-can lap
@@ -3277,6 +3374,10 @@ export function createEngine(opts: {
         }
         ctx.globalAlpha = 1;
         drawCan(1 - p);
+      } else if (shieldCharges > 0) {
+        // armed shield on a cold chain: the bare can still stands so the
+        // guardian ring has something to guard
+        drawCan(1);
       }
       // tier-crossing popup under the counter: the flame was the promise,
       // this is the payoff. Same face as the LEVEL banner. Completing a
@@ -3299,6 +3400,24 @@ export function createEngine(opts: {
         ctx.fillStyle = "#141611";
         ctx.fillText(msg, tx + 1, ty + 1);
         ctx.fillStyle = "#e2703a";
+        ctx.fillText(msg, tx, ty);
+        ctx.globalAlpha = 1;
+      }
+      // shield-save flash: a charge just ate a chain break — say so in
+      // the ring's own colour, same popup zone
+      const saveAge = state.time - shieldSavedAt;
+      if (saveAge < 0.9) {
+        const msg = "SHIELD!";
+        ctx.font = `bold ${Math.round(8 * ui)}px monospace`;
+        const tx = margin;
+        const ty = by + iconH + Math.round(10 * ui);
+        ctx.globalAlpha = Math.max(
+          0,
+          Math.min(1, Math.min(saveAge / 0.1, (0.9 - saveAge) / 0.3)),
+        );
+        ctx.fillStyle = "#141611";
+        ctx.fillText(msg, tx + 1, ty + 1);
+        ctx.fillStyle = "#bef264";
         ctx.fillText(msg, tx, ty);
         ctx.globalAlpha = 1;
       }
@@ -3459,6 +3578,31 @@ export function createEngine(opts: {
       ctx.fillStyle = "#141611";
       ctx.fillText(msg, tx + 2, ty + 2);
       ctx.fillStyle = "#e5484d";
+      ctx.fillText(msg, tx, ty);
+      ctx.globalAlpha = 1;
+    }
+
+    // bracket banner: the tier just crossed and what it paid, in the
+    // tier's own league colour — parked below the record banner's slot
+    // (0.42 h) so a record and a bracket can land the same second
+    const brAge = state.time - lastBracketAt;
+    if (brAge < 1.8 && !state.gameOver) {
+      const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      const msg =
+        lastBracketGrant === "heart"
+          ? `${lastBracketName}! +1 HEART`
+          : `${lastBracketName}! SHIELD x${SHIELD_MAX}`;
+      ctx.font = `bold ${Math.round(10 * ui)}px monospace`;
+      const tw = ctx.measureText(msg).width;
+      const tx = Math.round(width / 2 - tw / 2);
+      const ty = Math.round(height * 0.48);
+      ctx.globalAlpha = Math.max(
+        0,
+        Math.min(1, Math.min(brAge / 0.15, (1.8 - brAge) / 0.5)),
+      );
+      ctx.fillStyle = "#141611";
+      ctx.fillText(msg, tx + 2, ty + 2);
+      ctx.fillStyle = lastBracketColor;
       ctx.fillText(msg, tx, ty);
       ctx.globalAlpha = 1;
     }

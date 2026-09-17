@@ -78,6 +78,9 @@ export interface RacerAudio {
   /** third crash = fatal: a classic arcade explosion — noise burst with
       a collapsing lowpass over a pitch-diving square boom */
   breakdown(): void;
+  /** league bracket crossed mid-run: a bright rising fanfare with a
+      sparkle on top — the marquee reward moment */
+  bracket(): void;
   menuMove(): void;
   menuSelect(): void;
   gameOver(): void;
@@ -858,6 +861,19 @@ export function createRacerAudio(): RacerAudio {
       debris.connect(df).connect(dg).connect(engineBus);
       debris.start(t + 0.15);
       debris.stop(t + 0.55);
+    },
+
+    bracket() {
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      // marquee moment: a quick rising major arpeggio (A-C#-E-A) with a
+      // high sparkle landing — brighter and longer than the streak
+      // ladder's blips, this one is a league promotion
+      const notes = [N.A3, 277.18, N.E4, N.A4];
+      for (const [i, f] of notes.entries()) {
+        blip(t + i * 0.08, f, 0.14, "square", 0.15, menuBus ?? undefined);
+      }
+      blip(t + 0.34, N.C5 * 2, 0.22, "triangle", 0.12, menuBus ?? undefined);
     },
 
     menuMove() {
