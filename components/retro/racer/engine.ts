@@ -1481,6 +1481,19 @@ export function createEngine(opts: {
   // popup reads these ("+1" green vs "+3" gold)
   let lastPickupAmt = 1;
   let lastPickupGolden = false;
+  // collected cans fly to the streak jerrycan as a real sprite copy
+  // (same frame, golden tint included) arcing from the pickup point to
+  // the HUD icon — "you really bagged it". On arrival a bright yellow
+  // halo flares behind the streak can
+  const FLY_T = 0.55; // seconds from pickup point to the streak icon
+  const flyCans: {
+    sx: number;
+    sy: number;
+    t0: number;
+    golden: boolean;
+    big: boolean;
+  }[] = [];
+  let streakGlowAt = -10; // engine time of the last fly-can arrival
   // fuel sip grace right after a pickup: the gauge just lit up, so the
   // first 0.3 s of the new tank burn for free — grabbing a can at a hot
   // level no longer feels like the drain instantly eating the reward
@@ -1854,10 +1867,14 @@ export function createEngine(opts: {
         const seg = segments[ringSlot(si)];
         // pothole: falling in costs the same as running stranded — 1 dot,
         // a centre-line respawn and a broken chain. Consumed on impact, so
-        // the standstill right after the respawn can't re-trigger it
+        // the standstill right after the respawn can't re-trigger it.
+        // AIRBORNE cars clear holes (the wheels are off the tarmac) — but
+        // landing ON one still counts: airT zeroes in the hop block above
+        // before this scan runs, so a touchdown on the hole segment hits
         const hole = seg.hole;
         if (
           hole &&
+          airT <= 0 &&
           Math.abs(state.playerX - hole.x) < 0.28 &&
           state.speed > MAX_SPEED * 0.02
         ) {
@@ -1912,6 +1929,15 @@ export function createEngine(opts: {
           lastPickupAt = state.time;
           lastPickupAmt = amount;
           lastPickupGolden = pk.golden ?? false;
+          // the bagged can itself flies to the streak icon — anchored
+          // where the car sits (mid-windshield in the cockpit view)
+          flyCans.push({
+            sx: width / 2,
+            sy: height * (state.view === "cockpit" ? 0.3 : 0.55),
+            t0: state.time,
+            golden: pk.golden ?? false,
+            big: pk.big ?? false,
+          });
           pickupGrace = PICKUP_GRACE_T;
           state.streak += 1;
           // chain reward: crossing a ladder step pays bonus BOOST seconds
@@ -3022,6 +3048,29 @@ export function createEngine(opts: {
         );
         ctx.globalAlpha = 1;
       };
+      // fly-can arrival halo: a bright yellow flash flares behind the
+      // jerrycan for a beat when a bagged can docks — the "you really
+      // collected it" moment made visible on the HUD
+      const glowAge = state.time - streakGlowAt;
+      if (glowAge < 0.6 && state.streak >= 1) {
+        const gp = glowAge / 0.6;
+        const cx = bx + iconW / 2;
+        const cy = by + iconH / 2;
+        const gr = iconW * (1.3 + gp * 1.4);
+        const grad = ctx.createRadialGradient(cx, cy, 1, cx, cy, gr);
+        grad.addColorStop(
+          0,
+          `rgba(255,215,94,${(0.85 * (1 - gp)).toFixed(3)})`,
+        );
+        grad.addColorStop(1, "rgba(255,215,94,0)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(
+          Math.round(cx - gr),
+          Math.round(cy - gr),
+          Math.round(gr * 2),
+          Math.round(gr * 2),
+        );
+      }
       if (state.streak >= 1) {
         // flame tongues rising behind the can, flickering on engine time.
         // They track the ladder lap: growing through each 10-can lap
@@ -3089,6 +3138,49 @@ export function createEngine(opts: {
         ctx.fillStyle = "#e2703a";
         ctx.fillText(msg, tx, ty);
         ctx.globalAlpha = 1;
+      }
+    }
+
+    // collected cans in flight to the streak icon: the exact sprite copy
+    // (golden tint and big-can size included) arcs over the world and
+    // docks onto the HUD jerrycan, shrinking as it goes — docking fires
+    // the yellow halo above. Drawn over the HUD so the arc never clips
+    if (flyCans.length > 0 && !state.gameOver) {
+      const uiBase = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+      const ui =
+        uiBase * (height > width ? 2.5 : opts.clusterTopLeft ? 1.4 : 1);
+      const margin = Math.round(8 * ui);
+      const iconW = Math.round(10 * ui);
+      const iconH = Math.round(12 * ui);
+      const tx = margin + iconW / 2;
+      const ty =
+        (opts.clusterTopLeft
+          ? Math.round((TOUCH_CLUSTER_TOP + 52) * uiBase + 10 * ui)
+          : margin) +
+        iconH / 2;
+      for (let i = flyCans.length - 1; i >= 0; i--) {
+        const f = flyCans[i];
+        const p = Math.min(1, (state.time - f.t0) / FLY_T);
+        if (p >= 1) {
+          streakGlowAt = state.time;
+          flyCans.splice(i, 1);
+          continue;
+        }
+        const e = p * p * (3 - 2 * p); // smoothstep: fast launch, soft dock
+        const fx = f.sx + (tx - f.sx) * e;
+        const fy =
+          f.sy + (ty - f.sy) * e - Math.sin(p * Math.PI) * height * 0.12;
+        const frame = f.golden && gasCanGolden ? gasCanGolden : gasCan;
+        const sizeMul = (f.big ? 1.6 : f.golden ? 1.15 : 1) * (2.2 - 1.2 * e);
+        const dw = iconW * sizeMul;
+        const dh = (dw * frame.h) / frame.w;
+        ctx.drawImage(
+          frame.image,
+          Math.round(fx - dw / 2),
+          Math.round(fy - dh / 2),
+          Math.round(dw),
+          Math.round(dh),
+        );
       }
     }
 
