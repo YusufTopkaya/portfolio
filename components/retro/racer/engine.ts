@@ -1602,6 +1602,80 @@ export function createEngine(opts: {
   // can't
   let appliedSteer = 0;
 
+  // the full pickup grant — fuel dots, overflow/golden boost, streak and
+  // ladder rewards, the fly-can. Shared by the drive-through scan in
+  // update() and the crash-respawn landing check below (the teleport can
+  // plant the car squarely on a can: the sprite visibly covers it, so
+  // leaving it ungrabbed feels broken)
+  function grabCan(seg: Segment) {
+    const pk = seg.pickup;
+    if (!pk) return;
+    const amount = pk.golden ? 3 : pk.big ? 2 : 1;
+    // captured BEFORE this pickup's own grants: a can driven through
+    // while a boost still burns is a hot-chain grab
+    const hadBoost = state.boostT > 0;
+    // a can grabbed with a near-full tank doesn't go to waste:
+    // the overflow burns off as BOOST seconds instead
+    const overflow = state.fuel + amount - FUEL_MAX;
+    if (overflow > 0) {
+      // floor at half a second: a can grabbed at 7.01 dots only
+      // overflows 0.01, but the steer still cost something — a
+      // 0.02 s boost would be an insult, not a reward
+      state.boostT += Math.max(overflow * BOOST_PER_DOT, 0.5);
+      lastBoostSource = "overflow";
+    }
+    if (pk.golden) {
+      // golden can: a flat 1 s of BOOST on top of the 3 dots —
+      // the label outranks an overflow grant from the same pickup
+      state.boostT += GOLDEN_BOOST_T;
+      lastBoostSource = "golden";
+    }
+    state.fuel = Math.min(FUEL_MAX, state.fuel + amount);
+    seg.pickup = undefined;
+    lastPickupAt = state.time;
+    lastPickupAmt = amount;
+    lastPickupGolden = pk.golden ?? false;
+    // the bagged can itself flies to the streak icon — anchored
+    // where the car sits (mid-windshield in the cockpit view)
+    flyCans.push({
+      sx: width / 2,
+      sy: height * (state.view === "cockpit" ? 0.3 : 0.55),
+      t0: state.time,
+      golden: pk.golden ?? false,
+      big: pk.big ?? false,
+    });
+    pickupGrace = PICKUP_GRACE_T;
+    state.streak += 1;
+    // chain reward: crossing a ladder step pays bonus BOOST seconds
+    // (the ladder repeats every 10 cans — the flame HUD is the
+    // promise, this is the payoff)
+    const reward = streakReward(state.streak);
+    if (reward) {
+      state.boostT += reward;
+      lastBoostSource = "streak";
+      lastStreakAt = state.time;
+      lastStreakTier = state.streak;
+      lastStreakSecs = reward;
+      opts.onStreak?.(state.streak);
+      // a completed clean lap (every multiple of 10) also pays fuel
+      // dots — this bonus is the perfect chain's survival margin in
+      // the capped deep game, and a single miss never earns it
+      if (state.streak % 10 === 0) {
+        const lapOverflow = state.fuel + LAP_FUEL - FUEL_MAX;
+        if (lapOverflow > 0) {
+          state.boostT += Math.max(lapOverflow * BOOST_PER_DOT, 0.5);
+        }
+        state.fuel = Math.min(FUEL_MAX, state.fuel + LAP_FUEL);
+      }
+    } else if (hadBoost) {
+      // hot chain: a non-streak can grabbed mid-boost stretches the
+      // burn a touch — the reward for keeping the pace up between
+      // ladder steps
+      state.boostT += BOOST_CHAIN_T;
+    }
+    opts.onPickup?.(pk.big ?? false, pk.golden ?? false);
+  }
+
   // permanent crash damage on a 3-heart ladder: every crashRespawn knocks
   // CRASH_SPEED_STEPS[crashes-1] off the top speed, stacking
   // multiplicatively — a crumpled car is a slower car for the rest of the
@@ -1664,6 +1738,18 @@ export function createEngine(opts: {
     const carSeg = Math.floor((state.position + PLAYER_Z) / SEGMENT_LENGTH);
     for (let i = 0; i < RESPAWN_CLEAR_SEGMENTS; i++) {
       segments[ringSlot(carSeg + i)].hole = undefined;
+    }
+    // landed on a can? The teleport plants the car at the centre line —
+    // if a can sits within the SPRITE's own half-width (~0.35, wider than
+    // the drive-through point check) the car is visibly standing on it,
+    // and leaving it ungrabbed reads as a bug, not a rule
+    for (let i = 0; i <= 2; i++) {
+      const seg = segments[ringSlot(carSeg + i)];
+      const pk = seg.pickup;
+      if (pk && pickupActive(seg) && Math.abs(pk.x * canSpread) < 0.35) {
+        grabCan(seg);
+        break;
+      }
     }
     opts.onCrash?.();
   };
@@ -2024,70 +2110,7 @@ export function createEngine(opts: {
           // the can, the car is VISIBLY on the fuel
           (state.speed > MAX_SPEED * 0.02 || state.fuel <= 0)
         ) {
-          const amount = pk.golden ? 3 : pk.big ? 2 : 1;
-          // captured BEFORE this pickup's own grants: a can driven
-          // through while a boost still burns is a hot-chain grab
-          const hadBoost = state.boostT > 0;
-          // a can grabbed with a near-full tank doesn't go to waste:
-          // the overflow burns off as BOOST seconds instead
-          const overflow = state.fuel + amount - FUEL_MAX;
-          if (overflow > 0) {
-            // floor at half a second: a can grabbed at 7.01 dots only
-            // overflows 0.01, but the steer still cost something — a
-            // 0.02 s boost would be an insult, not a reward
-            state.boostT += Math.max(overflow * BOOST_PER_DOT, 0.5);
-            lastBoostSource = "overflow";
-          }
-          if (pk.golden) {
-            // golden can: a flat 1 s of BOOST on top of the 3 dots —
-            // the label outranks an overflow grant from the same pickup
-            state.boostT += GOLDEN_BOOST_T;
-            lastBoostSource = "golden";
-          }
-          state.fuel = Math.min(FUEL_MAX, state.fuel + amount);
-          seg.pickup = undefined;
-          lastPickupAt = state.time;
-          lastPickupAmt = amount;
-          lastPickupGolden = pk.golden ?? false;
-          // the bagged can itself flies to the streak icon — anchored
-          // where the car sits (mid-windshield in the cockpit view)
-          flyCans.push({
-            sx: width / 2,
-            sy: height * (state.view === "cockpit" ? 0.3 : 0.55),
-            t0: state.time,
-            golden: pk.golden ?? false,
-            big: pk.big ?? false,
-          });
-          pickupGrace = PICKUP_GRACE_T;
-          state.streak += 1;
-          // chain reward: crossing a ladder step pays bonus BOOST seconds
-          // (the ladder repeats every 10 cans — the flame HUD is the
-          // promise, this is the payoff)
-          const reward = streakReward(state.streak);
-          if (reward) {
-            state.boostT += reward;
-            lastBoostSource = "streak";
-            lastStreakAt = state.time;
-            lastStreakTier = state.streak;
-            lastStreakSecs = reward;
-            opts.onStreak?.(state.streak);
-            // a completed clean lap (every multiple of 10) also pays fuel
-            // dots — this bonus is the perfect chain's survival margin in
-            // the capped deep game, and a single miss never earns it
-            if (state.streak % 10 === 0) {
-              const lapOverflow = state.fuel + LAP_FUEL - FUEL_MAX;
-              if (lapOverflow > 0) {
-                state.boostT += Math.max(lapOverflow * BOOST_PER_DOT, 0.5);
-              }
-              state.fuel = Math.min(FUEL_MAX, state.fuel + LAP_FUEL);
-            }
-          } else if (hadBoost) {
-            // hot chain: a non-streak can grabbed mid-boost stretches the
-            // burn a touch — the reward for keeping the pace up between
-            // ladder steps
-            state.boostT += BOOST_CHAIN_T;
-          }
-          opts.onPickup?.(pk.big ?? false, pk.golden ?? false);
+          grabCan(seg);
         } else {
           // an active can was on this segment and we drove past it —
           // the chain is broken... unless a shield charge eats the
