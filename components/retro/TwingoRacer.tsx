@@ -282,12 +282,14 @@ export function TwingoRacer() {
   const padInputRef = useRef<PadState | null>(null);
   const [padConnected, setPadConnected] = useState(false);
   const screenRef = useRef(screen);
+  const titleBoardRef = useRef(titleBoard);
 
   pausedRef.current = paused;
   pauseMenuRef.current = pauseMenu;
   pauseSelRef.current = pauseSel;
   showFpsRef.current = showFps;
   screenRef.current = screen;
+  titleBoardRef.current = titleBoard;
 
   /* each run gets a fresh single-use submit token; PLAY AGAIN re-issues.
      On failure the leaderboard UI stays hidden and the game just plays.
@@ -522,6 +524,28 @@ export function TwingoRacer() {
     [fetchBoard],
   );
 
+  /* LB/RB on a gamepad steps the leaderboard period tabs — but only
+     while a board is actually on screen (title panel or the game-over
+     overlay), never mid-run */
+  useEffect(() => {
+    if (!open) return;
+    const order: ScorePeriod[] = ["all", "monthly", "weekly", "daily"];
+    const onStep = (ev: Event) => {
+      const dir = (ev as CustomEvent<number>).detail;
+      const visible =
+        screenRef.current === "title"
+          ? titleBoardRef.current
+          : gameOverRef.current;
+      if (!visible) return;
+      const i = order.indexOf(boardPeriodRef.current);
+      const next = order[(i + (dir > 0 ? 1 : order.length - 1)) % order.length];
+      audioRef.current?.menuMove();
+      selectPeriod(next);
+    };
+    window.addEventListener("twingo:board-step", onStep);
+    return () => window.removeEventListener("twingo:board-step", onStep);
+  }, [open, selectPeriod]);
+
   /* LEADERBOARD on the title screen: read-only top-10 panel — no token
      needed to look, only to submit after a run */
   const openTitleBoard = useCallback(() => {
@@ -745,7 +769,7 @@ export function TwingoRacer() {
      initials stays keyboard-only */
   useEffect(() => {
     if (!open) return;
-    const keyFor: Record<PadAction, string> = {
+    const keyFor: Record<Exclude<PadAction, "tabLeft" | "tabRight">, string> = {
       up: "ArrowUp",
       down: "ArrowDown",
       left: "ArrowLeft",
@@ -798,6 +822,17 @@ export function TwingoRacer() {
             action === "right")
         )
           continue;
+        // LB/RB step the leaderboard period tabs — no keyboard
+        // equivalent, so they go out as a dedicated event instead of a
+        // synthetic key
+        if (action === "tabLeft" || action === "tabRight") {
+          window.dispatchEvent(
+            new CustomEvent("twingo:board-step", {
+              detail: action === "tabRight" ? 1 : -1,
+            }),
+          );
+          continue;
+        }
         window.dispatchEvent(
           new KeyboardEvent("keydown", { key: keyFor[action] }),
         );
@@ -941,16 +976,27 @@ export function TwingoRacer() {
         if (pad?.steer != null) keysRef.current.steer = pad.steer;
         else if (tiltRef.current) keysRef.current.steer = steerRef.current;
         else delete keysRef.current.steer;
-        // pad pedals OR with the keyboard — either source drives
-        const input =
-          pad && (pad.gas || pad.brake)
-            ? {
-                ...keysRef.current,
-                gas: keysRef.current.gas || pad.gas,
-                brake: keysRef.current.brake || pad.brake,
-              }
-            : keysRef.current;
-        e.update(dt, input);
+        // pad pedals merge with the keyboard as analog amounts — the
+        // trigger pull wins if deeper, so feathering RT works even while
+        // a key is held
+        if (pad) {
+          keysRef.current.gasAmt = Math.max(
+            keysRef.current.gas ? 1 : 0,
+            pad.gasAmt,
+          );
+          keysRef.current.brakeAmt = Math.max(
+            keysRef.current.brake ? 1 : 0,
+            pad.brakeAmt,
+          );
+        } else {
+          delete keysRef.current.gasAmt;
+          delete keysRef.current.brakeAmt;
+        }
+        const gasOn =
+          (keysRef.current.gasAmt ?? (keysRef.current.gas ? 1 : 0)) > 0.05;
+        const brakeOn =
+          (keysRef.current.brakeAmt ?? (keysRef.current.brake ? 1 : 0)) > 0.05;
+        e.update(dt, keysRef.current);
         e.render(ctx);
         // after the tank ran dry the engine stays silent — gameOver()
         // already faded it out; drive() would revive an idle drone
@@ -958,8 +1004,8 @@ export function TwingoRacer() {
           audioRef.current?.setPaused(false);
           audioRef.current?.drive(
             e.state.speed / ENGINE_CONSTANTS.MAX_SPEED,
-            input.gas,
-            input.brake,
+            gasOn,
+            brakeOn,
             e.state.skid,
             e.state.rpm01,
             e.state.shiftT > 0,
@@ -1401,31 +1447,37 @@ export function TwingoRacer() {
   );
 
   /* period tabs shared by the title leaderboard panel and the game-over
-     overlay: all-time plus rolling 30d / 7d / 24h windows */
+     overlay: all-time plus TR-day-aligned 30d / 7d / 24h boards. LB/RB
+     on a gamepad cycles them (twingo:board-step) */
   const boardTabs = (
-    <div className="racer-lb-tabs" role="tablist" aria-label="Score period">
-      {(
-        [
-          ["all", "ALL"],
-          ["monthly", "30D"],
-          ["weekly", "7D"],
-          ["daily", "24H"],
-        ] as const
-      ).map(([p, label]) => (
-        <button
-          key={p}
-          type="button"
-          role="tab"
-          aria-selected={boardPeriod === p}
-          className={`racer-lb-tab font-pixel${
-            boardPeriod === p ? " racer-lb-tab-sel" : ""
-          }`}
-          onClick={() => selectPeriod(p)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <>
+      <div className="racer-lb-tabs" role="tablist" aria-label="Score period">
+        {(
+          [
+            ["all", "ALL"],
+            ["monthly", "30D"],
+            ["weekly", "7D"],
+            ["daily", "24H"],
+          ] as const
+        ).map(([p, label]) => (
+          <button
+            key={p}
+            type="button"
+            role="tab"
+            aria-selected={boardPeriod === p}
+            className={`racer-lb-tab font-pixel${
+              boardPeriod === p ? " racer-lb-tab-sel" : ""
+            }`}
+            onClick={() => selectPeriod(p)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {padConnected && (
+        <div className="racer-pausemenu-hint">LB · RB — TABS</div>
+      )}
+    </>
   );
 
   /* a fresh run token exists and the score would crack the top-10

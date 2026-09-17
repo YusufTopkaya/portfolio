@@ -34,6 +34,11 @@ export interface RacerInput {
   brake: boolean;
   /** analog steering (-1..1) from tilt controls — overrides left/right */
   steer?: number;
+  /** analog throttle 0..1 (gamepad RT) — 0.5 is a genuine half pull;
+      absent means the boolean gas flag rules (keyboard = full) */
+  gasAmt?: number;
+  /** analog brake 0..1 (gamepad LT) */
+  brakeAmt?: number;
 }
 
 export interface CarFrame {
@@ -1968,7 +1973,19 @@ export function createEngine(opts: {
     // at its band top) — an upshift drops the needle by the ratio gap on
     // its own, a downshift kicks it up; no fake pitch dips needed
     state.rpm01 = Math.max(0, Math.min(1, kmhNow / GEAR_TOPS[state.gear - 1]));
-    state.braking = input.brake;
+    // analog pedals: the gamepad triggers carry a 0..1 pull, the keyboard
+    // falls back to full/no travel through the boolean flags
+    const gasAmt = Math.max(
+      0,
+      Math.min(1, input.gasAmt ?? (input.gas ? 1 : 0)),
+    );
+    const brakeAmt = Math.max(
+      0,
+      Math.min(1, input.brakeAmt ?? (input.brake ? 1 : 0)),
+    );
+    // stop lamps / skid audio arm past a hair of trigger travel, so a
+    // noisy resting LT never glows
+    state.braking = brakeAmt > 0.12;
 
     // the boost top-speed ceiling eases in AND out: when the boost burns
     // out, the extra speed bleeds off over ~a second of aero drag instead
@@ -1977,16 +1994,20 @@ export function createEngine(opts: {
       ((state.boostT > 0 ? BOOST_TOP : 1) - boostTop) * Math.min(1, dt * 2.2);
     const boostMix = (boostTop - 1) / (BOOST_TOP - 1); // smoothed 0..1
 
-    if (input.gas && state.fuel > 0 && state.shiftT <= 0) {
+    if (gasAmt > 0 && state.fuel > 0 && state.shiftT <= 0) {
       // throttle follows the measured km/h curve of the real car; BOOST
-      // lifts the ceiling from 180 to ~194 km/h with a harder pull
+      // lifts the ceiling from 180 to ~194 km/h with a harder pull. An
+      // analog half-pull is a genuine half throttle — feathering the
+      // trigger holds a cruising speed below the ceiling
       const kmh = (state.speed / MAX_SPEED) * 180;
       const normalAccel = ACCEL_KMH(kmh);
       const boostPull = Math.max(normalAccel, (180 * BOOST_TOP - kmh) * 0.4);
       const accel = normalAccel + (boostPull - normalAccel) * boostMix;
       state.speed +=
-        ((accel * (1 + (BOOST_ACCEL - 1) * boostMix)) / 180) * MAX_SPEED * dt;
-    } else if (input.brake) state.speed += BRAKING * dt;
+        ((accel * gasAmt * (1 + (BOOST_ACCEL - 1) * boostMix)) / 180) *
+        MAX_SPEED *
+        dt;
+    } else if (brakeAmt > 0) state.speed += BRAKING * brakeAmt * dt;
     // clutch in during a shift: the car coasts almost freely (aero only),
     // none of the engine braking baked into ROLL_DRAG — a real shift
     // costs a couple of km/h, not 10
@@ -2055,7 +2076,7 @@ export function createEngine(opts: {
     // coasting crawl (<2 km/h) to a full stop, but never against a
     // downhill pull (a parked car on a descent must start rolling)
     if (
-      (!input.gas || state.fuel <= 0) &&
+      (gasAmt <= 0 || state.fuel <= 0) &&
       hillForce <= 0 &&
       state.speed < MAX_SPEED * 0.01
     ) {
