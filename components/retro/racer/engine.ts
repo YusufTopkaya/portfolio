@@ -1608,12 +1608,13 @@ export function createEngine(opts: {
             : 0;
     const playerSegment = findSegment(state.position + PLAYER_Z);
     const speedPercent = state.speed / MAX_SPEED;
-    // GTA-ish steering, between arcade and sim: the chassis RESPONSE lags
-    // the wheel and lateral authority falls with speed — nimble flicks at
-    // 60 km/h, a weighted lane-drift at 180. The lag grows with speed, so
-    // rapid left-right flicks average themselves out instead of snapping
-    // the car sideways (no more flat-out moose-test slaloms)
-    const steerLag = 0.12 + 0.25 * speedPercent;
+    // GTA-ish steering, between arcade and sim: the chassis response lags
+    // the wheel just a touch and lateral authority falls with speed —
+    // nimble flicks at 60 km/h, a weighted lane-drift at 180. The lag is
+    // deliberately minimal (0.05 → 0.15 s): a hint of chassis weight, not
+    // ice — the speed-scaled authority below is what really kills the
+    // flat-out moose-test slaloms
+    const steerLag = 0.05 + 0.1 * speedPercent;
     appliedSteer += (pendingSteer - appliedSteer) * Math.min(1, dt / steerLag);
     // lateral half-widths/s at full lock: 2.2 crawling → ~1.2 at 180 km/h,
     // still enough to HOLD an easy bend (worst capped drift ~1.6 vs
