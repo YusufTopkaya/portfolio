@@ -94,17 +94,33 @@ export function createTrackGenerator(seed = 427): TrackGenerator {
 
     // roadside objects: every few segments, 75% chance of a pine/bush/
     // rock/pole just off the road edge (offset 1.15-1.9 half-widths) —
-    // close offsets are what let sprites whiz past at arcade size. The
-    // old plate sign is gone (it spammed meaninglessly); chevrons never
-    // spawn here — they are curve infrastructure, planted by addRoad
+    // close offsets are what let sprites whiz past at arcade size. Pines
+    // often get shrubs huddled at their base; cobra-head lamps pick the
+    // arm variant that reaches over the tarmac (3 = arm from the left
+    // verge, 6 = from the right). The old plate sign is gone (it spammed
+    // meaninglessly); chevrons never spawn here — they are curve
+    // infrastructure, planted by addRoad
     if (i >= nextSpriteAt) {
       nextSpriteAt = i + 2 + Math.floor(rng() * 4);
       if (rng() >= 0.25) {
         const pick = rng();
-        seg.sprites.push({
-          sprite: pick < 0.3 ? 0 : pick < 0.6 ? 1 : pick < 0.8 ? 2 : 3,
-          offset: (rng() > 0.5 ? 1 : -1) * (1.15 + rng() * 0.75),
-        });
+        const offset = (rng() > 0.5 ? 1 : -1) * (1.15 + rng() * 0.75);
+        if (pick < 0.3) {
+          seg.sprites.push({ sprite: 0, offset });
+          const shrubs = Math.floor(rng() * 3); // 0-2 bushes at the base
+          for (let b = 0; b < shrubs; b++) {
+            const bo = offset + (rng() - 0.5) * 0.6;
+            seg.sprites.push({
+              sprite: 1,
+              offset: Math.sign(offset) * Math.max(1.15, Math.abs(bo)),
+            });
+          }
+        } else {
+          seg.sprites.push({
+            sprite: pick < 0.6 ? 1 : pick < 0.8 ? 2 : offset > 0 ? 6 : 3,
+            offset,
+          });
+        }
       }
     }
 

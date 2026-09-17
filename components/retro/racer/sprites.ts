@@ -436,21 +436,23 @@ function makePine(): HTMLCanvasElement {
 }
 
 function makeBush(): HTMLCanvasElement {
-  const [c, ctx] = canvas24(40, 28);
+  const [c, ctx] = canvas24(48, 36);
   if (!ctx) return c;
-  // low blobby shrub — quiet filler that never reads as "information"
+  // low blobby shrub — quiet filler that never reads as "information";
+  // huddles in clusters at pine bases
   const blob = (x: number, y: number, r: number, col: string) => {
     ctx.fillStyle = col;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   };
-  blob(12, 18, 9, "#1e5c2a");
-  blob(26, 16, 11, "#267034");
-  blob(20, 12, 8, "#2e7a37");
-  blob(33, 20, 6, "#1e5c2a");
+  blob(13, 24, 10, "#1e5c2a");
+  blob(30, 21, 13, "#267034");
+  blob(22, 16, 10, "#2e7a37");
+  blob(41, 26, 7, "#1e5c2a");
+  blob(33, 14, 6, "#2e7a37");
   ctx.fillStyle = "#143f1e";
-  ctx.fillRect(3, 24, 34, 3);
+  ctx.fillRect(4, 30, 41, 4);
   return c;
 }
 
@@ -489,37 +491,45 @@ function makeRock(): HTMLCanvasElement {
   return c;
 }
 
-function makePole(): HTMLCanvasElement {
-  const [c, ctx] = canvas24(20, 64);
+function makePole(dir: 1 | -1): HTMLCanvasElement {
+  const [c, ctx] = canvas24(28, 72);
   if (!ctx) return c;
+  // cobra-head street light: vertical mast + arm reaching OVER the road
+  // (an inverted L), dark head by day — the warm glow and the pool on
+  // the tarmac are painted at render time, only after dark. dir = +1
+  // arm reaches right (pole planted on the LEFT verge), -1 the mirror
+  const mastX = dir > 0 ? 4 : 20;
+  const headX = dir > 0 ? 18 : 2;
   ctx.fillStyle = "#4a4a52";
-  ctx.fillRect(8, 10, 4, 54);
-  ctx.fillStyle = "#92cc41";
-  ctx.fillRect(2, 2, 16, 10);
-  ctx.fillStyle = "#d7ff9e";
-  ctx.fillRect(4, 4, 12, 6);
+  ctx.fillRect(mastX, 6, 4, 66);
+  ctx.fillRect(Math.min(mastX, headX), 6, Math.abs(headX - mastX) + 8, 3);
+  // head housing + the unlit lens underneath
+  ctx.fillStyle = "#2c2c31";
+  ctx.fillRect(headX, 9, 8, 4);
+  ctx.fillStyle = "#4c4c54";
+  ctx.fillRect(headX + 1, 12, 6, 2);
   return c;
 }
 
 function makeChevron(dir: 1 | -1): HTMLCanvasElement {
-  const [c, ctx] = canvas24(44, 40);
+  const [c, ctx] = canvas24(48, 44);
   if (!ctx) return c;
-  // rally curve-warning board: black-edged amber board, two black
-  // chevrons pointing the way the road bends, on a gray pole
+  // European curve-warning sign (the white/red J32 style): dark edge,
+  // white face, two fat RED chevrons pointing the way the road bends
   ctx.fillStyle = "#5a5a62";
-  ctx.fillRect(20, 22, 4, 18);
+  ctx.fillRect(22, 26, 4, 18);
   ctx.fillStyle = "#141611";
-  ctx.fillRect(0, 0, 44, 22);
-  ctx.fillStyle = "#ffb03a";
-  ctx.fillRect(2, 2, 40, 18);
-  ctx.fillStyle = "#141611";
+  ctx.fillRect(0, 0, 48, 26);
+  ctx.fillStyle = "#f4f4f4";
+  ctx.fillRect(2, 2, 44, 22);
+  ctx.fillStyle = "#d43a2f";
   for (let k = 0; k < 2; k++) {
-    const cx = dir > 0 ? 8 + k * 14 : 36 - k * 14;
+    const cx = dir > 0 ? 9 + k * 16 : 39 - k * 16;
     ctx.beginPath();
     ctx.moveTo(cx, 5);
-    ctx.lineTo(cx + 8 * dir, 11);
-    ctx.lineTo(cx, 17);
-    ctx.lineTo(cx + 4 * dir, 11);
+    ctx.lineTo(cx + 9 * dir, 13);
+    ctx.lineTo(cx, 21);
+    ctx.lineTo(cx + 5 * dir, 13);
     ctx.closePath();
     ctx.fill();
   }
@@ -530,14 +540,17 @@ export function makeRoadside(): RoadsideSprite[] {
   return [
     // pines tower over the car — a roadside tree reads as a TREE, not a bonsai
     { image: makePine(), w: 48, h: 72, offset: 0, scale: 6.2 },
-    { image: makeBush(), w: 40, h: 28, offset: 0, scale: 1.6 },
+    { image: makeBush(), w: 48, h: 36, offset: 0, scale: 2.2 },
     { image: makeRock(), w: 36, h: 24, offset: 0, scale: 1.5 },
-    { image: makePole(), w: 20, h: 64, offset: 0, scale: 2.2 },
+    // cobra-head lamps come in arm-right (3, left verge) and arm-left
+    // (6, right verge) so the arm always reaches over the tarmac
+    { image: makePole(1), w: 28, h: 72, offset: 0, scale: 2.2 },
     // curve-warning chevrons (4 = points right, 5 = left): never spawned
     // by the random roadside mix — the generator plants them only around
     // medium/hard bends, on the outside edge
-    { image: makeChevron(1), w: 44, h: 40, offset: 0, scale: 1.9 },
-    { image: makeChevron(-1), w: 44, h: 40, offset: 0, scale: 1.9 },
+    { image: makeChevron(1), w: 48, h: 44, offset: 0, scale: 2.6 },
+    { image: makeChevron(-1), w: 48, h: 44, offset: 0, scale: 2.6 },
+    { image: makePole(-1), w: 28, h: 72, offset: 0, scale: 2.2 },
   ];
 }
 

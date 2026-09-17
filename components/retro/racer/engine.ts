@@ -2582,6 +2582,53 @@ export function createEngine(opts: {
           Math.round(destW),
           Math.round((visibleH / destH) * destH),
         );
+        // cobra-head lamps only work after dark: a warm glow at the head
+        // plus the soft pool the arm throws onto the tarmac below — by
+        // day the lens stays dark glass (an always-lit lamp at noon read
+        // as broken). Skipped when the crest clip hides most of the pole
+        if (
+          (s.sprite === 3 || s.sprite === 6) &&
+          skySt.night > 0.05 &&
+          visibleH > destH * 0.5
+        ) {
+          const armDir = s.sprite === 3 ? 1 : -1;
+          const headX = destX + (armDir > 0 ? destW * 0.79 : destW * 0.21);
+          const headY = destY + destH * 0.15;
+          const glowR = destW * 0.45;
+          const lg = ctx.createRadialGradient(
+            headX,
+            headY,
+            1,
+            headX,
+            headY,
+            glowR,
+          );
+          lg.addColorStop(
+            0,
+            `rgba(255,236,170,${(0.75 * skySt.night).toFixed(3)})`,
+          );
+          lg.addColorStop(1, "rgba(255,236,170,0)");
+          ctx.fillStyle = lg;
+          ctx.fillRect(
+            Math.round(headX - glowR),
+            Math.round(headY - glowR),
+            Math.round(glowR * 2),
+            Math.round(glowR * 2),
+          );
+          const prx = destW * 0.55;
+          ctx.fillStyle = `rgba(255,240,190,${(0.14 * skySt.night).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.ellipse(
+            Math.round(headX),
+            Math.round(segment.p1.screen.y),
+            Math.round(prx),
+            Math.max(1, Math.round(prx * 0.3)),
+            0,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        }
       }
     }
 
