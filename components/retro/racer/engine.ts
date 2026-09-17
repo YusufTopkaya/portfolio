@@ -1968,7 +1968,8 @@ export function createEngine(opts: {
     state.fuel = Math.max(0, state.fuel - fuelDrain);
     state.boostT = Math.max(0, state.boostT - dt);
     pickupGrace = Math.max(0, pickupGrace - dt);
-    if (state.fuel <= 0 && state.speed <= 0) state.gameOver = true;
+    // NOTE: the out-of-fuel game-over check lives AFTER the pickup scan
+    // below — a dry car stopped ON a can must get its grab first
 
     if (state.respawn > 0) {
       state.respawn = Math.max(0, state.respawn - dt);
@@ -2018,7 +2019,10 @@ export function createEngine(opts: {
         if (!pk || !pickupActive(seg)) continue;
         if (
           Math.abs(state.playerX - pk.x * canSpread) < 0.24 &&
-          state.speed > MAX_SPEED * 0.02
+          // a dry tank waives the speed gate: the coast-over-checkpoint
+          // mercy must also work at a dying crawl — even dead-stopped on
+          // the can, the car is VISIBLY on the fuel
+          (state.speed > MAX_SPEED * 0.02 || state.fuel <= 0)
         ) {
           const amount = pk.golden ? 3 : pk.big ? 2 : 1;
           // captured BEFORE this pickup's own grants: a can driven
@@ -2100,6 +2104,10 @@ export function createEngine(opts: {
           }
         }
       }
+      // out of fuel + standstill = game over — but only AFTER the pickup
+      // scan: a dry car stopped ON a can just grabbed it above and
+      // revives instead of dying on top of the fuel
+      if (state.fuel <= 0 && state.speed <= 0) state.gameOver = true;
       // mercy can: below 1.5 dots with nothing collectible in the next ~90
       // segments, one can materialises on a reachable line ~60 segments
       // out — ONCE per run, ever (mercyUsed never re-arms), and only in
