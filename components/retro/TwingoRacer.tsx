@@ -29,6 +29,7 @@ import {
   type RacerInput,
   type RacerView,
 } from "./racer/engine";
+import { type PadAction, type PadState, pollPad } from "./racer/gamepad";
 import {
   loadCarFrames,
   loadCockpit,
@@ -276,6 +277,10 @@ export function TwingoRacer() {
     gas: false,
     brake: false,
   });
+  /* gamepad: latest polled continuous state (steer/gas/brake) merged into
+     the engine input each frame; padConnected drives the hints HUD */
+  const padInputRef = useRef<PadState | null>(null);
+  const [padConnected, setPadConnected] = useState(false);
 
   pausedRef.current = paused;
   pauseMenuRef.current = pauseMenu;
@@ -729,6 +734,50 @@ export function TwingoRacer() {
     adjustTiltSens,
   ]);
 
+  /* gamepad: one rAF poller for the whole overlay (the title screen has
+     no engine loop). Continuous state (steer/gas/brake) lands in
+     padInputRef for the game loop to merge; edge presses become synthetic
+     keyboard events, so every existing menu handler (title, settings,
+     pause, leaderboard, game over) works with ZERO changes — d-pad/stick
+     = arrows, A = Enter, B/Start = Escape, Y = V, Select = R. Typing
+     initials stays keyboard-only */
+  useEffect(() => {
+    if (!open) return;
+    const keyFor: Record<PadAction, string> = {
+      up: "ArrowUp",
+      down: "ArrowDown",
+      confirm: "Enter",
+      back: "Escape",
+      pause: "Escape",
+      camera: "v",
+      restart: "r",
+    };
+    let raf = 0;
+    let connected = false;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const pad = pollPad();
+      padInputRef.current = pad;
+      const now = !!pad;
+      if (now !== connected) {
+        connected = now;
+        setPadConnected(now);
+      }
+      if (!pad) return;
+      for (const action of pad.pressed) {
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", { key: keyFor[action] }),
+        );
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      padInputRef.current = null;
+      setPadConnected(false);
+    };
+  }, [open]);
+
   /* rotating the phone mid-run flips the buffer between the landscape and
      portrait shapes; the engine keeps its state and just re-fits (resize) */
   useEffect(() => {
@@ -853,11 +902,22 @@ export function TwingoRacer() {
       }
       const e = engineRef.current;
       if (e && !pausedRef.current) {
-        // tilt steering: inject the smoothed analog value; it overrides
-        // the digital left/right flags inside the engine
-        if (tiltRef.current) keysRef.current.steer = steerRef.current;
+        // analog steering priority: gamepad stick > tilt > the digital
+        // left/right flags (the engine's steer overrides those anyway)
+        const pad = padInputRef.current;
+        if (pad?.steer != null) keysRef.current.steer = pad.steer;
+        else if (tiltRef.current) keysRef.current.steer = steerRef.current;
         else delete keysRef.current.steer;
-        e.update(dt, keysRef.current);
+        // pad pedals OR with the keyboard — either source drives
+        const input =
+          pad && (pad.gas || pad.brake)
+            ? {
+                ...keysRef.current,
+                gas: keysRef.current.gas || pad.gas,
+                brake: keysRef.current.brake || pad.brake,
+              }
+            : keysRef.current;
+        e.update(dt, input);
         e.render(ctx);
         // after the tank ran dry the engine stays silent — gameOver()
         // already faded it out; drive() would revive an idle drone
@@ -865,8 +925,8 @@ export function TwingoRacer() {
           audioRef.current?.setPaused(false);
           audioRef.current?.drive(
             e.state.speed / ENGINE_CONSTANTS.MAX_SPEED,
-            keysRef.current.gas,
-            keysRef.current.brake,
+            input.gas,
+            input.brake,
             e.state.skid,
             e.state.rpm01,
             e.state.shiftT > 0,
@@ -1789,36 +1849,65 @@ export function TwingoRacer() {
         </div>
       )}
 
-      {/* key legend — desktop only, hidden once the run is over */}
+      {/* key legend — desktop only, hidden once the run is over. With a
+          gamepad connected the pad's own buttons take over the legend
+          (the keyboard keeps working, it just stops being the hint) */}
       {screen === "playing" && !coarse && !gameOver && (
         <div className="racer-keys font-pixel" aria-hidden="true">
-          <div className="racer-keys-row">
-            <span className="racer-key">W</span> GAS
-          </div>
-          <div className="racer-keys-row">
-            <span className="racer-key">S</span> BRAKE
-          </div>
-          <div className="racer-keys-row">
-            <span className="racer-key">A</span>
-            <span className="racer-key">D</span> STEER
-          </div>
-          {cockpitReady && (
-            <div className="racer-keys-row">
-              <span className="racer-key">V</span> CAMERA
-            </div>
+          {padConnected ? (
+            <>
+              <div className="racer-keys-row">
+                <span className="racer-key">RT</span> GAS
+              </div>
+              <div className="racer-keys-row">
+                <span className="racer-key">LT</span> BRAKE
+              </div>
+              <div className="racer-keys-row">
+                <span className="racer-key">LS</span> STEER
+              </div>
+              {cockpitReady && (
+                <div className="racer-keys-row">
+                  <span className="racer-key">Y</span> CAMERA
+                </div>
+              )}
+              <div className="racer-keys-row">
+                <span className="racer-key">SEL</span> RESTART
+              </div>
+              <div className="racer-keys-row">
+                <span className="racer-key">START</span> MENU
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="racer-keys-row">
+                <span className="racer-key">W</span> GAS
+              </div>
+              <div className="racer-keys-row">
+                <span className="racer-key">S</span> BRAKE
+              </div>
+              <div className="racer-keys-row">
+                <span className="racer-key">A</span>
+                <span className="racer-key">D</span> STEER
+              </div>
+              {cockpitReady && (
+                <div className="racer-keys-row">
+                  <span className="racer-key">V</span> CAMERA
+                </div>
+              )}
+              <div className="racer-keys-row">
+                <span className="racer-key">R</span> RESTART
+              </div>
+              <div className="racer-keys-row">
+                <span className="racer-key">F</span> FPS
+              </div>
+              <div className="racer-keys-row">
+                <span className="racer-key">M</span> SOUND
+              </div>
+              <div className="racer-keys-row">
+                <span className="racer-key">ESC</span> MENU
+              </div>
+            </>
           )}
-          <div className="racer-keys-row">
-            <span className="racer-key">R</span> RESTART
-          </div>
-          <div className="racer-keys-row">
-            <span className="racer-key">F</span> FPS
-          </div>
-          <div className="racer-keys-row">
-            <span className="racer-key">M</span> SOUND
-          </div>
-          <div className="racer-keys-row">
-            <span className="racer-key">ESC</span> MENU
-          </div>
         </div>
       )}
 

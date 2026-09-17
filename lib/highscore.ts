@@ -31,7 +31,8 @@ const MAX_SCORE_PER_SEC = 150; // generous plausibility bound: 100/s flat out
 const MIN_DURATION_SEC = 3;
 
 const STORE_PATH =
-  process.env.HIGHSCORE_FILE ?? path.join(process.cwd(), "data", "highscores.json");
+  process.env.HIGHSCORE_FILE ??
+  path.join(process.cwd(), "data", "highscores.json");
 
 export function getSalt(): string | null {
   const salt = process.env.HIGHSCORE_SALT;
@@ -56,7 +57,8 @@ async function readStore(): Promise<StoreFile> {
     return {
       version: STORE_VERSION,
       scores: !stale && Array.isArray(parsed.scores) ? parsed.scores : [],
-      nonces: parsed.nonces && typeof parsed.nonces === "object" ? parsed.nonces : {},
+      nonces:
+        parsed.nonces && typeof parsed.nonces === "object" ? parsed.nonces : {},
     };
   } catch {
     return { version: STORE_VERSION, scores: [], nonces: {} };
@@ -66,12 +68,18 @@ async function readStore(): Promise<StoreFile> {
 async function writeStore(store: StoreFile): Promise<void> {
   await mkdir(path.dirname(STORE_PATH), { recursive: true });
   const tmp = `${STORE_PATH}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify({ ...store, version: STORE_VERSION }), "utf8");
+  await writeFile(
+    tmp,
+    JSON.stringify({ ...store, version: STORE_VERSION }),
+    "utf8",
+  );
   await rename(tmp, STORE_PATH);
 }
 
 function sign(nonce: string, issuedAt: number, salt: string): string {
-  return createHmac("sha256", salt).update(`${nonce}.${issuedAt}`).digest("hex");
+  return createHmac("sha256", salt)
+    .update(`${nonce}.${issuedAt}`)
+    .digest("hex");
 }
 
 export interface StartResult {
@@ -110,7 +118,11 @@ export async function submitScore(
 
   // --- input validation (before touching the store) ---
   if (!/^[A-Z0-9]{3}$/.test(name)) {
-    return { ok: false, error: "invalid_input", message: "Name must be 3 chars A-Z0-9" };
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: "Name must be 3 chars A-Z0-9",
+    };
   }
   if (isProfane(name)) {
     return { ok: false, error: "invalid_input", message: "Name not allowed" };
@@ -118,7 +130,11 @@ export async function submitScore(
   if (!Number.isFinite(score) || !Number.isInteger(score) || score < 0) {
     return { ok: false, error: "invalid_input", message: "Invalid score" };
   }
-  if (!Number.isFinite(durationSec) || durationSec < MIN_DURATION_SEC || durationSec > 86_400) {
+  if (
+    !Number.isFinite(durationSec) ||
+    durationSec < MIN_DURATION_SEC ||
+    durationSec > 86_400
+  ) {
     return { ok: false, error: "invalid_input", message: "Invalid duration" };
   }
   // Plausibility: score cannot exceed what the game can produce in the elapsed time.
@@ -150,7 +166,11 @@ export async function submitScore(
   return withLock(async () => {
     const store = await readStore();
     if (!(hmacHex in store.nonces)) {
-      return { ok: false, error: "invalid_token", message: "Token already used or unknown" };
+      return {
+        ok: false,
+        error: "invalid_token",
+        message: "Token already used or unknown",
+      };
     }
     delete store.nonces[hmacHex];
 
@@ -184,16 +204,30 @@ export async function submitScore(
 
 export type ScorePeriod = "all" | "daily" | "weekly" | "monthly";
 
-const PERIOD_WINDOWS_MS: Record<Exclude<ScorePeriod, "all">, number> = {
-  daily: 24 * 60 * 60 * 1000,
-  weekly: 7 * 24 * 60 * 60 * 1000,
-  monthly: 30 * 24 * 60 * 60 * 1000,
+// Turkey is permanently on UTC+3 (no DST since 2016). Period boards are
+// aligned to TR CALENDAR days, not rolling windows: the 24H board resets
+// at midnight TR (same moment the daily track flips), and the 7D/30D
+// boards advance day-by-day on the TR clock
+const TR_OFFSET_MS = 3 * 3600000;
+const DAY_MS = 86400000;
+const trDay = (t: number) => Math.floor((t + TR_OFFSET_MS) / DAY_MS);
+const trDayStart = (day: number) => day * DAY_MS - TR_OFFSET_MS;
+
+const PERIOD_WINDOW_DAYS: Record<Exclude<ScorePeriod, "all">, number> = {
+  daily: 1,
+  weekly: 7,
+  monthly: 30,
 };
 
-/** Public top-10 listing; rolling windows for period boards. */
-export async function listScores(period: ScorePeriod = "all"): Promise<ScoreEntry[]> {
+/** Public top-10 listing; period boards snap to TR calendar days. */
+export async function listScores(
+  period: ScorePeriod = "all",
+): Promise<ScoreEntry[]> {
   const store = await readStore();
-  const cutoff = period === "all" ? 0 : Date.now() - PERIOD_WINDOWS_MS[period];
+  const cutoff =
+    period === "all"
+      ? 0
+      : trDayStart(trDay(Date.now()) - (PERIOD_WINDOW_DAYS[period] - 1));
   return store.scores
     .filter((e) => Date.parse(e.at) >= cutoff)
     .sort((x, y) => y.score - x.score || x.at.localeCompare(y.at))
