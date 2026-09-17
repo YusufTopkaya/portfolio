@@ -413,7 +413,7 @@ export function TwingoRacer() {
     ];
     void Promise.all(
       CHASE.map(([p]) =>
-        fetch(`/api/highscore?period=${p}`)
+        fetch(`/api/highscore?period=${p}`, { cache: "no-store" })
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null),
       ),
@@ -441,7 +441,9 @@ export function TwingoRacer() {
     const gen = boardGenRef.current;
     setBoard(null);
     setBoardError(false);
-    fetch(`/api/highscore?period=${period}`)
+    // no-store: the middleware once forced public caching on /api and the
+    // browser happily replayed a minutes-old board over a fresh submit
+    fetch(`/api/highscore?period=${period}`, { cache: "no-store" })
       .then((r) =>
         r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
       )

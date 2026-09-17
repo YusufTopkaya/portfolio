@@ -235,7 +235,7 @@ Bu yapılandırılmış veriler, Google'ın kişi bilgilerini ve site bilgilerin
 
 ### Önbellek (Caching) — middleware.ts
 - Statik sayfalar: `public, max-age=3600, must-revalidate`
-- API rotaları: `max-age=300, s-maxage=3600`
+- API rotaları: middleware artık Cache-Control dayatmıyor — her route kendi header'ını verir (dinamik olanlar `no-store`; blanket `max-age=300` bir dönem route'un no-store'unu eziyordu)
 - Statik dosyalar: `max-age=86400`
 - Sitemap/robots: `max-age=86400`
 

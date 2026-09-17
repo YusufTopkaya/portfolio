@@ -69,12 +69,11 @@ export async function middleware(request: NextRequest) {
     pathname === "/feed.xml" ||
     pathname.startsWith("/.well-known")
   ) {
-    if (pathname.startsWith("/api")) {
-      response.headers.set(
-        "Cache-Control",
-        "public, max-age=300, s-maxage=3600",
-      );
-    } else {
+    // /api routes set their OWN Cache-Control (no-store for the dynamic
+    // ones) — a blanket public max-age here used to override the route's
+    // no-store and browsers served minutes-old highscore boards, hiding a
+    // just-submitted score from its own author
+    if (!pathname.startsWith("/api")) {
       response.headers.set("Cache-Control", "public, max-age=86400");
     }
     return response;
@@ -103,6 +102,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|icon\\.png|icon\\.svg|apple-icon\\.png|manifest\\.json|web-app-manifest-.*\\.png|files/|images/|sitemap\\.xml|robots\\.txt|llms\\.txt|llms-full\\.txt|feed\\.xml|\\.well-known).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|icon\\.png|icon\\.svg|apple-icon\\.png|manifest\\.json|web-app-manifest-.*\\.png|sw\\.js|workbox-.*\\.js|files/|images/|sitemap\\.xml|robots\\.txt|llms\\.txt|llms-full\\.txt|feed\\.xml|\\.well-known).*)",
   ],
 };
