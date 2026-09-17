@@ -145,6 +145,11 @@ const TIRE_SCRUB = 0.23;
 const GEAR_TOPS = [45, 80, 115, 150, 180];
 const SHIFT_TIME = 0.28;
 const RESPAWN_TIME = 2.6; // seconds of "breathing" fade after a respawn
+// crash cost (off-road, pothole, tree — all share crashRespawn): 2 fuel
+// dots AND permanent engine damage — every crash knocks 7% off the top
+// speed, stacking multiplicatively for the rest of the run
+const CRASH_FUEL = 2;
+const CRASH_SPEED_LOSS = 0.07;
 const PICKUP_GRACE_T = 0.3; // fuel burns free for this long after a can grab
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank is the run's death clock, OutRun-style: the drain is (nearly)
@@ -170,23 +175,23 @@ const BOOST_PER_DOT = 1.5;
 // streak can bank a long run of free speed. The drain keeps ticking at
 // the normal rate through it, so a huge pool is pace you've earned, not
 // time you've stolen
-// golden can: 3 dots + a flat 1 s of BOOST — a small sweet bonus that
+// golden can: 3 dots + a flat 2 s of BOOST — a small sweet bonus that
 // doesn't overshadow the streak ladder
-const GOLDEN_BOOST_T = 1;
-// fuel-chain streak ladder, repeating every 10 cans: +3 s at 3, +5 s at
-// 5, +8 s at each multiple of 10 (10/20/30…). A full clean lap pays 16 s —
-// the same 16 s (3+5 twice) a player earns by DELIBERATELY breaking a chain
-// after the lap and re-farming 3/5, so the seconds no longer punish
-// breaking — the LAP_FUEL dots below do: a completed lap pays +2 fuel,
-// and a single miss resets the streak before the lap completes, so staying
-// clean still strictly wins (the deep-game economy is calibrated so a
-// PERFECT chain is sustainable forever while even a 1-in-10 miss rate
-// slowly bleeds out — the lap bonus is exactly the margin a misser never
-// earns)
+const GOLDEN_BOOST_T = 2;
+// fuel-chain streak ladder, repeating every 10 cans: +4 s at 3, +6 s at
+// 5, +9 s at each multiple of 10 (10/20/30…). A full clean lap pays 19 s —
+// the 20 s (4+6 twice) a player earns by DELIBERATELY breaking a chain
+// after the lap and re-farming 3/5, so the raw seconds are near-neutral
+// either way — the LAP_FUEL dots below are the decider: a completed lap
+// pays +2 fuel, and a single miss resets the streak before the lap
+// completes, so staying clean still strictly wins (the deep-game economy
+// is calibrated so a PERFECT chain is sustainable forever while even a
+// 1-in-10 miss rate slowly bleeds out — the lap bonus is exactly the
+// margin a misser never earns)
 const LAP_FUEL = 2;
 const streakReward = (streak: number): number => {
   const lap = streak % 10 === 0 ? 10 : streak % 10; // position in the ladder
-  return lap === 10 ? 8 : lap === 5 ? 5 : lap === 3 ? 3 : 0;
+  return lap === 10 ? 9 : lap === 5 ? 6 : lap === 3 ? 4 : 0;
 };
 // km driven per difficulty level — a tight ladder: the ×1.5 knee arrives
 // by ~12 km and the drain multiplier then keeps creeping +2.5%/level to
@@ -202,7 +207,7 @@ const MERCY_MAX_LEVEL = 5;
 // where the browser chrome already crowds the glass. The streak HUD
 // anchors off TOUCH_CLUSTER_TOP + 52 (the cluster's bottom edge)
 const TOUCH_CLUSTER_TOP = 16;
-const FAR_OFFROAD = 1.15; // |playerX| at/above this = stranded: just past the rumble strips (road edge ~1.1) — half the car over the grass is a respawn WITH or WITHOUT a tree there, and roadside pines (offset ≥ ~1.15) stay reachable so the tree crash rule lives
+const FAR_OFFROAD = 1.18; // |playerX| at/above this = stranded: a touch past the rumble strips (road edge ~1.1) — half the car over the grass is a respawn WITH or WITHOUT a tree there, and roadside pines (offset ≥ ~1.15) stay reachable so the tree crash rule lives
 const LANES = 3;
 
 const COLORS = {
@@ -1555,13 +1560,19 @@ export function createEngine(opts: {
   // can't
   let appliedSteer = 0;
 
+  // permanent crash damage: every crashRespawn knocks CRASH_SPEED_LOSS
+  // off the top speed, stacking multiplicatively — a crumpled car is a
+  // slower car for the rest of the run
+  let damageMul = 1;
   // shared crash: stranded off-road, a pothole or a roadside pine all
-  // cost the same — centre-line respawn, 1 fuel dot, a broken chain
+  // cost the same — centre-line respawn, CRASH_FUEL dots, a broken
+  // chain, and 7% less top speed for good
   const crashRespawn = () => {
     state.respawn = RESPAWN_TIME;
     state.speed = 0;
     state.playerX = 0;
-    state.fuel = Math.max(0, state.fuel - 1);
+    state.fuel = Math.max(0, state.fuel - CRASH_FUEL);
+    damageMul *= 1 - CRASH_SPEED_LOSS;
     if (state.streak > 0) lastStreakLostAt = state.time;
     state.streak = 0;
     // a crash mid-hop must not land the teleported car into a squash +
@@ -1789,7 +1800,11 @@ export function createEngine(opts: {
       -FAR_OFFROAD,
       Math.min(FAR_OFFROAD, state.playerX),
     );
-    state.speed = Math.max(0, Math.min(MAX_SPEED * boostTop, state.speed));
+    // the ceiling carries crash damage: boost lifts it, damage lowers it
+    state.speed = Math.max(
+      0,
+      Math.min(MAX_SPEED * boostTop * damageMul, state.speed),
+    );
 
     // crest hop: the road falling away steeply right after a steep climb
     // means the car just cleared a hilltop at speed — give it a short
@@ -2004,8 +2019,9 @@ export function createEngine(opts: {
         }
       }
       // stranded on the grass past the rumble strips: respawn on the
-      // centre line at a standstill with a breathing fade-in — and a
-      // 1-dot fuel penalty, so crashing directly shortens the run
+      // centre line at a standstill with a breathing fade-in — a
+      // CRASH_FUEL-dot penalty plus permanent speed damage, so crashing
+      // directly shortens AND slows the run
       if (Math.abs(state.playerX) >= FAR_OFFROAD) crashRespawn();
     }
 
