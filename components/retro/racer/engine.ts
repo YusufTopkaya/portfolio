@@ -1534,6 +1534,22 @@ export function createEngine(opts: {
   // steering intent captured in update(), consumed by render() to pick
   // the car frame (left/right lean)
   let pendingSteer = 0;
+  // what the CAR is actually doing: chases pendingSteer through a
+  // speed-dependent lag (see update) — the input can flick, the chassis
+  // can't
+  let appliedSteer = 0;
+
+  // shared crash: stranded off-road, a pothole or a roadside pine all
+  // cost the same — centre-line respawn, 1 fuel dot, a broken chain
+  const crashRespawn = () => {
+    state.respawn = RESPAWN_TIME;
+    state.speed = 0;
+    state.playerX = 0;
+    state.fuel = Math.max(0, state.fuel - 1);
+    if (state.streak > 0) lastStreakLostAt = state.time;
+    state.streak = 0;
+    opts.onCrash?.();
+  };
 
   // crest airtime: clearing a hilltop fast pops the car off the tarmac
   // for a beat, then the suspension squashes on touchdown. Purely
@@ -1592,8 +1608,19 @@ export function createEngine(opts: {
             : 0;
     const playerSegment = findSegment(state.position + PLAYER_Z);
     const speedPercent = state.speed / MAX_SPEED;
-    // steering authority scales with speed — no spinning out at standstill
-    const dx = dt * 2.2 * speedPercent;
+    // GTA-ish steering, between arcade and sim: the chassis RESPONSE lags
+    // the wheel and lateral authority falls with speed — nimble flicks at
+    // 60 km/h, a weighted lane-drift at 180. The lag grows with speed, so
+    // rapid left-right flicks average themselves out instead of snapping
+    // the car sideways (no more flat-out moose-test slaloms)
+    const steerLag = 0.12 + 0.25 * speedPercent;
+    appliedSteer += (pendingSteer - appliedSteer) * Math.min(1, dt / steerLag);
+    // lateral half-widths/s at full lock: 2.2 crawling → ~1.2 at 180 km/h,
+    // still enough to HOLD an easy bend (worst capped drift ~1.6 vs
+    // medium/hard = brake country) but never to slash across lanes; the
+    // 3p gate keeps a parked car from sliding sideways
+    const steerAuthority = 2.2 * (1 - 0.45 * speedPercent);
+    const dx = dt * steerAuthority * Math.min(1, 3 * speedPercent);
 
     state.time += dt;
     // segments the car's pickup point crosses this frame — at full speed
@@ -1640,7 +1667,7 @@ export function createEngine(opts: {
       levelUpAt = state.time;
     }
 
-    state.playerX += dx * pendingSteer;
+    state.playerX += dx * appliedSteer;
     // centrifugal push on curves (Jake Gordon), tuned so every bend has a
     // real grip-limited corner speed — the balance p·curve·grip·CENTRIFUGAL
     // = 1 gives easy ≈ flat-out, medium ≈ 125→96 km/h, hard ≈ 85→64 km/h
@@ -1813,15 +1840,23 @@ export function createEngine(opts: {
           state.speed > MAX_SPEED * 0.02
         ) {
           seg.hole = undefined;
-          state.respawn = RESPAWN_TIME;
-          state.speed = 0;
-          state.playerX = 0;
-          state.fuel = Math.max(0, state.fuel - 1);
-          if (state.streak > 0) lastStreakLostAt = state.time;
-          state.streak = 0;
-          opts.onCrash?.();
+          crashRespawn();
           break;
         }
+        // roadside pines are solid: this far off the line to clip one and
+        // the run takes the stranded penalty. Signs and poles fold like
+        // they would in GTA — only the trees stop a car
+        for (const s of seg.sprites) {
+          if (
+            s.sprite === 0 &&
+            Math.abs(state.playerX - s.offset) < 0.2 &&
+            state.speed > MAX_SPEED * 0.02
+          ) {
+            crashRespawn();
+            break;
+          }
+        }
+        if (state.respawn > 0) break;
         const pk = seg.pickup;
         // scarcity-hidden cans aren't on the road — passing them neither
         // counts nor breaks a streak
@@ -1926,16 +1961,7 @@ export function createEngine(opts: {
       // stranded on the grass past the rumble strips: respawn on the
       // centre line at a standstill with a breathing fade-in — and a
       // 1-dot fuel penalty, so crashing directly shortens the run
-      if (Math.abs(state.playerX) >= FAR_OFFROAD) {
-        state.respawn = RESPAWN_TIME;
-        state.speed = 0;
-        state.playerX = 0;
-        state.fuel = Math.max(0, state.fuel - 1);
-        // a crash breaks the fuel chain too
-        if (state.streak > 0) lastStreakLostAt = state.time;
-        state.streak = 0;
-        opts.onCrash?.();
-      }
+      if (Math.abs(state.playerX) >= FAR_OFFROAD) crashRespawn();
     }
 
     // score: metres driven at HALF rate, multiplied when cruising fast
