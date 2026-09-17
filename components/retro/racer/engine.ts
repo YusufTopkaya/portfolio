@@ -2456,15 +2456,17 @@ export function createEngine(opts: {
       // (light catches the wall that faces the viewer). Depth comes from
       // the segment's own screen thickness (a flat disc on the road plane
       // projects as a sliver), and the rim is clamped so it never spills
-      // past the road edge. Culled with the road line behind crests
+      // past the road edge. A hole fully hidden behind a crest gets the
+      // cans' pennant treatment in DANGER red instead — falling into a
+      // hole you never saw is cheap, and the yellow flag means fuel
       if (segment.hole) {
         const scale = segment.p1.screen.scale;
         const y1 = segment.p1.screen.y;
         const y2 = segment.p2.screen.y;
         const roadW = scale * ROAD_WIDTH * (width / 2);
         const rx = Math.min(0.26, 1 - Math.abs(segment.hole.x)) * roadW;
+        const hx = segment.p1.screen.x + segment.hole.x * roadW;
         if (rx >= 2 && (!segment.clip || y1 <= segment.clip)) {
-          const hx = segment.p1.screen.x + segment.hole.x * roadW;
           const ry = Math.max(1, Math.min(rx * 0.35, (y1 - y2) * 0.45));
           const hy = y1 - ry * 0.5;
           ctx.fillStyle = "#0a0a0c";
@@ -2492,6 +2494,29 @@ export function createEngine(opts: {
             0.85 * Math.PI,
           );
           ctx.stroke();
+        } else if (rx >= 2) {
+          // crest-hidden: thin pole + red flag poking over the hill line,
+          // gently swaying like the fuel pennant
+          const px = Math.round(hx);
+          const hillY = Math.round(segment.clip);
+          const poleH = Math.max(6, Math.round(rx * 0.35));
+          const poleW = Math.max(1, Math.round(rx * 0.03));
+          ctx.fillStyle = "#141611";
+          ctx.fillRect(px, hillY - poleH, poleW, poleH);
+          const fw = Math.max(3, Math.round(rx * 0.22));
+          const fh = Math.max(2, Math.round(rx * 0.13));
+          const sway = Math.round(
+            Math.sin(state.time * 6 + segment.index) * Math.max(1, rx * 0.04),
+          );
+          ctx.fillStyle = "#e5484d";
+          ctx.fillRect(px + poleW + sway, hillY - poleH, fw, fh);
+          ctx.fillStyle = "#20242e";
+          ctx.fillRect(
+            px + poleW + sway + fw,
+            hillY - poleH,
+            Math.max(1, Math.round(fw * 0.45)),
+            Math.max(1, Math.round(fh * 0.7)),
+          );
         }
       }
 
