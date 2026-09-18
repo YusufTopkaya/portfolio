@@ -1517,6 +1517,50 @@ html.crt-boot::after {
   color: #e76e55;
 }
 
+/* arcade initials spinner (gamepad): three LCD slots, the armed one lit
+   with scroll arrows — joystick up/down cycles the letter, fire locks it */
+.racer-spinner {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+}
+
+.racer-spinner-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  opacity: 0.45;
+}
+
+.racer-spinner-slot-sel {
+  opacity: 1;
+}
+
+.racer-spinner-ch {
+  min-width: 18px;
+  padding: 4px 3px;
+  text-align: center;
+  font-size: 12px;
+  color: #0d1f0a;
+  background: #a4c768;
+  border: 3px solid #0d1f0a;
+}
+
+.racer-spinner-slot-sel .racer-spinner-ch {
+  background: #d7ff9e;
+}
+
+.racer-spinner-arrow {
+  font-size: 6px;
+  color: #92cc41;
+  visibility: hidden;
+}
+
+.racer-spinner-slot-sel .racer-spinner-arrow {
+  visibility: visible;
+}
+
 /* title screen: full-viewport stage with the retro key art. The art sits
    in an aspect-locked box so the transparent hit areas stay glued to the
    painted START / LEADERBOARD buttons at any screen size; a blurred

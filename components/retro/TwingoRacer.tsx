@@ -60,6 +60,9 @@ function computeBuf(): { w: number; h: number } {
 const TR_OFFSET_MS = 3 * 3600000;
 const turkeyDay = () => Math.floor((Date.now() + TR_OFFSET_MS) / 86400000);
 
+/* arcade initials spinner alphabet — same charset the text input enforces */
+const SPIN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
 /** "HH:MM:SS" until the next TR midnight — the daily track reset */
 function resetCountdown(): string {
   const next = (turkeyDay() + 1) * 86400000 - TR_OFFSET_MS;
@@ -283,6 +286,9 @@ export function TwingoRacer() {
   const [padConnected, setPadConnected] = useState(false);
   const screenRef = useRef(screen);
   const titleBoardRef = useRef(titleBoard);
+  /* true while the arcade initials spinner owns the pad (game over,
+     qualifies, pad connected) — the poller routes edges to twingo:spin */
+  const spinActiveRef = useRef(false);
 
   pausedRef.current = paused;
   pauseMenuRef.current = pauseMenu;
@@ -782,6 +788,8 @@ export function TwingoRacer() {
     };
     let raf = 0;
     let connected = false;
+    let spinRepDir: string | null = null;
+    let spinRepAt = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const pad = pollPad();
@@ -792,6 +800,51 @@ export function TwingoRacer() {
         setPadConnected(now);
       }
       if (!pad) return;
+      // arcade initials spinner owns the pad while it's on screen: edges
+      // go out as a dedicated event (Start = send the score), and a HELD
+      // direction auto-repeats like the joystick scroll of the originals
+      // (380 ms delay, then every 110 ms)
+      if (spinActiveRef.current) {
+        for (const action of pad.pressed) {
+          if (
+            action === "up" ||
+            action === "down" ||
+            action === "left" ||
+            action === "right" ||
+            action === "confirm" ||
+            action === "back"
+          )
+            window.dispatchEvent(
+              new CustomEvent("twingo:spin", { detail: action }),
+            );
+          else if (action === "pause")
+            window.dispatchEvent(
+              new CustomEvent("twingo:spin", { detail: "submit" }),
+            );
+          // restart/camera/tabs stay dead: a stray Select must not nuke
+          // an unsubmitted score
+        }
+        const dir =
+          pad.menuY !== 0
+            ? pad.menuY < 0
+              ? "up"
+              : "down"
+            : pad.menuX !== 0
+              ? pad.menuX < 0
+                ? "left"
+                : "right"
+              : null;
+        const t = performance.now();
+        if (dir !== spinRepDir) {
+          spinRepDir = dir;
+          spinRepAt = t + 380;
+        } else if (dir && t >= spinRepAt) {
+          window.dispatchEvent(new CustomEvent("twingo:spin", { detail: dir }));
+          spinRepAt = t + 110;
+        }
+        return;
+      }
+      spinRepDir = null;
       // the quick-pause overlay (PAUSED — …) resumes on ANY pad press,
       // like its click/tap — and must NOT also dispatch the press as a
       // synthetic Escape, or the pause menu would open right on top
@@ -1285,6 +1338,74 @@ export function TwingoRacer() {
     },
   });
 
+  /* a fresh run token exists and the score would crack the top-10
+     (or the board isn't full / hasn't loaded yet) → offer the form */
+  const qualifies =
+    tokenRef.current !== null &&
+    finalScore > 0 &&
+    (board == null ||
+      board.length < 10 ||
+      finalScore > (board[board.length - 1]?.score ?? 0));
+
+  /* arcade initials spinner (gamepad only — the classic joystick entry):
+     up/down cycles A-Z0-9 on the armed slot, left/right moves slots,
+     A locks the letter and advances (from the last slot it sends the
+     score), B steps back a slot, Start sends. It drives the SAME
+     `initials` state as the text input, so the submit path (and its
+     profanity/plausibility checks) is untouched */
+  const spinnerOn = padConnected && qualifies && submitState !== "done";
+  const [spinSlot, setSpinSlot] = useState(0);
+  useEffect(() => {
+    spinActiveRef.current = spinnerOn;
+    return () => {
+      spinActiveRef.current = false;
+    };
+  }, [spinnerOn]);
+  useEffect(() => {
+    if (spinnerOn) {
+      setInitials((s) => s.padEnd(3, "A").slice(0, 3));
+      setSpinSlot(0);
+    }
+  }, [spinnerOn]);
+  useEffect(() => {
+    if (!spinnerOn) return;
+    const onSpin = (ev: Event) => {
+      const a = (ev as CustomEvent<string>).detail;
+      if (a === "submit" || (a === "confirm" && spinSlot === 2)) {
+        audioRef.current?.menuSelect();
+        submitScore();
+        return;
+      }
+      if (a === "confirm") {
+        audioRef.current?.menuSelect();
+        setSpinSlot(spinSlot + 1);
+        return;
+      }
+      if (a === "back") {
+        setSpinSlot(Math.max(0, spinSlot - 1));
+        return;
+      }
+      if (a === "left" || a === "right") {
+        audioRef.current?.menuMove();
+        setSpinSlot(
+          Math.max(0, Math.min(2, spinSlot + (a === "right" ? 1 : -1))),
+        );
+        return;
+      }
+      // up/down cycle the armed slot's letter (up walks A→Z, wrap-around)
+      audioRef.current?.menuMove();
+      setInitials((s) => {
+        const cur = s.padEnd(3, "A").slice(0, 3);
+        const i = SPIN_CHARS.indexOf(cur[spinSlot]);
+        const n = SPIN_CHARS.length;
+        const next = SPIN_CHARS[(i + (a === "up" ? 1 : n - 1) + n) % n];
+        return cur.slice(0, spinSlot) + next + cur.slice(spinSlot + 1);
+      });
+    };
+    window.addEventListener("twingo:spin", onSpin);
+    return () => window.removeEventListener("twingo:spin", onSpin);
+  }, [spinnerOn, spinSlot, submitScore]);
+
   if (!open) return null;
 
   /* sound settings panel — shared by the title screen and the pause menu.
@@ -1479,15 +1600,6 @@ export function TwingoRacer() {
       )}
     </>
   );
-
-  /* a fresh run token exists and the score would crack the top-10
-     (or the board isn't full / hasn't loaded yet) → offer the form */
-  const qualifies =
-    tokenRef.current !== null &&
-    finalScore > 0 &&
-    (board == null ||
-      board.length < 10 ||
-      finalScore > (board[board.length - 1]?.score ?? 0));
 
   return (
     <div
@@ -1869,38 +1981,73 @@ export function TwingoRacer() {
 
           {qualifies && submitState !== "done" && (
             <div className="racer-initials">
-              <label className="racer-initials-label" htmlFor="racer-initials">
-                NEW HIGHSCORE — ENTER INITIALS
-              </label>
-              <div className="racer-initials-row">
-                <input
-                  id="racer-initials"
-                  className="racer-initials-input font-pixel"
-                  value={initials}
-                  maxLength={3}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="AAA"
-                  onChange={(e) =>
-                    setInitials(
-                      e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
-                    )
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") submitScore();
-                    e.stopPropagation();
-                  }}
-                  ref={(el) => el?.focus()}
-                />
-                <button
-                  type="button"
-                  className="racer-initials-submit font-pixel"
-                  disabled={initials.length !== 3 || submitState === "sending"}
-                  onClick={submitScore}
+              {spinnerOn ? (
+                <div className="racer-initials-label">
+                  NEW HIGHSCORE — ENTER INITIALS
+                </div>
+              ) : (
+                <label
+                  className="racer-initials-label"
+                  htmlFor="racer-initials"
                 >
-                  {submitState === "sending" ? "..." : "SUBMIT"}
-                </button>
-              </div>
+                  NEW HIGHSCORE — ENTER INITIALS
+                </label>
+              )}
+              {spinnerOn ? (
+                <>
+                  <div className="racer-spinner font-pixel">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className={`racer-spinner-slot${
+                          i === spinSlot ? " racer-spinner-slot-sel" : ""
+                        }`}
+                      >
+                        <span className="racer-spinner-arrow">▲</span>
+                        <span className="racer-spinner-ch">
+                          {initials.padEnd(3, "A")[i]}
+                        </span>
+                        <span className="racer-spinner-arrow">▼</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="racer-pausemenu-hint">
+                    ↑↓ LETTER · ←→ SLOT · A OK · START SEND
+                  </div>
+                </>
+              ) : (
+                <div className="racer-initials-row">
+                  <input
+                    id="racer-initials"
+                    className="racer-initials-input font-pixel"
+                    value={initials}
+                    maxLength={3}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="AAA"
+                    onChange={(e) =>
+                      setInitials(
+                        e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+                      )
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitScore();
+                      e.stopPropagation();
+                    }}
+                    ref={(el) => el?.focus()}
+                  />
+                  <button
+                    type="button"
+                    className="racer-initials-submit font-pixel"
+                    disabled={
+                      initials.length !== 3 || submitState === "sending"
+                    }
+                    onClick={submitScore}
+                  >
+                    {submitState === "sending" ? "..." : "SUBMIT"}
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {submitState === "error" && (
