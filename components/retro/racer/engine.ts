@@ -197,12 +197,12 @@ const DYING_STOP_T = 1.66;
 const DOOM_KMH = 25;
 const DOOM_FADE_T = 1.0;
 const PICKUP_GRACE_T = 0.3; // fuel burns free for this long after a can grab
-// P2P race (all inert in solo play): a can a peer bagged vanishes only
-// briefly — long enough for the blink to signal the take and to keep the
-// missed-can streak logic coherent — then it respawns, so every player
-// effectively races their own cans again. Hazards never respawn
+// P2P race (all inert in solo play): a can a peer bagged vanishes for a
+// single frame — just enough to register the take and to keep the
+// missed-can streak logic coherent — then it respawns instantly, so
+// every player effectively races their own cans. Hazards never respawn
 // (applyRemoteHole consumes them for good)
-const REMOTE_TAKE_T = 0.5;
+const REMOTE_TAKE_T = 0.01;
 // car-car contact, griefing-proof arcade: positional separation plus
 // impulse exchanges on contact ENTRY — NO fuel/heart penalty, so nobody
 // can be killed on purpose. The first RACE_GRACE_T seconds are
