@@ -1441,6 +1441,16 @@ export interface RacerEngine {
   setRemoteName(id: string, name: string): void;
   /** the `dead` message: park the peer's wreck at its final position */
   markRemoteDead(id: string, score: number): void;
+  /** flag a remote as a ghost (CPU bot): rendered like any other remote
+      but skipped by the car-car collision BOTH ways — players pass
+      through bots and bots pass through players. Solo play never sets
+      one, so it stays byte-identical */
+  setRemoteGhost(id: string, ghost: boolean): void;
+  /** the difficulty-adjusted (curveGain) curve of the segment AT a world
+      position — current segment only, no look-ahead. Back-row negative
+      positions clamp to the first segment. Feeds the CPU bot sim: the
+      bots react to the bend they are in, never preview the road ahead */
+  curveAt(pos: number): number;
   /** spectate a live peer after our own death: render-only mode — the
       camera rides the target, the player car is hidden and its input,
       fuel, pickups and collisions are all suspended. null restores play.
@@ -1656,6 +1666,9 @@ export function createEngine(opts: {
   const bumpContact = new Set<string>();
   let bumpLatVel = 0; // half-widths/s, decays at BUMP_LAT_DECAY
   let lastBumpX = 0; // playerX last contact-frame — our lateral velocity est.
+  // ghost remotes (CPU bots): skipped by the car-car collision below —
+  // everyone passes through them in both directions
+  const ghostRemotes = new Set<string>();
 
   // horizon parallax offsets (Lou: horizon slides opposite the curve)
   let skyOffset = 0;
@@ -2676,6 +2689,7 @@ export function createEngine(opts: {
       const playerLat = dt > 0 ? (state.playerX - lastBumpX) / dt : 0;
       lastBumpX = state.playerX;
       for (const v of views) {
+        if (ghostRemotes.has(v.id)) continue; // CPU bots: pass-through
         const dSeg = v.pos / SEGMENT_LENGTH - playerSegFloat;
         const dX = v.x - state.playerX;
         // hysteresis: a peer already in contact leaves through a wider
@@ -4744,14 +4758,21 @@ export function createEngine(opts: {
     removeRemote: (id) => {
       remotes.remove(id);
       bumpContact.delete(id);
+      ghostRemotes.delete(id);
     },
     clearRemotes: () => {
       remotes.clear();
       bumpContact.clear();
       bumpLatVel = 0;
+      ghostRemotes.clear();
     },
     setRemoteName: (id, name) => remotes.setName(id, name),
     markRemoteDead: (id, score) => remotes.markDead(id, score),
+    setRemoteGhost: (id, ghost) => {
+      if (ghost) ghostRemotes.add(id);
+      else ghostRemotes.delete(id);
+    },
+    curveAt: (pos) => findSegment(Math.max(0, pos)).curve * curveGain,
     setSpectate: (t) => {
       spectateTarget = t;
     },

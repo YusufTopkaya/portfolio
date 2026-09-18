@@ -54,6 +54,22 @@ export interface RacePeer extends RaceHello {
   id: string;
 }
 
+/** a CPU ghost bot in the lobby roster (see bots.ts — leader-simulated,
+    collision-free, immortal). Broadcast by the leader via the `bots`
+    action whenever the roster changes */
+export interface RaceBot {
+  id: string; // "cpu-N"
+  name: string; // "CPU N"
+}
+
+/** bot state on the wire (`bst` action): the bot's identity plus a full
+    car state — same shape the peers stream, so receivers render bots
+    through the same interpolation buffer as human remotes */
+export interface NetBotState extends NetCarState {
+  id: string;
+  name: string;
+}
+
 export interface RaceNetHandlers {
   onPeersChanged?: (peers: RacePeer[]) => void;
   onStart?: (s: RaceStart) => void;
@@ -67,6 +83,12 @@ export interface RaceNetHandlers {
   onDead?: (id: string, score: number) => void;
   /** leader triggered a rematch — carries the fresh per-race track seed */
   onRematch?: (seed: number) => void;
+  /** the leader changed the CPU bot roster (ADD/REMOVE BOT, or a
+      re-announce for a newcomer) — replace the local mirror wholesale */
+  onBotsChanged?: (bots: RaceBot[]) => void;
+  /** a bot's 20 Hz state from the leader's simulation (bots never send
+      take/hole/dead — they are immortal ghosts) */
+  onBotState?: (id: string, name: string, s: NetCarState) => void;
 }
 
 export interface RaceNet {
@@ -87,6 +109,11 @@ export interface RaceNet {
   sendTake(segIdx: number): void;
   sendHole(segIdx: number): void;
   sendDead(score: number): void;
+  /** lobby leader only: broadcast the full CPU bot roster (replaces the
+      receivers' mirror — no local echo, the leader already has it) */
+  setBots(bots: RaceBot[]): void;
+  /** lobby leader only: stream one bot's simulated state at 20 Hz */
+  sendBotState(id: string, name: string, s: NetCarState): void;
   leave(): void;
 }
 
@@ -126,6 +153,19 @@ function validStart(v: unknown): v is RaceStart {
   const s = v as RaceStart;
   return !!s && isNum(s.ms, 500, 10000) && isNum(s.seed, 0, 1e9);
 }
+function validBots(v: unknown): v is RaceBot[] {
+  return (
+    Array.isArray(v) &&
+    v.length <= MAX_RACERS &&
+    v.every(
+      (b) => !!b && isStr((b as RaceBot).id) && isStr((b as RaceBot).name),
+    )
+  );
+}
+function validBotState(v: unknown): v is NetBotState {
+  const s = v as NetBotState;
+  return !!s && isStr(s.id) && isStr(s.name) && validState(s);
+}
 
 /* ── Trystero (real network) ── */
 
@@ -144,6 +184,8 @@ export class TrysteroNet implements RaceNet {
     hole: (v: number) => void;
     dead: (v: number) => void;
     rematch: (v: number) => void;
+    bots: (v: RaceBot[]) => void;
+    bst: (v: NetBotState) => void;
   };
 
   constructor(code: string, hello: RaceHello, handlers: RaceNetHandlers) {
@@ -165,6 +207,8 @@ export class TrysteroNet implements RaceNet {
     const holeAct = this.room.makeAction("hole");
     const deadAct = this.room.makeAction("dead");
     const rematchAct = this.room.makeAction("rematch");
+    const botsAct = this.room.makeAction("bots");
+    const bstAct = this.room.makeAction("bst");
     // trystero 0.25: makeAction returns {send, onMessage} (no tuple), and
     // its DataPayload constraint wants a JsonValue-mapped object — payloads
     // are validated on receipt anyway, so cast at the boundary
@@ -178,6 +222,8 @@ export class TrysteroNet implements RaceNet {
       hole: (v) => void holeAct.send(v),
       dead: (v) => void deadAct.send(v),
       rematch: (v) => void rematchAct.send(v),
+      bots: (v) => void botsAct.send(v as unknown as Wire[]),
+      bst: (v) => void bstAct.send(v as unknown as Wire),
     };
 
     helloAct.onMessage = (data, ctx) => {
@@ -211,6 +257,14 @@ export class TrysteroNet implements RaceNet {
     };
     rematchAct.onMessage = (data) => {
       if (validSeed(data)) this.h.onRematch?.(data);
+    };
+    botsAct.onMessage = (data) => {
+      if (validBots(data)) this.h.onBotsChanged?.(data);
+    };
+    bstAct.onMessage = (data) => {
+      if (!validBotState(data)) return;
+      const { id, name, ...s } = data as NetBotState;
+      this.h.onBotState?.(id, name, s);
     };
 
     this.room.onPeerJoin = (id) => {
@@ -264,6 +318,12 @@ export class TrysteroNet implements RaceNet {
   }
   sendDead(score: number) {
     this.senders.dead(score);
+  }
+  setBots(bots: RaceBot[]) {
+    this.senders.bots(bots);
+  }
+  sendBotState(id: string, name: string, s: NetCarState) {
+    this.senders.bst({ ...s, id, name });
   }
   leave() {
     void this.room.leave();
@@ -348,6 +408,12 @@ export class LoopbackNet implements RaceNet {
   }
   sendDead(score: number) {
     this.each((o) => o.h.onDead?.(this.selfId, score));
+  }
+  setBots(bots: RaceBot[]) {
+    this.each((o) => o.h.onBotsChanged?.(bots));
+  }
+  sendBotState(id: string, name: string, s: NetCarState) {
+    this.each((o) => o.h.onBotState?.(id, name, s));
   }
   leave() {
     const hub = LoopbackNet.hubs.get(this.code);

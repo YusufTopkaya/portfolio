@@ -1872,6 +1872,19 @@ html.crt-boot::after {
   text-shadow: 0 0 6px rgba(146, 204, 65, 0.8);
 }
 
+/* CPU ghost bot tag (lobby roster, standings HUD, results) — a small
+   boxed chip so a bot never reads as a human */
+.racer-bot-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 4px;
+  font-size: 0.7em;
+  line-height: 1.4;
+  vertical-align: middle;
+  color: #7fd4f7;
+  border: 2px solid rgba(127, 212, 247, 0.6);
+}
+
 .racer-lobby-menu {
   display: flex;
   flex-direction: column;

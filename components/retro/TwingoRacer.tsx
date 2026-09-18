@@ -27,6 +27,7 @@ import {
   type RacerAudio,
   type RacerVolumes,
 } from "./racer/audio";
+import { type Bot, botStates, createBots, updateBots } from "./racer/bots";
 import { bracketForScore, nextBracket } from "./racer/brackets";
 import {
   createEngine,
@@ -41,6 +42,7 @@ import { type PadAction, type PadState, pollPad } from "./racer/gamepad";
 import {
   MAX_RACERS,
   type NetCarState,
+  type RaceBot,
   type RaceHello,
   type RaceNet,
   type RacePeer,
@@ -163,7 +165,13 @@ interface StandingRow {
   score: number;
   dead: boolean;
   self: boolean;
+  /** CPU ghost bot (leader-simulated) — tagged BOT in the UI */
+  bot?: boolean;
 }
+
+/* CPU bot ids are always "cpu-N" (bots.ts) — the standings/spectate/
+   race-over paths recognise them by the prefix */
+const isBotId = (id: string) => id.startsWith("cpu-");
 
 /* the game-over action row gains a SPECTATE entry in a VS race while at
    least one peer is still alive */
@@ -176,7 +184,7 @@ const lobbyRowIds = (view: LobbyView, leader: boolean): string[] =>
     ? ["name", "create", "join", "back"]
     : view === "room"
       ? leader
-        ? ["name", "ready", "copy", "start", "leave"]
+        ? ["name", "ready", "copy", "addbot", "removebot", "start", "leave"]
         : ["name", "ready", "copy", "leave"]
       : ["back"];
 
@@ -584,6 +592,14 @@ export function TwingoRacer() {
      interval instead of re-rendering per packet */
   const standingsRef = useRef<Map<string, PeerStanding>>(new Map());
   const [standings, setStandings] = useState<StandingRow[]>([]);
+  /* CPU ghost bots: the roster the leader broadcasts (`bots` action) —
+     the leader additionally runs the simulation itself (botsSimRef,
+     created per race at engine boot). Receivers only mirror the roster
+     and render the streamed states */
+  const [bots, setBots] = useState<RaceBot[]>([]);
+  const botsRef = useRef<RaceBot[]>([]);
+  const botsSimRef = useRef<Bot[] | null>(null);
+  botsRef.current = bots;
   /* spectate mode after our own death: which peer the camera rides
      (null = not spectating). Ref mirror for the key/net handlers */
   const [spectating, setSpectating] = useState<{
@@ -683,8 +699,13 @@ export function TwingoRacer() {
   const isLeader = peers.length > 0 && peers[0]?.id === selfPeerId;
   isLeaderRef.current = isLeader;
   const myReady = peers.find((p) => p.id === selfPeerId)?.ready ?? false;
-  /* the leader's START RACE unlocks at ≥ 2 racers with everyone READY */
-  const canStart = isLeader && peers.length >= 2 && peers.every((p) => p.ready);
+  /* the leader's START RACE unlocks at ≥ 2 racers with everyone READY —
+     CPU bots count toward the field (a solo leader + a bot can race),
+     humans alone still need a second racer */
+  const canStart =
+    isLeader && peers.length + bots.length >= 2 && peers.every((p) => p.ready);
+  /* ADD BOT caps the field (humans + bots) at MAX_RACERS */
+  const canAddBot = isLeader && peers.length + bots.length < MAX_RACERS;
 
   /* ── VS RACE race-time flow (standings / spectate / results / rematch) ──
      All stable ([] deps): they touch refs + setState only, so the net
@@ -708,7 +729,9 @@ export function TwingoRacer() {
     const rosterIds = new Set(rosterRef.current.map((p) => p.id));
     let best: { id: string; name: string; state: NetCarState } | null = null;
     for (const [id, p] of standingsRef.current) {
-      if (p.dead || !rosterIds.has(id)) continue;
+      // bots aren't in the (human) roster but stay spectatable — they're
+      // immortal, so a dead human can always ride one
+      if (p.dead || (!rosterIds.has(id) && !isBotId(id))) continue;
       if (!best || p.state.score > best.state.score)
         best = { id, name: p.name, state: p.state };
     }
@@ -745,7 +768,7 @@ export function TwingoRacer() {
       if (!cur || !e) return;
       const rosterIds = new Set(rosterRef.current.map((p) => p.id));
       const alive = [...standingsRef.current.entries()]
-        .filter(([id, p]) => !p.dead && rosterIds.has(id))
+        .filter(([id, p]) => !p.dead && (rosterIds.has(id) || isBotId(id)))
         .sort((a, b) => b[1].state.score - a[1].state.score);
       if (alive.length < 2) return;
       const i = alive.findIndex(([id]) => id === cur.id);
@@ -766,15 +789,19 @@ export function TwingoRacer() {
     [setSpectateMode],
   );
 
-  /* race over = we are dead AND every participant (a peer that sent at
-     least one packet — a mid-race lobby idler never blocks this) is dead.
-     Builds the results panel; spectate becomes moot */
+  /* race over = we are dead AND every HUMAN participant (a peer that sent
+     at least one packet — a mid-race lobby idler never blocks this) is
+     dead. CPU bots are immortal and EXCLUDED from the check, but they
+     still rank in the results. Builds the results panel; spectate
+     becomes moot */
   const checkRaceOver = useCallback(() => {
     const net = netRef.current;
     if (!net || !gameOverRef.current || raceResultsRef.current) return;
     const parts = [...standingsRef.current.entries()];
+    const humans = parts.filter(([id]) => !isBotId(id));
     // an empty set would pass every() vacuously — require participants
-    if (parts.length === 0 || !parts.every(([, p]) => p.dead)) return;
+    // (a bot-only field completes: the dead leader was a racer)
+    if (parts.length === 0 || !humans.every(([, p]) => p.dead)) return;
     const nameOf = (id: string, fallback: string) =>
       rosterRef.current.find((p) => p.id === id)?.name ?? fallback;
     const rows: StandingRow[] = [
@@ -788,9 +815,11 @@ export function TwingoRacer() {
       ...parts.map(([id, p]) => ({
         id,
         name: nameOf(id, p.name || "???"),
-        score: Math.floor(p.deadScore),
+        // bots never die — their LIVE score is the final one
+        score: Math.floor(p.dead ? p.deadScore : p.state.score),
         dead: true,
         self: false,
+        bot: isBotId(id),
       })),
     ].sort((a, b) => b.score - a.score);
     // a score tie is a shared win — keep it simple
@@ -857,6 +886,9 @@ export function TwingoRacer() {
     rosterRef.current = [];
     selfPeerIdRef.current = "";
     standingsRef.current.clear();
+    botsRef.current = [];
+    setBots([]);
+    botsSimRef.current = null;
     engineRef.current?.setSpectate(null);
     setSpectateMode(null);
     raceResultsRef.current = null;
@@ -870,6 +902,50 @@ export function TwingoRacer() {
     setNetConnected(false);
     setConnectStuck(false);
   }, [setSpectateMode]);
+
+  /* attach the bot roster to the CURRENT engine: ghost flag (collision
+     pass-through, both ways) + the name tag. Called wherever bot ids are
+     first learned (leader at engine boot, receivers via onBotsChanged)
+     and again on the leader's state feed — a fresh engine per race
+     forgets the flags */
+  const attachBots = useCallback((list: RaceBot[]) => {
+    const e = engineRef.current;
+    if (!e) return;
+    for (const b of list) {
+      e.setRemoteGhost(b.id, true);
+      e.setRemoteName(b.id, b.name);
+    }
+  }, []);
+
+  /* ADD BOT (lobby leader): ids stay cpu-1..cpu-N with REMOVE taking the
+     last one, so the roster always matches createBots(N, seed) 1:1.
+     humans + bots capped at MAX_RACERS; receivers mirror via onBotsChanged */
+  const addBot = useCallback(() => {
+    const cur = botsRef.current;
+    if (rosterRef.current.length + cur.length >= MAX_RACERS) return;
+    audioRef.current?.menuSelect();
+    const next: RaceBot[] = [
+      ...cur,
+      { id: `cpu-${cur.length + 1}`, name: `CPU ${cur.length + 1}` },
+    ];
+    botsRef.current = next;
+    setBots(next);
+    netRef.current?.setBots(next);
+    attachBots(next);
+  }, [attachBots]);
+
+  const removeBot = useCallback(() => {
+    const cur = botsRef.current;
+    if (cur.length === 0) return;
+    audioRef.current?.menuSelect();
+    const removed = cur[cur.length - 1];
+    const next = cur.slice(0, -1);
+    botsRef.current = next;
+    setBots(next);
+    netRef.current?.setBots(next);
+    engineRef.current?.removeRemote(removed.id);
+    standingsRef.current.delete(removed.id);
+  }, []);
 
   /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly. In a
      VS race this is also the per-client rematch reset (fired by startRun
@@ -976,12 +1052,28 @@ export function TwingoRacer() {
           setNetConnected(true);
           // over capacity and WE are the newest arrival → bounced. The
           // leave itself runs in the lobbyView === "full" effect below —
-          // the net instance isn't reliably reachable from in here
+          // the net instance isn't reliably reachable from in here. CPU
+          // bots count against the cap (humans + bots ≤ MAX_RACERS)
           const newest = Math.max(...ps.map((p) => p.joinedAt));
-          if (ps.length > MAX_RACERS && hello.joinedAt >= newest) {
+          if (
+            ps.length + botsRef.current.length > MAX_RACERS &&
+            hello.joinedAt >= newest
+          ) {
             setLobbyView("full");
             return;
           }
+          // a newcomer (or a leadership change) needs the bot roster —
+          // the leader re-announces it. Deferred to a microtask: the
+          // net instance isn't assigned to netRef yet when LoopbackNet
+          // fires this synchronously from its constructor
+          queueMicrotask(() => {
+            if (
+              gen === netGenRef.current &&
+              isLeaderRef.current &&
+              botsRef.current.length > 0
+            )
+              netRef.current?.setBots(botsRef.current);
+          });
           // race-time bookkeeping: name the live remote cars, drop the
           // departed ones (their standings row goes with them)
           const prevIds = rosterRef.current.map((p) => p.id);
@@ -1073,6 +1165,32 @@ export function TwingoRacer() {
           // CURRENT roster's grid slots
           beginVsRace(seed, START_COUNTDOWN_MS);
         },
+        onBotsChanged: (bs) => {
+          if (gen !== netGenRef.current) return;
+          // the leader's bot roster, mirrored wholesale (receivers never
+          // simulate — they render the streamed states as ghost remotes)
+          botsRef.current = bs;
+          setBots(bs);
+          attachBots(bs);
+        },
+        onBotState: (id, name, s) => {
+          if (gen !== netGenRef.current) return;
+          const e = engineRef.current;
+          e?.setRemoteState(id, s);
+          e?.setRemoteName(id, name);
+          // bots are pass-through ghosts on EVERY client (idempotent)
+          e?.setRemoteGhost(id, true);
+          standingsRef.current.set(id, {
+            name,
+            state: s,
+            dead: false, // bots are immortal
+            deadScore: 0,
+          });
+          // keep the camera riding a spectated bot
+          if (spectatingRef.current?.id === id) {
+            e?.setSpectate({ id, pos: s.pos, x: s.x, speed: s.speed });
+          }
+        },
       });
       netRef.current = net;
       setSelfPeerId(net.selfId);
@@ -1092,7 +1210,7 @@ export function TwingoRacer() {
         setPeers([{ id: net.selfId, ...hello }]);
       }
     },
-    [repickSpectate, checkRaceOver, beginVsRace],
+    [repickSpectate, checkRaceOver, beginVsRace, attachBots],
   );
 
   /* shareable join link: <origin>/<lang>/?race=CODE — the lang comes from
@@ -1495,6 +1613,7 @@ export function TwingoRacer() {
           score: Math.floor(p.dead ? p.deadScore : p.state.score),
           dead: p.dead,
           self: false,
+          bot: isBotId(id),
         });
       }
       rows.sort((a, b) => b.score - a.score);
@@ -1769,6 +1888,10 @@ export function TwingoRacer() {
         netRef.current?.setReady(!myReady);
       } else if (row === "copy") {
         copyRaceLink();
+      } else if (row === "addbot") {
+        addBot();
+      } else if (row === "removebot") {
+        removeBot();
       } else if (row === "start") {
         if (canStart) {
           audioRef.current?.menuSelect();
@@ -1838,6 +1961,8 @@ export function TwingoRacer() {
     leaveNet,
     copyRaceLink,
     flushName,
+    addBot,
+    removeBot,
   ]);
 
   /* gamepad: one rAF poller for the whole overlay (the title screen has
@@ -2140,6 +2265,23 @@ export function TwingoRacer() {
               ),
             );
         e.update(dt, hold ? HELD_INPUT : keysRef.current);
+        // CPU bots (lobby leader's sim): advance with the same dt, fed
+        // the CURRENT-segment curve only (engine.curveAt — no preview)
+        // and the human poses for rubber banding + mild avoidance. Held
+        // with the grid during the countdown like the human cars; keeps
+        // running after the leader's own death (bots are immortal and
+        // stay spectatable)
+        const sim = botsSimRef.current;
+        if (sim && !hold) {
+          const humans: { pos: number; x: number }[] = [
+            { pos: e.state.position, x: e.state.playerX },
+          ];
+          for (const [id, p] of standingsRef.current) {
+            if (isBotId(id) || p.dead) continue;
+            humans.push({ pos: p.state.pos, x: p.state.x });
+          }
+          updateBots(sim, dt, (pos) => e.curveAt(pos), humans);
+        }
         e.render(ctx);
         // spectate instruments: the canvas LCD cluster still shows OUR
         // finished run's frozen score/fuel — restamp it with the followed
@@ -2261,12 +2403,15 @@ export function TwingoRacer() {
         // start grid: lateral + along-track slot by roster index (join
         // order; the 5th arrival takes the back row 3 segments behind
         // the line) — solo races pass NOTHING so single-player behaviour
-        // is byte-identical
+        // is byte-identical. CPU bots take the slots AFTER the humans
+        // (joinedAt order), so the grid TABLE is sized humans + bots —
+        // a bot can be the one pushed to the back row
+        const totalRacers = roster.length + botsRef.current.length;
         const myIdx = net ? roster.findIndex((p) => p.id === net.selfId) : -1;
         const slot =
           net && myIdx >= 0
             ? RACE_GRID[
-                Math.min(Math.max(roster.length, 1), RACE_GRID.length) - 1
+                Math.min(Math.max(totalRacers, 1), RACE_GRID.length) - 1
               ][myIdx]
             : undefined;
         engineRef.current = createEngine({
@@ -2307,6 +2452,29 @@ export function TwingoRacer() {
           debug: process.env.NODE_ENV !== "production",
         });
         setView(engineRef.current.state.view);
+        // CPU ghost bots: EVERY client flags them as pass-through ghosts
+        // with name tags on the fresh engine; the LEADER additionally
+        // creates the simulation here (per race — a rematch re-rolls the
+        // calibration from the new seed) and places the bots on the grid
+        // slots right after the humans. The sim is fed in the frame loop
+        // and streamed on the 50 ms net interval below
+        botsSimRef.current = null;
+        if (net && botsRef.current.length > 0) {
+          attachBots(botsRef.current);
+          if (isLeaderRef.current) {
+            const sim = createBots(botsRef.current.length, seed);
+            const grid =
+              RACE_GRID[
+                Math.min(Math.max(totalRacers, 1), RACE_GRID.length) - 1
+              ];
+            sim.forEach((b, i) => {
+              const gs = grid[roster.length + i];
+              b.pos = gs?.pos ?? 0;
+              b.x = gs?.x ?? 0;
+            });
+            botsSimRef.current = sim;
+          }
+        }
         // a record-chase fetch that landed before the engine booted
         if (recordTargetsRef.current.length > 0) {
           engineRef.current.setRecordTargets(recordTargetsRef.current);
@@ -2315,6 +2483,9 @@ export function TwingoRacer() {
         if (process.env.NODE_ENV !== "production") {
           (window as unknown as { __twingo?: RacerEngine }).__twingo =
             engineRef.current;
+          (
+            window as unknown as { __twingoBots?: () => Bot[] | null }
+          ).__twingoBots = () => botsSimRef.current;
         }
       } else {
         // orientation flipped mid-run: keep the run, re-fit the renderer
@@ -2328,19 +2499,49 @@ export function TwingoRacer() {
        (see remotes.ts) despite DataChannel arrival jitter. Solo runs have
        no net — one null check per tick, zero behaviour change. After the
        local death the `dead` message (sent once in the frame loop) is the
-       final word, so the stream stops there */
+       final word, so OUR stream stops there. The leader's CPU bots keep
+       streaming regardless (immortal — dead humans spectate them): each
+       snapshot goes to the room AND straight into the leader's own
+       engine — no network loopback, so a solo room with bots works too */
     const netSend = window.setInterval(() => {
       const net = netRef.current;
       const e = engineRef.current;
-      if (!net || !e || gameOverRef.current) return;
-      net.sendState({
-        pos: e.state.position,
-        x: e.state.playerX,
-        speed: e.state.speed,
-        score: Math.floor(e.state.score),
-        dead: false,
-        steer: steerOutRef.current,
-      });
+      if (!net || !e) return;
+      if (!gameOverRef.current) {
+        net.sendState({
+          pos: e.state.position,
+          x: e.state.playerX,
+          speed: e.state.speed,
+          score: Math.floor(e.state.score),
+          dead: false,
+          steer: steerOutRef.current,
+        });
+      }
+      const sim = botsSimRef.current;
+      if (sim) {
+        for (const b of botStates(sim)) {
+          e.setRemoteState(b.id, b.state);
+          e.setRemoteName(b.id, b.name);
+          net.sendBotState(b.id, b.name, b.state);
+          // the leader's own onBotState never fires (no loopback): mirror
+          // the standings bookkeeping here too, or the leader's HUD /
+          // spectate / race-over check never see the bots
+          standingsRef.current.set(b.id, {
+            name: b.name,
+            state: b.state,
+            dead: false,
+            deadScore: 0,
+          });
+        }
+        // keep the camera riding a spectated bot (the receivers get this
+        // from onBotState; the leader must do it itself)
+        const spec = spectatingRef.current;
+        if (spec && isBotId(spec.id)) {
+          const b = sim.find((x) => x.id === spec.id);
+          if (b)
+            e.setSpectate({ id: b.id, pos: b.pos, x: b.x, speed: b.speed });
+        }
+      }
     }, 50);
 
     const onKey = (down: boolean) => (ev: KeyboardEvent) => {
@@ -3090,6 +3291,19 @@ export function TwingoRacer() {
                       </span>
                     </li>
                   ))}
+                  {/* CPU ghost bots: after the humans (their grid slots
+                      too), always READY — the leader simulates them */}
+                  {bots.map((b) => (
+                    <li key={b.id}>
+                      <span className="racer-lobby-name">
+                        {b.name} <span className="racer-bot-tag">BOT</span>
+                      </span>
+                      <span className="racer-lobby-dots" aria-hidden="true" />
+                      <span className="racer-lobby-status racer-lobby-status-ready">
+                        READY
+                      </span>
+                    </li>
+                  ))}
                 </ol>
                 {peers.length < 2 && (
                   <div className="racer-lobby-sub">WAITING FOR RACERS…</div>
@@ -3118,6 +3332,32 @@ export function TwingoRacer() {
                   >
                     {copied ? "COPIED!" : "COPY LINK"}
                   </button>
+                  {isLeader && (
+                    <button
+                      type="button"
+                      className={`racer-quit font-pixel${
+                        sel === lobbyAt("addbot") ? " racer-go-armed" : ""
+                      }`}
+                      disabled={!canAddBot}
+                      onClick={addBot}
+                      onPointerEnter={() => setLobbySel(lobbyAt("addbot"))}
+                    >
+                      ADD BOT
+                    </button>
+                  )}
+                  {isLeader && (
+                    <button
+                      type="button"
+                      className={`racer-quit font-pixel${
+                        sel === lobbyAt("removebot") ? " racer-go-armed" : ""
+                      }`}
+                      disabled={bots.length === 0}
+                      onClick={removeBot}
+                      onPointerEnter={() => setLobbySel(lobbyAt("removebot"))}
+                    >
+                      REMOVE BOT
+                    </button>
+                  )}
                   {isLeader && (
                     <button
                       type="button"
@@ -3562,6 +3802,7 @@ export function TwingoRacer() {
                 <span className="racer-lobby-name">
                   {String(i + 1).padStart(2, "0")}. {r.name}
                   {r.self ? " (YOU)" : ""}
+                  {r.bot && <span className="racer-bot-tag">BOT</span>}
                 </span>
                 <span className="racer-lobby-dots" aria-hidden="true" />
                 <span>{r.score}</span>
@@ -3828,6 +4069,7 @@ export function TwingoRacer() {
               <span className="racer-standings-name">
                 {i === 0 ? "» " : ""}
                 {r.name}
+                {r.bot && <span className="racer-bot-tag">BOT</span>}
               </span>
               <span className="racer-standings-score">
                 {r.dead ? "OUT" : r.score}
