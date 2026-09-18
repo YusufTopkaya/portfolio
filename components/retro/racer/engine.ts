@@ -26,6 +26,8 @@
  */
 
 import { RACER_BRACKETS } from "./brackets";
+import type { NetCarState } from "./net";
+import { createRemoteCars, type RemoteCars } from "./remotes";
 
 export interface RacerInput {
   left: boolean;
@@ -108,6 +110,10 @@ export interface Segment {
     golden?: boolean;
     ordinal: number;
     missed?: boolean;
+    /** P2P race: a peer bagged this can — hidden until this engine time,
+        then it respawns for everyone else. While taken it behaves exactly
+        like a scarcity-hidden can (not collectible, never breaks a streak) */
+    takenUntil?: number;
   };
   /** pothole on the tarmac, x in road half-width units (±1 = edge). One
       per gas can; ~40% are bait holes parked just off a can's line so the
@@ -191,6 +197,21 @@ const DYING_STOP_T = 1.66;
 const DOOM_KMH = 25;
 const DOOM_FADE_T = 1.0;
 const PICKUP_GRACE_T = 0.3; // fuel burns free for this long after a can grab
+// P2P race (all inert in solo play): a can a peer bagged vanishes for this
+// long, then respawns for everyone else — hazards never respawn
+// (applyRemoteHole consumes them for good)
+const REMOTE_TAKE_T = 4;
+// car-car contact, griefing-proof arcade: a lateral shove plus a touch of
+// drag per contact frame — NO fuel/heart penalty, so nobody can be killed
+// on purpose. The first RACE_GRACE_T seconds are contact-free so the
+// start-grid scramble doesn't register
+const BUMP_PUSH = 0.8; // road half-widths/s shoved away from the other car
+const BUMP_DRAG = 0.98; // speed kept per contact frame
+const BUMP_AUDIO_T = 0.3; // at most one bump sound per 300 ms of contact
+const RACE_GRACE_T = 1.5; // collision grace at race start
+// remote car sprite scale factor: sits mid-range of the player sprite's
+// speed-dependent carScale (1.1-1.45) so a peer alongside reads the same size
+const REMOTE_CAR_SCALE = 1.3;
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank is the run's death clock, OutRun-style: the drain is (nearly)
 // FLAT per second, so fuel-per-km falls monotonically with speed —
@@ -1386,6 +1407,28 @@ export interface RacerEngine {
   /** leaderboard top scores to chase this run (ascending, deduped) —
       crossing one fires the centre "NEW <label> RECORD!" banner once */
   setRecordTargets(targets: { score: number; label: string }[]): void;
+  /* ── P2P race (multiplayer) — all inert until used: a solo engine never
+     sets a remote and every new code path is guarded off ── */
+  /** a peer grabbed the can on this absolute segment: hide it locally for
+      REMOTE_TAKE_T seconds, then it respawns for everyone else. No-op when
+      the ring no longer holds that segment or the can is already gone */
+  applyRemoteTake(absSegIdx: number): void;
+  /** a peer fell into the pothole on this absolute segment: consumed for
+      everyone (hazards don't respawn). No-op on a stale ring slot */
+  applyRemoteHole(absSegIdx: number): void;
+  /** feed a peer's latest state packet into the interpolation buffer */
+  setRemoteState(id: string, s: NetCarState): void;
+  /** peer left the room: remove its car (a fade is the UI's business) */
+  removeRemote(id: string): void;
+  clearRemotes(): void;
+  /** attach the peer's 3-letter initials (drawn over its car) */
+  setRemoteName(id: string, name: string): void;
+  /** the `dead` message: park the peer's wreck at its final position */
+  markRemoteDead(id: string, score: number): void;
+  /** spectate a live peer after our own death: render-only mode — the
+      camera rides the target, the player car is hidden and its input,
+      fuel, pickups and collisions are all suspended. null restores play */
+  setSpectate(target: { pos: number; x: number; speed: number } | null): void;
   /** dev-only (e2e probes): the next active gas can ahead of the car,
       with its effective lateral position after the level spread */
   debugNextPickup?: () => {
@@ -1484,6 +1527,19 @@ export function createEngine(opts: {
       tier per run) — the engine grants +1 heart or a streak shield, this
       is the fanfare hook */
   onBracket?: (name: string) => void;
+  /* ── P2P race hooks (all optional; solo play never sets them) ── */
+  /** P2P race: the start-grid lateral slot (road half-widths) — everyone
+      starts at position 0, spread across the lanes by join order */
+  startX?: number;
+  /** fired when THIS player grabs a can (absolute segment index) — the
+      net layer broadcasts it so peers hide the can for REMOTE_TAKE_T */
+  onTakeCan?: (absSegIdx: number) => void;
+  /** fired when THIS player falls into a pothole (absolute segment index)
+      — the net layer broadcasts it so the hole is consumed for everyone */
+  onHoleHit?: (absSegIdx: number) => void;
+  /** fired on car-car contact with a live peer (throttled by the engine
+      to at most once per BUMP_AUDIO_T seconds) — wire to audio.bump() */
+  onBump?: () => void;
   /** dev-only (e2e probes): collect per-render road diagnostics into
       `probe` — off in production so the game ships zero per-frame garbage */
   debug?: boolean;
@@ -1528,7 +1584,7 @@ export function createEngine(opts: {
 
   const state: EngineState = {
     position: 0,
-    playerX: 0,
+    playerX: opts.startX ?? 0, // P2P start-grid slot; 0 (centre) solo
     speed: 0,
     time: 0,
     distanceKm: 0,
@@ -1548,6 +1604,15 @@ export function createEngine(opts: {
     view: opts.view === "cockpit" && cockpit ? "cockpit" : "chase",
     level: 1,
   };
+
+  // P2P race state: peers' interpolation buffer (fed via setRemoteState),
+  // spectate override (render-only camera follow after our own death) and
+  // the bump-sound throttle. Everything downstream is guarded on
+  // remotes.size / spectateTarget so solo play is byte-identical
+  const remotes: RemoteCars = createRemoteCars();
+  const nowMs = () => performance.now();
+  let spectateTarget: { pos: number; x: number; speed: number } | null = null;
+  let lastBumpAt = -10; // engine time of the last bump sound
 
   // horizon parallax offsets (Lou: horizon slides opposite the curve)
   let skyOffset = 0;
@@ -1706,6 +1771,13 @@ export function createEngine(opts: {
   const pickupActive = (seg: Segment): boolean => {
     const pk = seg.pickup;
     if (!pk) return true;
+    // P2P race: a peer bagged this can — hidden until takenUntil, then it
+    // respawns for everyone else. While taken it's exactly a scarcity-hidden
+    // can: not collectible, and driving past it never breaks a streak
+    if (pk.takenUntil !== undefined) {
+      if (state.time < pk.takenUntil) return false;
+      pk.takenUntil = undefined;
+    }
     if (pk.ordinal < 0) return true; // mercy can: never scarcity-hidden
     if (pk.golden) return true; // golden can: a gift is never hidden
     const hidden = Math.min(0.4, Math.floor(state.score / 1500) * scarcityStep);
@@ -1794,6 +1866,9 @@ export function createEngine(opts: {
       state.boostT += BOOST_CHAIN_T;
     }
     opts.onPickup?.(pk.big ?? false, pk.golden ?? false);
+    // P2P race: tell the room this can is ours (peers hide it for a few
+    // seconds, then it respawns for everyone else)
+    opts.onTakeCan?.(seg.index);
   }
 
   // permanent crash damage on a 3-heart ladder: every crashRespawn knocks
@@ -1930,6 +2005,22 @@ export function createEngine(opts: {
   }
 
   function update(dt: number, input: RacerInput) {
+    // spectate (P2P race, after our own death): render-only mode — the
+    // camera rides the target peer's pos/speed, the player car is hidden
+    // in render and its input, fuel drain, pickups and collisions are all
+    // suspended. This must run BEFORE the gameOver early-out: spectate is
+    // entered exactly when our own game ended
+    if (spectateTarget) {
+      state.time += dt;
+      state.position = Math.max(0, spectateTarget.pos - PLAYER_Z);
+      state.playerX = spectateTarget.x;
+      state.speed = spectateTarget.speed;
+      state.offRoad = false;
+      pendingSteer = 0;
+      // keep the ring buffered ahead of the FOLLOWED car
+      extend(Math.floor(state.position / SEGMENT_LENGTH) + AHEAD_SEGMENTS);
+      return;
+    }
     if (state.gameOver) return;
     if (dying) {
       // fatal crash: the driver's foot is off everything — a hard linear
@@ -2226,6 +2317,8 @@ export function createEngine(opts: {
           state.speed > MAX_SPEED * 0.02
         ) {
           seg.hole = undefined;
+          // P2P race: the hole is consumed for everyone — tell the room
+          opts.onHoleHit?.(seg.index);
           crashRespawn("pothole");
           break;
         }
@@ -2509,6 +2602,39 @@ export function createEngine(opts: {
       recordTargets = recordTargets.slice(1);
     }
 
+    // car-car contact (P2P race only): overlap with a live peer shoves us
+    // apart laterally and bleeds a touch of speed per contact frame — no
+    // fuel/heart penalty (griefing-proof), and the first RACE_GRACE_T
+    // seconds are contact-free so the start-grid scramble doesn't count.
+    // The shove is clamped just INSIDE the stranded threshold: being
+    // pushed must never by itself trigger the off-road respawn
+    if (
+      remotes.size > 0 &&
+      state.time > RACE_GRACE_T &&
+      !dying &&
+      state.respawn <= 0
+    ) {
+      const views = remotes.sample(nowMs());
+      const playerSegFloat = (state.position + PLAYER_Z) / SEGMENT_LENGTH;
+      for (const v of views) {
+        if (v.dead) continue;
+        const dSeg = v.pos / SEGMENT_LENGTH - playerSegFloat;
+        const dX = v.x - state.playerX;
+        if (Math.abs(dSeg) >= 1 || Math.abs(dX) >= 0.4) continue;
+        // away from the other car; exactly overlapped: toward the near edge
+        const away = dX === 0 ? (state.playerX >= 0 ? 1 : -1) : -Math.sign(dX);
+        state.playerX = Math.max(
+          -FAR_OFFROAD + 0.01,
+          Math.min(FAR_OFFROAD - 0.01, state.playerX + away * BUMP_PUSH * dt),
+        );
+        state.speed *= BUMP_DRAG;
+        if (state.time - lastBumpAt > BUMP_AUDIO_T) {
+          lastBumpAt = state.time;
+          opts.onBump?.();
+        }
+      }
+    }
+
     // horizon drifts opposite the current curve, faster with speed
     // (rates eased 30% down from Jake's 2.5/5 — gentler mountain parallax)
     skyOffset += playerSegment.curve * curveGain * speedPercent * dt * 1.75;
@@ -2531,7 +2657,10 @@ export function createEngine(opts: {
     // world is pitched up into the windshield — a plain screen-space y
     // shift on the projection (camera tilt). Horizon, hills, sprites and
     // the hill-clip logic all derive from projected y, so they follow.
-    const cockpitMode = state.view === "cockpit" && cockpit !== null;
+    // spectating a peer (P2P): no cockpit dash — that's our own dead car's
+    // interior; the followed peer renders as a world-anchored remote
+    const cockpitMode =
+      state.view === "cockpit" && cockpit !== null && !spectateTarget;
     // crest hop, computed up front: parabolic lift while airborne, a short
     // damped squash on touchdown. Chase cam SHOWS the car hopping; in the
     // cockpit you ARE the car, so the world sinks by the lift instead and
@@ -2877,8 +3006,18 @@ export function createEngine(opts: {
       top: number;
       bottom: number;
       w: number;
-      kind: "can" | "hole";
+      kind: "can" | "hole" | "car";
     }[] = [];
+    // P2P race: peers' interpolated poses this frame, each with its current
+    // (fractional) segment — drawn world-anchored inside the far-to-near
+    // pass so painter ordering and the crest clip apply exactly like cans
+    const remoteViews =
+      remotes.size > 0
+        ? remotes.sample(nowMs()).map((v) => ({
+            ...v,
+            segFloat: v.pos / SEGMENT_LENGTH,
+          }))
+        : null;
     lastCatRect = null; // dev probe: refreshed every render
     for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
       const segment = segments[ringSlot(baseSegment.index + n)];
@@ -2889,7 +3028,21 @@ export function createEngine(opts: {
       // or the crossing renders INVISIBLE (the "görünmez kedi" bug)
       const catHere =
         catFrames && cat.crossing && !cat.gone && segment.index === cat.segIdx;
-      if (!pk && !segment.hole && segment.sprites.length === 0 && !catHere)
+      // same for remote cars: they live in the remotes buffer, not on the
+      // segment — a peer on a prop-less segment must still be visited
+      const remoteHere = remoteViews
+        ? remoteViews.some(
+            (v) =>
+              v.segFloat >= segment.index && v.segFloat < segment.index + 1,
+          )
+        : false;
+      if (
+        !pk &&
+        !segment.hole &&
+        segment.sprites.length === 0 &&
+        !catHere &&
+        !remoteHere
+      )
         continue;
 
       // gas cans hover above the tarmac of their segment, bobbing gently
@@ -3130,6 +3283,137 @@ export function createEngine(opts: {
         }
       }
 
+      // remote racers (P2P): world-anchored at the interpolated pose. The
+      // car sits at segFloat along the segment, so the screen position and
+      // projection scale are lerped between the segment's two endpoints —
+      // a per-segment snap would teleport the car ~0.75 segments per frame
+      // at full speed. Straight frame at the segment's own scale (with the
+      // player sprite's mid-range carScale factor and portrait boost, so a
+      // peer alongside reads the same size), initials floating above. Dead
+      // peers park as the wreck: straight frame + the dense damage-smoke
+      // column. Stale peers (no packet for >1.5 s) fade to half alpha.
+      // Crest clip applies exactly like the cans; a fully crest-hidden
+      // remote gets NO mystery "?" (a moving car is neither fuel nor a
+      // fixed hazard — it reappears on its own past the crest)
+      if (remoteHere && remoteViews) {
+        for (const rv of remoteViews) {
+          if (rv.segFloat < segment.index || rv.segFloat >= segment.index + 1)
+            continue;
+          const frac = rv.segFloat - segment.index;
+          const sx = interpolate(
+            segment.p1.screen.x,
+            segment.p2.screen.x,
+            frac,
+          );
+          const sy = interpolate(
+            segment.p1.screen.y,
+            segment.p2.screen.y,
+            frac,
+          );
+          const ss = interpolate(
+            segment.p1.screen.scale,
+            segment.p2.screen.scale,
+            frac,
+          );
+          const rPortrait =
+            width < RACER_WIDTH ? Math.min(2, (RACER_WIDTH / width) * 1.15) : 1;
+          const destW =
+            car.straight.w * ss * (width / 2) * REMOTE_CAR_SCALE * rPortrait;
+          const destH =
+            car.straight.h * ss * (width / 2) * REMOTE_CAR_SCALE * rPortrait;
+          if (destW < 2) continue;
+          const rwx = sx + ss * rv.x * ROAD_WIDTH * (width / 2);
+          const destX = rwx - destW / 2;
+          const destY = sy - destH;
+          let visibleH = destH;
+          if (segment.clip && destY + destH > segment.clip) {
+            visibleH = segment.clip - destY;
+          }
+          if (visibleH <= 0) continue; // fully crest-hidden: reappears past it
+          const rAlpha = rv.stale ? 0.5 : 1;
+          // soft shadow on the tarmac, like the player car's
+          ctx.globalAlpha = rAlpha * 0.9;
+          ctx.fillStyle = "rgba(0,0,0,0.35)";
+          ctx.beginPath();
+          ctx.ellipse(
+            Math.round(rwx),
+            Math.round(sy - 1),
+            destW * 0.42,
+            Math.max(1, destH * 0.08),
+            0,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+          ctx.globalAlpha = rAlpha;
+          ctx.drawImage(
+            car.straight.image,
+            0,
+            0,
+            car.straight.w,
+            (visibleH / destH) * car.straight.h,
+            Math.round(destX),
+            Math.round(destY),
+            Math.round(destW),
+            Math.round((visibleH / destH) * destH),
+          );
+          ctx.globalAlpha = 1;
+          // dead peer: the parked wreck's dense smoke column (the same
+          // rising-puff pattern the player's own dead engine gets)
+          if (rv.dead && car.smoke.length > 0) {
+            for (let i = 0; i < 3; i++) {
+              const phase = (state.time * 1.6 + i / 3) % 1;
+              const puff =
+                car.smoke[
+                  (Math.floor(state.time * 10) + i * 2) % car.smoke.length
+                ];
+              const puffW = destW * 0.34 * (0.6 + phase);
+              const puffH = (puff.h / puff.w) * puffW;
+              ctx.globalAlpha = rAlpha * 0.85 * (1 - phase);
+              ctx.drawImage(
+                puff.image,
+                Math.round(
+                  rwx -
+                    puffW / 2 +
+                    Math.sin(phase * 6 + i * 2.1) * destW * 0.06,
+                ),
+                Math.round(destY + destH * 0.1 - phase * destH * 0.9),
+                Math.round(puffW),
+                Math.round(puffH),
+              );
+            }
+            ctx.globalAlpha = 1;
+          }
+          // initials tag above the car — skipped at a distance where the
+          // text would be a smudge
+          if (rv.name && destW >= 16) {
+            const fs = Math.max(6, Math.min(11, Math.round(destW * 0.22)));
+            ctx.font = `bold ${fs}px monospace`;
+            const tw = ctx.measureText(rv.name).width;
+            const tx = Math.round(destX + destW / 2 - tw / 2);
+            const ty = Math.round(destY - 2);
+            ctx.globalAlpha = rAlpha;
+            ctx.fillStyle = "#141611";
+            ctx.fillText(rv.name, tx + 1, ty + 1);
+            ctx.fillStyle = "#dfe6ff";
+            ctx.fillText(rv.name, tx, ty);
+            ctx.globalAlpha = 1;
+          }
+          // blind-zone: a live peer sliding under the player car / dash
+          // gets the same occluded-marker treatment as cans (amber "!":
+          // not fuel, not a fixed hazard — but very much something there)
+          if (!rv.dead && destY + visibleH > height * 0.45) {
+            blindObjs.push({
+              cx: destX + destW / 2,
+              top: destY,
+              bottom: destY + visibleH,
+              w: destW,
+              kind: "car",
+            });
+          }
+        }
+      }
+
       for (const s of segment.sprites) {
         const sprite = roadside[s.sprite];
         const scale = segment.p1.screen.scale;
@@ -3329,46 +3613,56 @@ export function createEngine(opts: {
       const carX = width / 2 - destW / 2 + shakeX;
       const carY =
         height - destH - Math.round(height * 0.04) + bounce - lift + dip;
-      carRoofY = carY;
-      carHalfW = destW * 0.5;
+      // spectate (P2P): the player car is hidden entirely — the followed
+      // peer renders as a world-anchored remote, and with no sprite on
+      // screen nothing occludes the blind-zone markers
+      carRoofY = spectateTarget ? null : carY;
+      carHalfW = spectateTarget ? 0 : destW * 0.5;
 
       // respawn: the car breathes in and out of existence for a moment
       const carAlpha =
         state.respawn > 0 ? 0.5 + 0.5 * Math.sin(state.time * 9) : 1;
 
-      // soft shadow — stays on the tarmac while the car is airborne, so
-      // the hop reads as real separation from the road
-      const shadowFade = 1 - Math.min(1, lift / (height * 0.035)) * 0.5;
-      ctx.globalAlpha = carAlpha * 0.9 * shadowFade;
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.beginPath();
-      ctx.ellipse(
-        width / 2 + shakeX,
-        height - Math.round(height * 0.03),
-        destW * 0.42,
-        destH * 0.08,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
+      if (!spectateTarget) {
+        // soft shadow — stays on the tarmac while the car is airborne, so
+        // the hop reads as real separation from the road
+        const shadowFade = 1 - Math.min(1, lift / (height * 0.035)) * 0.5;
+        ctx.globalAlpha = carAlpha * 0.9 * shadowFade;
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        ctx.ellipse(
+          width / 2 + shakeX,
+          height - Math.round(height * 0.03),
+          destW * 0.42,
+          destH * 0.08,
+          0,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
 
-      ctx.globalAlpha = carAlpha;
-      ctx.drawImage(
-        frame.image,
-        Math.round(carX),
-        Math.round(carY),
-        Math.round(destW),
-        Math.round(destH),
-      );
-      ctx.globalAlpha = 1;
+        ctx.globalAlpha = carAlpha;
+        ctx.drawImage(
+          frame.image,
+          Math.round(carX),
+          Math.round(carY),
+          Math.round(destW),
+          Math.round(destH),
+        );
+        ctx.globalAlpha = 1;
+      }
 
       // stop lamps: taillights + the high-level LED strip on the roofline
       // glow red while the brake pedal is down — like a real car they
       // stay lit at a standstill. Anchors come from the frame itself:
       // the angled left/right frames put the lamps in different spots.
       // A soft halo under a brighter core sells the lamp bloom
-      if (state.braking && state.respawn <= 0 && frame.lamps) {
+      if (
+        !spectateTarget &&
+        state.braking &&
+        state.respawn <= 0 &&
+        frame.lamps
+      ) {
         const lamp = (fx: number, fy: number, fw: number, fh: number) => {
           const lx = carX + destW * fx;
           const ly = carY + destH * fy;
@@ -3387,6 +3681,7 @@ export function createEngine(opts: {
 
       // off-road dust puffs
       if (
+        !spectateTarget &&
         state.offRoad &&
         state.speed > MAX_SPEED * 0.08 &&
         car.smoke.length > 0
@@ -3412,7 +3707,12 @@ export function createEngine(opts: {
       // wheels, trailing outward from the bend
       const curveSlide =
         Math.abs(playerSegment.curve * curveGain) * speedPercent ** 2;
-      if (!state.offRoad && curveSlide > 1 && car.smoke.length > 0) {
+      if (
+        !spectateTarget &&
+        !state.offRoad &&
+        curveSlide > 1 &&
+        car.smoke.length > 0
+      ) {
         const outward = playerSegment.curve > 0 ? -1 : 1;
         for (const wheelSide of [-1, 1]) {
           const puff =
@@ -3444,7 +3744,11 @@ export function createEngine(opts: {
       // dense rising cloud while the dead engine coasts out. Puffs rise
       // from the car and fade with their phase so the column reads as
       // drifting upward rather than a static sprite
-      if ((crashes === CRASH_MAX - 1 || dying) && car.smoke.length > 0) {
+      if (
+        !spectateTarget &&
+        (crashes === CRASH_MAX - 1 || dying) &&
+        car.smoke.length > 0
+      ) {
         const puffs = dying ? 3 : 1;
         for (let i = 0; i < puffs; i++) {
           const phase = (state.time * (dying ? 1.6 : 0.9) + i / puffs) % 1;
@@ -3601,7 +3905,12 @@ export function createEngine(opts: {
         ctx.font = `bold ${fs}px monospace`;
         ctx.fillStyle = "#141611";
         ctx.fillText("!", Math.round(mx - fs * 0.3) + 1, ty + 1);
-        ctx.fillStyle = o.kind === "can" ? "#7ddc4f" : "#ff5252";
+        ctx.fillStyle =
+          o.kind === "can"
+            ? "#7ddc4f"
+            : o.kind === "car"
+              ? "#ffd75e"
+              : "#ff5252";
         ctx.fillText("!", Math.round(mx - fs * 0.3), ty);
       }
     }
@@ -4215,6 +4524,28 @@ export function createEngine(opts: {
     state,
     setRecordTargets: (t) => {
       recordTargets = t;
+    },
+    // ── P2P race ──
+    applyRemoteTake: (absSegIdx) => {
+      const seg = segments[ringSlot(absSegIdx)];
+      // only while the ring still holds that exact segment AND its can —
+      // a stale slot or a can we already grabbed ourselves is a no-op
+      if (seg.index !== absSegIdx || !seg.pickup) return;
+      seg.pickup.takenUntil = state.time + REMOTE_TAKE_T;
+    },
+    applyRemoteHole: (absSegIdx) => {
+      const seg = segments[ringSlot(absSegIdx)];
+      // same end state as if we had hit it ourselves, minus the crash —
+      // hazards never respawn
+      if (seg.index === absSegIdx) seg.hole = undefined;
+    },
+    setRemoteState: (id, s) => remotes.upsert(id, s, nowMs()),
+    removeRemote: (id) => remotes.remove(id),
+    clearRemotes: () => remotes.clear(),
+    setRemoteName: (id, name) => remotes.setName(id, name),
+    markRemoteDead: (id, score) => remotes.markDead(id, score),
+    setSpectate: (t) => {
+      spectateTarget = t;
     },
     debugNextPickup,
     debugCat,

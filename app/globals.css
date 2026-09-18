@@ -1157,6 +1157,64 @@ html.crt-boot::after {
   z-index: 3;
 }
 
+/* VS race live standings: top-right panel parked under the ✕ close
+   button / the touch top bar (CAM · mute · pause all sit at top:10px on
+   the right, ~30px tall, so 48px clears them on every form factor).
+   pointer-events: none — it's a readout, never a target */
+.racer-standings {
+  position: absolute;
+  top: 48px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 128px;
+  font-size: 8px;
+  color: #d7ff9e;
+  background: #1c1a16;
+  border: 2px solid #6e6650;
+  padding: 6px 8px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.racer-standings-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.racer-standings-me {
+  color: #ffd75e;
+}
+
+.racer-standings-dead {
+  opacity: 0.45;
+}
+
+/* spectate status line: centred chip at the top, same chrome as the
+   countdown's panel language */
+.racer-spectate {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  color: #ffd75e;
+  background: #1c1a16;
+  border: 2px solid #6e6650;
+  padding: 4px 10px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* results rows reuse the lobby roster's NAME ……… VALUE language */
+.racer-results {
+  margin: 4px 0 8px;
+}
+
 /* key legend: small grey-translucent panel on the left edge, listing
    what each key does — desktop only (touch users get pedals) */
 .racer-keys {
@@ -1698,6 +1756,160 @@ html.crt-boot::after {
 .racer-title-panel {
   border-color: #5b3c8c;
   z-index: 1;
+}
+
+/* VS RACE chip: P2P lobby entry — stacked under the SETTINGS chip in the
+   top-right sky corner (the artwork's painted buttons can't grow a
+   sibling, and the bottom of the art is painted content) */
+.racer-title-race {
+  position: absolute;
+  top: 42px;
+  right: 50px;
+  font-size: 7px;
+  color: #0d1f0a;
+  background: #92cc41;
+  border: 2px solid #d7ff9e;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  z-index: 1;
+}
+
+.racer-title-race:hover,
+.racer-title-race-sel {
+  background: #d7ff9e;
+  box-shadow: 0 0 10px rgba(146, 204, 65, 0.7);
+}
+
+/* P2P lobby: replaces the title art inside the same overlay box */
+.racer-lobby-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a090d;
+}
+
+/* lobby panel: same CRT-panel language as the leaderboard (racer-gameover
+   + racer-title-panel), petrol border instead of purple */
+.racer-lobby {
+  border-color: #3c7a8c;
+  min-width: min(320px, 86vw);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.racer-lobby-sub {
+  font-size: 7px;
+  color: #9fb97a;
+}
+
+.racer-lobby-code-label {
+  font-size: 7px;
+  color: #9fb97a;
+  letter-spacing: 1px;
+}
+
+.racer-lobby-code {
+  font-size: 22px;
+  color: #d7ff9e;
+  letter-spacing: 8px;
+  text-indent: 8px; /* recentre the letter-spaced text */
+  text-shadow: 0 0 10px rgba(146, 204, 65, 0.8);
+}
+
+/* peer roster: NAME ……… READY rows, self in amber, leader marked » */
+.racer-lobby-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.racer-lobby-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 8px;
+  color: #d7ff9e;
+}
+
+.racer-lobby-list li.racer-lobby-me {
+  color: #ffd75e;
+}
+
+.racer-lobby-dots {
+  flex: 1;
+  border-bottom: 2px dotted #6e8f50;
+}
+
+.racer-lobby-status {
+  color: rgba(215, 255, 158, 0.45);
+}
+
+.racer-lobby-status-ready {
+  color: #92cc41;
+  text-shadow: 0 0 6px rgba(146, 204, 65, 0.8);
+}
+
+.racer-lobby-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.racer-playagain:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.racer-playagain:disabled:hover {
+  background: #92cc41;
+  box-shadow: none;
+}
+
+/* READY toggle already lit: solid green so the button and the roster
+   status never disagree */
+.racer-lobby-ready-on {
+  color: #0d1f0a;
+  background: #92cc41;
+  border-color: #d7ff9e;
+}
+
+/* relay slow/blocked: subtle retry line under the roster */
+.racer-lobby-retry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 7px;
+  color: #e2703a;
+}
+
+.racer-lobby-retry button {
+  font-size: 7px;
+  padding: 3px 8px;
+}
+
+/* JOIN: 4-char room code input — same LCD inset as the initials field */
+.racer-lobby-input {
+  width: 96px;
+}
+
+/* 3·2·1·GO before a VS race, driven off the leader's startAt */
+.racer-countdown {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 42px;
+  color: #ffd75e;
+  text-shadow: 0 0 16px rgba(247, 179, 43, 0.9);
+  z-index: 6;
 }
 
 /* the overlay grows with the board — keep it inside the screen on phones */
