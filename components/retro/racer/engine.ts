@@ -254,16 +254,18 @@ const TOUCH_CLUSTER_TOP = 16;
 const FAR_OFFROAD = 1.18; // |playerX| at/above this = stranded: a touch past the rumble strips (road edge ~1.1) — half the car over the grass is a respawn WITH or WITHOUT a tree there, and roadside pines (offset ≥ ~1.15) stay reachable so the tree crash rule lives
 const LANES = 3;
 
-/* the cat easter egg: at most once per run, somewhere in the first
+/* the cat easter egg: exactly once per run (whenever the sprite sheet
+   loaded — there is no spawn roll), somewhere between 200 m and
    CAT_MAX_KM km (run-random, NOT day-seeded — every player's encounter
-   lands somewhere else). It steps out of the roadside cover and walks
-   across the tarmac; running it over bypasses the heart ladder and ends
-   the run on the spot. Spawn chance scales with the day's map difficulty
-   like the can-hiding rate: 2% on easy maps, 1% on cruel ones */
+   lands somewhere else; the first 200 m are always cat-free so the run
+   can settle first). It steps out of the roadside cover and walks across
+   the tarmac; running it over bypasses the heart ladder and ends the run
+   on the spot */
 const CAT_MAX_KM = 10;
 // display-km → segments at the 180 km/h reference pace: 1 km = 20 s =
 // 1200 frames = 1200 segments
 const CAT_MAX_SEGS = CAT_MAX_KM * 1200;
+const CAT_MIN_SEGS = 240; // 200 m — never earlier, in anyone's run
 const CAT_WALK_SPEED = 0.55; // road half-widths per second — a stroll
 const CAT_TRIGGER_SEGS = 320; // starts crossing when the car is this near
 const CAT_HIT_X = 0.26; // lateral hit window (a touch under the can's 0.28)
@@ -295,11 +297,13 @@ export type RacerView = "chase" | "cockpit";
 
 /** the cat easter egg's frames, cut from the site's 32px-cell sheet
     (public/images/cat-sprite.png — same file RetroCat uses): 8 walk
-    frames per direction plus the crouch pose it flies off in */
+    frames per direction, the crouch pose it flies off in, and the
+    front-facing sit for the mid-crossing stop-and-stare */
 export interface CatFrames {
   left: HTMLCanvasElement[];
   right: HTMLCanvasElement[];
   jump: HTMLCanvasElement;
+  front: HTMLCanvasElement;
 }
 
 /* cockpit dash geometry as fractions of the drawn dash rect — measured
@@ -1596,10 +1600,11 @@ export function createEngine(opts: {
   // mercy can: one rescue can per dry spell, injected by update() when
   // the tank runs below 1.5 dots with nothing collectible ahead
   let mercyUsed = false;
-  // the cat easter egg: one roll per run (needs the sprite sheet). It
-  // waits dormant at its absolute segment until the car closes to
-  // CAT_TRIGGER_SEGS, then walks across the road, ping-ponging between
-  // the verges so a slow approach doesn't miss it. One hit ends the run
+  // the cat easter egg: one crossing per run (needs the sprite sheet —
+  // no spawn roll, everyone meets it). It waits dormant at its absolute
+  // segment until the car closes to CAT_TRIGGER_SEGS, then walks across
+  // the road, ping-ponging between the verges so a slow approach doesn't
+  // miss it — and may freeze mid-crossing to stare down the oncoming car
   const catFrames = opts.cat ?? null;
   const cat = {
     spawned: false,
@@ -1608,6 +1613,8 @@ export function createEngine(opts: {
     dir: 1 as 1 | -1,
     crossing: false,
     gone: false,
+    pauseT: 0, // >0: frozen mid-crossing, facing the oncoming car
+    pauseCd: 0, // cooldown so it can't stutter stop-and-go
     hitAt: -10, // engine time of the fatal hit (-1... uses -10 sentinel)
     // screen-space ballistic flight after the hit (flyCans-style, but
     // gravity-driven and up-and-over, never down through the floor)
@@ -1617,13 +1624,12 @@ export function createEngine(opts: {
     flyVY: 0,
   };
   if (catFrames) {
-    const d = Math.min(10, Math.max(1, opts.mapDifficulty ?? 5.5));
-    const chance = 0.02 - ((d - 1) / 9) * 0.01; // easy 2% → cruel 1%
-    if (Math.random() < chance) {
-      cat.spawned = true;
-      // somewhere in the first CAT_MAX_KM, never at the very start
-      cat.segIdx = Math.floor(400 + Math.random() * (CAT_MAX_SEGS - 400));
-    }
+    cat.spawned = true;
+    // somewhere between CAT_MIN_SEGS (200 m — never earlier, in anyone's
+    // run) and CAT_MAX_KM out
+    cat.segIdx = Math.floor(
+      CAT_MIN_SEGS + Math.random() * (CAT_MAX_SEGS - CAT_MIN_SEGS),
+    );
   }
   // record chase: the leaderboard tops to beat this run (ascending) —
   // crossing one fires the centre "NEW <label> RECORD!" banner once
@@ -1794,8 +1800,12 @@ export function createEngine(opts: {
   let dying = false;
   let dyingT = 0;
   // doom fade: the tank is dry, the coast is slow and the math says no
-  // can is reachable — >0 counts down the last beat before game over
+  // can is reachable — >0 counts down the last beat before game over.
+  // doomCredit is the score the remaining roll-out WOULD have earned:
+  // the player is paid for every last metre the car could have rolled,
+  // credited the moment the fade ends (a mid-fade revive never saw it)
   let doomT = 0;
+  let doomCredit = 0;
   // centre banner state for the crash cost readout (cause + penalties)
   let lastCrashAt = -10;
   let lastCrashCause: "pothole" | "tree" | "offroad" | "cat" = "offroad";
@@ -2339,7 +2349,13 @@ export function createEngine(opts: {
       if (state.fuel <= 0 && !dying) {
         if (doomT > 0) {
           doomT -= dt;
-          if (doomT <= 0) state.gameOver = true;
+          if (doomT <= 0) {
+            // pay the coast credit: the score the remaining roll-out
+            // would have earned, down to the car's last metre
+            state.score += doomCredit;
+            doomCredit = 0;
+            state.gameOver = true;
+          }
         } else if (
           state.speed > 0 &&
           (state.speed / MAX_SPEED) * 180 < DOOM_KMH
@@ -2364,10 +2380,20 @@ export function createEngine(opts: {
               break;
             }
           }
-          if (!canAhead) doomT = DOOM_FADE_T;
+          if (!canAhead) {
+            doomT = DOOM_FADE_T;
+            // the doomed roll-out's worth, in score: world units ×
+            // 50/MAX_SPEED = metres (the live formula's kmh·dt/3.6), at
+            // the ×0.5 arcade scale — the multiplier is 1 this deep into
+            // a crawl anyway. Credited when the fade ends, so a mid-fade
+            // revive never sees it
+            doomCredit =
+              ((state.speed / ROLL_DRAG) * 1.25 * 50 * 0.5) / MAX_SPEED;
+          }
         }
       } else {
         doomT = 0; // revived mid-fade (a downhill roll into a can) — live on
+        doomCredit = 0;
       }
       // stranded on the grass past the rumble strips: respawn on the
       // centre line at a standstill with a breathing fade-in — a
@@ -2398,8 +2424,22 @@ export function createEngine(opts: {
         }
       } else if (carSegNow > cat.segIdx + 2) {
         cat.gone = true;
+      } else if (cat.pauseT > 0) {
+        // frozen mid-crossing, staring down the oncoming car
+        cat.pauseT = Math.max(0, cat.pauseT - dt);
+        if (cat.pauseT === 0) cat.pauseCd = 1.5; // no stutter stop-and-go
       } else {
+        cat.pauseCd = Math.max(0, cat.pauseCd - dt);
         cat.x += cat.dir * CAT_WALK_SPEED * dt;
+        // the random stop-and-stare: only while actually ON the tarmac
+        // (a freeze out on the grass would read as a statue, not a cat)
+        if (
+          cat.pauseCd <= 0 &&
+          Math.abs(cat.x) < 1.0 &&
+          Math.random() < dt * 0.35
+        ) {
+          cat.pauseT = 0.8 + Math.random() * 0.8;
+        }
         if (cat.x > 1.9) {
           cat.x = 1.9;
           cat.dir = -1;
@@ -3017,8 +3057,13 @@ export function createEngine(opts: {
         segment.index === cat.segIdx
       ) {
         const scale = segment.p1.screen.scale;
-        const frames = cat.dir > 0 ? catFrames.right : catFrames.left;
-        const fr = frames[Math.floor(state.time * 10) % frames.length];
+        // frozen = sitting front, staring at the oncoming car
+        const fr =
+          cat.pauseT > 0
+            ? catFrames.front
+            : (cat.dir > 0 ? catFrames.right : catFrames.left)[
+                Math.floor(state.time * 10) % 8
+              ];
         const destW = fr.width * scale * (width / 2) * 4.2 * CAT_SCALE;
         const destH = fr.height * scale * (width / 2) * 4.2 * CAT_SCALE;
         if (destW >= 2) {

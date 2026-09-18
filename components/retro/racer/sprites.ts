@@ -714,6 +714,7 @@ export async function loadCat(): Promise<CatFrames | null> {
       left: Array.from({ length: 8 }, (_, i) => cut(7, i)),
       right: Array.from({ length: 8 }, (_, i) => cut(6, i)),
       jump: cut(2, 0),
+      front: cut(0, 0), // sitting front — the mid-crossing stop-and-stare
     };
   } catch {
     return null;
