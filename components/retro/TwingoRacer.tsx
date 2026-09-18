@@ -32,6 +32,7 @@ import {
 import { type PadAction, type PadState, pollPad } from "./racer/gamepad";
 import {
   loadCarFrames,
+  loadCat,
   loadCockpit,
   loadGasCan,
   makeRoadside,
@@ -1122,10 +1123,11 @@ export function TwingoRacer() {
 
     (async () => {
       if (!engineRef.current) {
-        const [car, gasCan, cockpit] = await Promise.all([
+        const [car, gasCan, cockpit, cat] = await Promise.all([
           loadCarFrames(),
           loadGasCan(),
           loadCockpit(),
+          loadCat(),
         ]);
         if (cancelled) return;
         cockpitReadyRef.current = cockpit !== null;
@@ -1151,6 +1153,7 @@ export function TwingoRacer() {
           gasCan,
           gasCanGolden: tintGold(gasCan),
           cockpit,
+          cat,
           view: "chase",
           width: buf.w,
           height: buf.h,
@@ -1162,6 +1165,7 @@ export function TwingoRacer() {
           onStreak: (tier) => audioRef.current?.streak(tier),
           onCrash: () => audioRef.current?.crash(),
           onBreakdown: () => audioRef.current?.breakdown(),
+          onCatHit: () => audioRef.current?.catHit(),
           onBracket: () => audioRef.current?.bracket(),
           debug: process.env.NODE_ENV !== "production",
         });

@@ -26,11 +26,12 @@
 import type {
   CarFrame,
   CarFrames,
+  CatFrames,
   CockpitSprites,
   RoadsideSprite,
 } from "./engine";
 
-export type { CockpitSprites };
+export type { CatFrames, CockpitSprites };
 
 const SHEET_URL = "/images/twingo-sheet-white.png";
 
@@ -673,6 +674,46 @@ export async function loadCockpit(): Promise<CockpitSprites | null> {
       dash: { image: dash, w: dash.width, h: dash.height },
       wheel,
       wheelFrame: wheel.height,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* ── the cat: easter-egg road-crosser in the racer, frames cut from the
+   site's 32px-cell sprite sheet (public/images/cat-sprite.png — the same
+   file RetroCat animates with). Rows follow RetroCat's frame table:
+   walkLeft = row 7, walkRight = row 6 (cols 0-7), jump/crouch = row 2
+   col 0. No procedural fallback — when the sheet is missing the run
+   simply rolls no cat */
+
+const CAT_URL = "/images/cat-sprite.png";
+const CAT_CELL = 32;
+
+export async function loadCat(): Promise<CatFrames | null> {
+  try {
+    const img = await loadImage(CAT_URL);
+    const cut = (row: number, col: number): HTMLCanvasElement => {
+      const c = document.createElement("canvas");
+      c.width = CAT_CELL;
+      c.height = CAT_CELL;
+      c.getContext("2d")?.drawImage(
+        img,
+        col * CAT_CELL,
+        row * CAT_CELL,
+        CAT_CELL,
+        CAT_CELL,
+        0,
+        0,
+        CAT_CELL,
+        CAT_CELL,
+      );
+      return c;
+    };
+    return {
+      left: Array.from({ length: 8 }, (_, i) => cut(7, i)),
+      right: Array.from({ length: 8 }, (_, i) => cut(6, i)),
+      jump: cut(2, 0),
     };
   } catch {
     return null;

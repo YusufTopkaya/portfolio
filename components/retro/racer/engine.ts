@@ -182,6 +182,14 @@ const DYING_TIME = 2.2; // total seconds between the fatal hit and game over
 // normal rolling drag) brings it to a standstill within this window,
 // then the smoke hangs for the remainder of DYING_TIME
 const DYING_STOP_T = 1.66;
+// out-of-fuel doom check: a dry tank normally ends the run at a full
+// standstill — but below this coast speed the remaining roll-out distance
+// is computable (exponential drag integrates to speed/ROLL_DRAG), and if
+// NO collectible can sits inside it the run is mathematically over. The
+// score freezes and the game ends after a short fade instead of making
+// the player watch a hopeless crawl die over ten seconds
+const DOOM_KMH = 25;
+const DOOM_FADE_T = 1.0;
 const PICKUP_GRACE_T = 0.3; // fuel burns free for this long after a can grab
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank is the run's death clock, OutRun-style: the drain is (nearly)
@@ -246,6 +254,21 @@ const TOUCH_CLUSTER_TOP = 16;
 const FAR_OFFROAD = 1.18; // |playerX| at/above this = stranded: a touch past the rumble strips (road edge ~1.1) — half the car over the grass is a respawn WITH or WITHOUT a tree there, and roadside pines (offset ≥ ~1.15) stay reachable so the tree crash rule lives
 const LANES = 3;
 
+/* the cat easter egg: at most once per run, somewhere in the first
+   CAT_MAX_KM km (run-random, NOT day-seeded — every player's encounter
+   lands somewhere else). It steps out of the roadside cover and walks
+   across the tarmac; running it over bypasses the heart ladder and ends
+   the run on the spot. Spawn chance scales with the day's map difficulty
+   like the can-hiding rate: 2% on easy maps, 1% on cruel ones */
+const CAT_MAX_KM = 10;
+// display-km → segments at the 180 km/h reference pace: 1 km = 20 s =
+// 1200 frames = 1200 segments
+const CAT_MAX_SEGS = CAT_MAX_KM * 1200;
+const CAT_WALK_SPEED = 0.55; // road half-widths per second — a stroll
+const CAT_TRIGGER_SEGS = 320; // starts crossing when the car is this near
+const CAT_HIT_X = 0.26; // lateral hit window (a touch under the can's 0.28)
+const CAT_SCALE = 1.8; // roadside-sprite scale factor (bush = 2.2)
+
 const COLORS = {
   light: {
     road: "#6b6b70",
@@ -269,6 +292,15 @@ export interface CockpitSprites {
 }
 
 export type RacerView = "chase" | "cockpit";
+
+/** the cat easter egg's frames, cut from the site's 32px-cell sheet
+    (public/images/cat-sprite.png — same file RetroCat uses): 8 walk
+    frames per direction plus the crouch pose it flies off in */
+export interface CatFrames {
+  left: HTMLCanvasElement[];
+  right: HTMLCanvasElement[];
+  jump: HTMLCanvasElement;
+}
 
 /* cockpit dash geometry as fractions of the drawn dash rect — measured
    and printed by scripts/build-cockpit.mjs */
@@ -1356,6 +1388,17 @@ export interface RacerEngine {
     big: boolean;
     golden: boolean;
   } | null;
+  /** dev-only (e2e probes): the cat easter egg's live state */
+  debugCat?: () => {
+    spawned: boolean;
+    segIdx: number;
+    x: number;
+    crossing: boolean;
+    gone: boolean;
+    hit: boolean;
+  };
+  /** dev-only (e2e probes): force-spawn the cat at an absolute segment */
+  debugForceCat?: (segIdx: number) => void;
   /** dev-only (e2e probes): last render's road-fill diagnostics — how far
       above the buffer bottom the nearest painted road line sat (a large
       gap means the near gap-fill painted a big fake road) plus cull counts */
@@ -1401,6 +1444,9 @@ export function createEngine(opts: {
   gasCan: CarFrame;
   /** gold-tinted copy of the gas can sprite, for the rare golden pickups */
   gasCanGolden?: CarFrame;
+  /** cat easter-egg frames — null when the sprite sheet is missing (the
+      run then rolls no cat at all) */
+  cat?: CatFrames | null;
   /** cockpit overlay sprites — null when the assets are missing (chase-only) */
   cockpit?: CockpitSprites | null;
   /** initial camera; forced to "chase" when no cockpit sprites are loaded */
@@ -1423,6 +1469,9 @@ export function createEngine(opts: {
   /** fired on the THIRD crash — the engine dies: the run ends in a
       driverless coast, so play the breakdown sputter instead of crash() */
   onBreakdown?: () => void;
+  /** fired the instant the car hits the crossing cat (fatal — the
+      breakdown sputter follows through the normal fatal path) */
+  onCatHit?: () => void;
   /** fired when the score crosses into a higher league bracket (once per
       tier per run) — the engine grants +1 heart or a streak shield, this
       is the fanfare hook */
@@ -1547,6 +1596,35 @@ export function createEngine(opts: {
   // mercy can: one rescue can per dry spell, injected by update() when
   // the tank runs below 1.5 dots with nothing collectible ahead
   let mercyUsed = false;
+  // the cat easter egg: one roll per run (needs the sprite sheet). It
+  // waits dormant at its absolute segment until the car closes to
+  // CAT_TRIGGER_SEGS, then walks across the road, ping-ponging between
+  // the verges so a slow approach doesn't miss it. One hit ends the run
+  const catFrames = opts.cat ?? null;
+  const cat = {
+    spawned: false,
+    segIdx: -1,
+    x: 0,
+    dir: 1 as 1 | -1,
+    crossing: false,
+    gone: false,
+    hitAt: -10, // engine time of the fatal hit (-1... uses -10 sentinel)
+    // screen-space ballistic flight after the hit (flyCans-style, but
+    // gravity-driven and up-and-over, never down through the floor)
+    flyX: 0,
+    flyY: 0,
+    flyVX: 0,
+    flyVY: 0,
+  };
+  if (catFrames) {
+    const d = Math.min(10, Math.max(1, opts.mapDifficulty ?? 5.5));
+    const chance = 0.02 - ((d - 1) / 9) * 0.01; // easy 2% → cruel 1%
+    if (Math.random() < chance) {
+      cat.spawned = true;
+      // somewhere in the first CAT_MAX_KM, never at the very start
+      cat.segIdx = Math.floor(400 + Math.random() * (CAT_MAX_SEGS - 400));
+    }
+  }
   // record chase: the leaderboard tops to beat this run (ascending) —
   // crossing one fires the centre "NEW <label> RECORD!" banner once
   let recordTargets: { score: number; label: string }[] = [];
@@ -1715,14 +1793,18 @@ export function createEngine(opts: {
   // momentum under a smoke cloud, then game over
   let dying = false;
   let dyingT = 0;
+  // doom fade: the tank is dry, the coast is slow and the math says no
+  // can is reachable — >0 counts down the last beat before game over
+  let doomT = 0;
   // centre banner state for the crash cost readout (cause + penalties)
   let lastCrashAt = -10;
-  let lastCrashCause: "pothole" | "tree" | "offroad" = "offroad";
+  let lastCrashCause: "pothole" | "tree" | "offroad" | "cat" = "offroad";
   // shared crash: stranded off-road, a pothole or a roadside pine all
   // cost the same — CRASH_FUEL dots, a broken chain, a heart. The first
   // two also mean a centre-line respawn; the third is fatal and lets the
-  // car coast out where it crashed
-  const crashRespawn = (cause: "pothole" | "tree" | "offroad") => {
+  // car coast out where it crashed. ("cat" only ever arrives with the
+  // heart ladder pre-sunk — it IS the fatal crash)
+  const crashRespawn = (cause: "pothole" | "tree" | "offroad" | "cat") => {
     if (dying) return; // already coasting to the end — no double jeopardy
     crashes++;
     state.fuel = Math.max(0, state.fuel - CRASH_FUEL);
@@ -2143,6 +2225,35 @@ export function createEngine(opts: {
             break;
           }
         }
+        // the crossing cat: a MOVING hazard — running it over skips the
+        // heart ladder entirely and ends the run where it happened.
+        // AIRBORNE cars clear it like a pothole (the wheels are off the
+        // tarmac), and a dying wreck can't double-dip
+        if (
+          cat.crossing &&
+          !cat.gone &&
+          !dying &&
+          si === cat.segIdx &&
+          airT <= 0 &&
+          Math.abs(state.playerX - cat.x) < CAT_HIT_X &&
+          state.speed > MAX_SPEED * 0.02
+        ) {
+          cat.gone = true;
+          cat.hitAt = state.time;
+          // launch up-and-over, away from the impact side (never down
+          // through the floor) — integrated in update, drawn screen-space
+          cat.flyX = width / 2 + (cat.x - state.playerX) * width * 0.2;
+          cat.flyY = height * (state.view === "cockpit" ? 0.3 : 0.55);
+          const side = Math.sign(cat.x - state.playerX) || cat.dir;
+          cat.flyVX = side * width * 0.22;
+          cat.flyVY = -height * 0.95;
+          opts.onCatHit?.();
+          // the heart ladder doesn't apply: sink it, then let the shared
+          // fatal path (dying coast, smoke, banner) take over
+          crashes = CRASH_MAX - 1;
+          crashRespawn("cat");
+          break;
+        }
         if (state.respawn > 0) break;
         const pk = seg.pickup;
         // scarcity-hidden cans aren't on the road — passing them neither
@@ -2218,11 +2329,85 @@ export function createEngine(opts: {
           }
         }
       }
+      // doom check: dry tank + slow coast + no collectible can inside the
+      // remaining roll-out distance = the run is already lost, only the
+      // waiting remains. Freeze the score and end it after a short fade.
+      // The roll-out integrates the exponential drag analytically
+      // (distance = speed / ROLL_DRAG), padded 25% for downhill hope; a
+      // live mercy can ahead always counts as reachable — rescuing this
+      // exact situation is its whole point
+      if (state.fuel <= 0 && !dying) {
+        if (doomT > 0) {
+          doomT -= dt;
+          if (doomT <= 0) state.gameOver = true;
+        } else if (
+          state.speed > 0 &&
+          (state.speed / MAX_SPEED) * 180 < DOOM_KMH
+        ) {
+          const playerSegIdx = Math.floor(
+            (state.position + PLAYER_Z) / SEGMENT_LENGTH,
+          );
+          const reachSegs =
+            Math.ceil((state.speed / ROLL_DRAG / SEGMENT_LENGTH) * 1.25) + 2;
+          let canAhead = false;
+          for (
+            let si = playerSegIdx;
+            si < playerSegIdx + Math.max(reachSegs, 90);
+            si++
+          ) {
+            const seg = segments[ringSlot(si)];
+            if (seg.index !== si) break; // generator hasn't reached this slot
+            const pk = seg.pickup;
+            if (!pk || pk.missed || !pickupActive(seg)) continue;
+            if (si < playerSegIdx + reachSegs || pk.ordinal < 0) {
+              canAhead = true;
+              break;
+            }
+          }
+          if (!canAhead) doomT = DOOM_FADE_T;
+        }
+      } else {
+        doomT = 0; // revived mid-fade (a downhill roll into a can) — live on
+      }
       // stranded on the grass past the rumble strips: respawn on the
       // centre line at a standstill with a breathing fade-in — a
       // CRASH_FUEL-dot penalty plus permanent speed damage, so crashing
       // directly shortens AND slows the run
       if (Math.abs(state.playerX) >= FAR_OFFROAD) crashRespawn("offroad");
+    }
+
+    // the cat: dormant until the car closes in, then a stroll back and
+    // forth across the tarmac (ping-pong between the verges, so a slow
+    // approach still meets it mid-road instead of finding it long gone).
+    // Passed by unhit? The road behind never comes back — one chance
+    if (cat.hitAt >= 0) {
+      // ballistic flight after the hit: a gravity arc up and off to the
+      // impact side — the render's age check handles the despawn
+      cat.flyVY += height * 2.4 * dt;
+      cat.flyX += cat.flyVX * dt;
+      cat.flyY += cat.flyVY * dt;
+    } else if (cat.spawned && !cat.gone) {
+      const carSegNow = Math.floor(
+        (state.position + PLAYER_Z) / SEGMENT_LENGTH,
+      );
+      if (!cat.crossing) {
+        if (carSegNow >= cat.segIdx - CAT_TRIGGER_SEGS) {
+          cat.crossing = true;
+          cat.dir = Math.random() < 0.5 ? 1 : -1;
+          cat.x = -cat.dir * 1.9; // steps out of the verge cover
+        }
+      } else if (carSegNow > cat.segIdx + 2) {
+        cat.gone = true;
+      } else {
+        cat.x += cat.dir * CAT_WALK_SPEED * dt;
+        if (cat.x > 1.9) {
+          cat.x = 1.9;
+          cat.dir = -1;
+        } else if (cat.x < -1.9) {
+          cat.x = -1.9;
+          cat.dir = 1;
+        }
+      }
     }
 
     // score: metres driven at HALF rate, multiplied when cruising fast
@@ -2241,7 +2426,9 @@ export function createEngine(opts: {
             : kmh > 110
               ? 2
               : 1;
-    state.score += ((kmh * dt) / 3.6) * state.multiplier * 0.5;
+    // doomed (dry tank, no reachable can): the score freezes — the run is
+    // over, only the fade-out beat remains
+    if (doomT <= 0) state.score += ((kmh * dt) / 3.6) * state.multiplier * 0.5;
 
     // bracket reward: crossing into the next league tier (once per tier
     // per run — the index only ever climbs) pays +1 heart back, or a
@@ -2816,6 +3003,54 @@ export function createEngine(opts: {
           // crest-hidden: the same bobbing "?" the cans use — fuel or
           // hole, you only find out past the crest
           drawCrestMystery(hx, Math.round(segment.clip), rx, segment.index);
+        }
+      }
+
+      // the crossing cat: drawn like a roadside sprite but at its LIVE x
+      // (it walks), walk-cycling with the sheet's row. Crest-hidden cats
+      // get the same mystery "?" cans and holes share — an instant-death
+      // hazard must never be invisible
+      if (
+        catFrames &&
+        cat.crossing &&
+        !cat.gone &&
+        segment.index === cat.segIdx
+      ) {
+        const scale = segment.p1.screen.scale;
+        const frames = cat.dir > 0 ? catFrames.right : catFrames.left;
+        const fr = frames[Math.floor(state.time * 10) % frames.length];
+        const destW = fr.width * scale * (width / 2) * 4.2 * CAT_SCALE;
+        const destH = fr.height * scale * (width / 2) * 4.2 * CAT_SCALE;
+        if (destW >= 2) {
+          const destX =
+            segment.p1.screen.x +
+            scale * cat.x * ROAD_WIDTH * (width / 2) -
+            destW / 2;
+          const destY = segment.p1.screen.y - destH;
+          let visibleH = destH;
+          if (segment.clip && destY + destH > segment.clip) {
+            visibleH = segment.clip - destY;
+          }
+          if (visibleH > 0) {
+            ctx.drawImage(
+              fr,
+              0,
+              0,
+              fr.width,
+              (visibleH / destH) * fr.height,
+              Math.round(destX),
+              Math.round(destY),
+              Math.round(destW),
+              Math.round((visibleH / destH) * destH),
+            );
+          } else {
+            drawCrestMystery(
+              destX + destW / 2,
+              Math.round(segment.clip || 0),
+              destW,
+              segment.index,
+            );
+          }
         }
       }
 
@@ -3655,6 +3890,21 @@ export function createEngine(opts: {
     // (golden tint and big-can size included) arcs over the world and
     // docks onto the HUD jerrycan, shrinking as it goes — docking fires
     // the yellow halo above. Drawn over the HUD so the arc never clips
+    // the launched cat: a ballistic arc in screen space (integrated in
+    // update), the sheet's crouch pose facing the flight direction
+    if (catFrames && cat.hitAt >= 0) {
+      const age = state.time - cat.hitAt;
+      if (age < 1.4) {
+        const fr = catFrames.jump;
+        const s = Math.max(6, Math.round(height * 0.09));
+        ctx.save();
+        ctx.translate(Math.round(cat.flyX), Math.round(cat.flyY));
+        if (cat.flyVX < 0) ctx.scale(-1, 1);
+        ctx.drawImage(fr, -s / 2, -s / 2, s, s * (fr.height / fr.width));
+        ctx.restore();
+      }
+    }
+
     if (flyCans.length > 0 && !state.gameOver) {
       const uiBase = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
       const ui =
@@ -3738,7 +3988,9 @@ export function createEngine(opts: {
           ? "POTHOLE!"
           : lastCrashCause === "tree"
             ? "TREE!"
-            : "OFF ROAD!";
+            : lastCrashCause === "cat"
+              ? "CAT!"
+              : "OFF ROAD!";
       const msg =
         crashes >= CRASH_MAX
           ? `${label} ENGINE DEAD!`
@@ -3857,6 +4109,28 @@ export function createEngine(opts: {
           return null;
         };
 
+  const debugCat =
+    process.env.NODE_ENV === "production"
+      ? undefined
+      : () => ({
+          spawned: cat.spawned,
+          segIdx: cat.segIdx,
+          x: cat.x,
+          crossing: cat.crossing,
+          gone: cat.gone,
+          hit: cat.hitAt >= 0,
+        });
+  const debugForceCat =
+    process.env.NODE_ENV === "production"
+      ? undefined
+      : (segIdx: number) => {
+          cat.spawned = true;
+          cat.segIdx = segIdx;
+          cat.gone = false;
+          cat.crossing = false;
+          cat.hitAt = -10;
+        };
+
   return {
     update,
     render,
@@ -3866,6 +4140,8 @@ export function createEngine(opts: {
       recordTargets = t;
     },
     debugNextPickup,
+    debugCat,
+    debugForceCat,
     get probe() {
       return probe;
     },

@@ -78,6 +78,10 @@ export interface RacerAudio {
   /** third crash = fatal: a classic arcade explosion — noise burst with
       a collapsing lowpass over a pitch-diving square boom */
   breakdown(): void;
+  /** ran over the crossing cat: a hard, short metal-and-meat "tak" —
+      tighter and harsher than the pothole thud, then the fatal path's
+      breakdown follows on its own */
+  catHit(): void;
   /** league bracket crossed mid-run: a bright rising fanfare with a
       sparkle on top — the marquee reward moment */
   bracket(): void;
@@ -861,6 +865,34 @@ export function createRacerAudio(): RacerAudio {
       debris.connect(df).connect(dg).connect(engineBus);
       debris.start(t + 0.15);
       debris.stop(t + 0.55);
+    },
+
+    catHit() {
+      if (!ctx || !engineBus) return;
+      const t = ctx.currentTime;
+      // a hard "tak": a tight mid-band thump (metal panel + mass) with a
+      // short high ping on top — harsher and much shorter than the
+      // pothole crash(); the fatal path's breakdown() layers right after
+      const thump = makeNoise(ctx);
+      const f1 = ctx.createBiquadFilter();
+      f1.type = "lowpass";
+      f1.frequency.value = 320;
+      const g1 = ctx.createGain();
+      g1.gain.setValueAtTime(0.55, t);
+      g1.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      thump.connect(f1).connect(g1).connect(engineBus);
+      thump.start(t);
+      thump.stop(t + 0.2);
+      const ping = ctx.createOscillator();
+      ping.type = "triangle";
+      ping.frequency.setValueAtTime(2100, t);
+      ping.frequency.exponentialRampToValueAtTime(480, t + 0.12);
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.16, t);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+      ping.connect(g2).connect(engineBus);
+      ping.start(t);
+      ping.stop(t + 0.16);
     },
 
     bracket() {
