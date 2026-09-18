@@ -43,6 +43,18 @@ export interface RacerInput {
   brakeAmt?: number;
 }
 
+/** one road object a CPU bot pilot can see (engine.perceive) */
+export interface PerceivedObject {
+  kind: "can" | "hole";
+  /** absolute segment index */
+  segIdx: number;
+  /** effective lateral position in road half-widths (canSpread applied
+      for cans — the same value the pickup grab check uses) */
+  x: number;
+  big?: boolean;
+  golden?: boolean;
+}
+
 export interface CarFrame {
   image: CanvasImageSource;
   w: number;
@@ -1446,11 +1458,21 @@ export interface RacerEngine {
       through bots and bots pass through players. Solo play never sets
       one, so it stays byte-identical */
   setRemoteGhost(id: string, ghost: boolean): void;
-  /** the difficulty-adjusted (curveGain) curve of the segment AT a world
-      position — current segment only, no look-ahead. Back-row negative
-      positions clamp to the first segment. Feeds the CPU bot sim: the
-      bots react to the bend they are in, never preview the road ahead */
+  /** the difficulty-adjusted (curveGain) curve of the segment the car at
+      camera position `pos` is CURRENTLY on (position + PLAYER_Z — the
+      same segment the physics pushes on) — no look-ahead. Back-row
+      negative positions clamp to the first segment. Feeds the CPU bot
+      pilot: the bots react to the bend they are in, never preview the
+      road ahead */
   curveAt(pos: number): number;
+  /** the pilot's eyes (CPU bots): cans and holes on the ring within
+      `aheadSegments` of the car at camera position `pos`, nearest first.
+      Cans respect the same pickupActive rule the render/pickup scan use
+      (taken, scarcity-hidden and already-missed cans are invisible, so a
+      bot never chases a can it can't grab) and report their EFFECTIVE
+      lateral (canSpread applied, same as the grab check). Human screen
+      distance is ~60-80 segments — the caller's choice, not enforced */
+  perceive(pos: number, aheadSegments: number): PerceivedObject[];
   /** spectate a live peer after our own death: render-only mode — the
       camera rides the target, the player car is hidden and its input,
       fuel, pickups and collisions are all suspended. null restores play.
@@ -4772,7 +4794,28 @@ export function createEngine(opts: {
       if (ghost) ghostRemotes.add(id);
       else ghostRemotes.delete(id);
     },
-    curveAt: (pos) => findSegment(Math.max(0, pos)).curve * curveGain,
+    curveAt: (pos) =>
+      findSegment(Math.max(0, pos) + PLAYER_Z).curve * curveGain,
+    perceive: (pos, aheadSegments) => {
+      const out: PerceivedObject[] = [];
+      const start = Math.floor((Math.max(0, pos) + PLAYER_Z) / SEGMENT_LENGTH);
+      for (let si = start; si < start + aheadSegments; si++) {
+        const seg = segments[ringSlot(si)];
+        if (seg.index !== si) break; // the ring doesn't reach that far yet
+        const pk = seg.pickup;
+        if (pk && !pk.missed && pickupActive(seg)) {
+          out.push({
+            kind: "can",
+            segIdx: si,
+            x: pk.x * canSpread,
+            big: !!pk.big,
+            golden: !!pk.golden,
+          });
+        }
+        if (seg.hole) out.push({ kind: "hole", segIdx: si, x: seg.hole.x });
+      }
+      return out;
+    },
     setSpectate: (t) => {
       spectateTarget = t;
     },
@@ -4790,5 +4833,7 @@ export const ENGINE_CONSTANTS = {
   RUMBLE_LENGTH,
   ROAD_WIDTH,
   CAMERA_HEIGHT,
+  CAMERA_DEPTH,
+  PLAYER_Z,
   MAX_SPEED,
 };

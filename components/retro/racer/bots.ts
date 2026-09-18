@@ -1,99 +1,139 @@
 /**
- * CPU ghost bots for VS RACE — bronze-level drivers simulated ONLY by the
- * lobby leader and streamed to the room as ordinary remote-car states
- * (the `bst` action in net.ts). Every client renders them as ghost
- * remotes: no car-car collision either way (engine.setRemoteGhost), they
- * never die and never touch pickups/holes, so they emit no take/hole/dead
- * traffic — just 20 Hz poses.
+ * CPU ghost bots for VS RACE — bronze-level drivers that play by FULL
+ * player rules. Each bot wraps a REAL engine instance on the lobby leader
+ * (same per-race seed as the humans, its own track generator so pickup /
+ * hole state is private like every player's, its grid startX/startPos)
+ * and drives it ONLY by generating a `RacerInput` every frame — gas,
+ * brake and analog steer, never render. That buys the whole rulebook for
+ * free: real fuel drain and the death clock, can pickups through the real
+ * scan (streaks, big/golden cans, boost, the mercy can), pothole falls,
+ * off-road/tree crashes with the 3-heart damage ladder, the doom check —
+ * and game over. Bots are MORTAL: an empty tank or a third heart ends
+ * their race and parks a wreck like any human's.
  *
- * Track knowledge is deliberately limited to the segment the bot is
- * CURRENTLY on (`curveAt(pos)` — no look-ahead, no preview sampling):
- * the steering reacts to the bend it is already inside, low-pass filtered
- * through a reaction lag with an imperfect gain, so the car visibly
- * wobbles, drifts wide mid-bend and only then corrects back toward the
- * centre line (a weak recentering pull — positional self-awareness, not
- * track knowledge). Bends also cap the cruise at a margin under the
- * corner's hold speed, so bots bleed speed in curves like a scrub.
+ * Perception is deliberately limited — the pilot is still bronze and
+ * still knows no track ahead:
+ * - `engine.curveAt(pos)` — the segment the car is CURRENTLY on, nothing
+ *   further (no look-ahead/preview sampling);
+ * - `engine.perceive(pos, PERCEPTION_SEGS)` — only the cans/holes inside
+ *   a ~60-80 segment window (human screen distance), taken/hidden cans
+ *   already filtered by the engine.
+ * On top of that sits the bronze calibration: low-pass steering
+ * (reaction lag), an imperfect hold gain, idle wander, a weak after-drift
+ * recentering pull, per-bot eagerness so cans get MISSED (real fuel
+ * pressure), per-bot caution so holes sometimes get clipped at the lag,
+ * and actual brake input for bends entered too hot. Rubber banding
+ * stretches/shrinks the cruise against the best human.
  *
- * The lateral model mirrors the player physics in engine.ts (same
- * authority falloff with speed, same CENTRIFUGAL push) so a bot's line
- * through a bend reads like a real, mediocre Twingo driver.
+ * Bots never broadcast take/dead-by-crash messages of their own beyond
+ * the shared-hazard rule: a bot's hole fall goes out as `hole(segIdx)`
+ * (consumed for everyone, exactly like a human's); cans are effectively
+ * per-player (0.01 s respawn) so takes are not shared. Death is reported
+ * through the ordinary 20 Hz `bst` stream (state with dead + final
+ * score) — receivers park the wreck via markRemoteDead. Car-car
+ * collision stays OFF both ways (ghost remotes, engine.setRemoteGhost).
  */
 
-import { ENGINE_CONSTANTS } from "./engine";
+import {
+  type CarFrame,
+  type CarFrames,
+  type CatFrames,
+  createEngine,
+  ENGINE_CONSTANTS,
+  type RacerEngine,
+  type RacerInput,
+} from "./engine";
 import type { NetCarState } from "./net";
+import { createTrackGenerator } from "./track";
 
 const MAX_SPEED = ENGINE_CONSTANTS.MAX_SPEED; // world units/s (180 km/h)
+const SEGMENT_LENGTH = ENGINE_CONSTANTS.SEGMENT_LENGTH;
+const PLAYER_Z = ENGINE_CONSTANTS.PLAYER_Z;
 /** mirrors engine.ts — the centrifugal push constant of the player car */
 const CENTRIFUGAL = 0.4;
 
 /* ── calibration (bronze) ── */
 /** cruise speed as a fraction of MAX_SPEED, per bot */
-const SKILL_MIN = 0.7;
-const SKILL_MAX = 0.85;
+const CRUISE_MIN = 0.7;
+const CRUISE_MAX = 0.85;
 /** steering low-pass time constant (reaction lag), per bot */
 const STEER_LAG_MIN = 0.18;
 const STEER_LAG_MAX = 0.3;
 /** fraction of the steer needed to HOLD the current bend — under 1 means
-    the bot understeers and rides wide until the recentering pulls it
-    back (the visible wobble) */
+    the bot understeers and rides wide before the lane pull corrects it */
 const CORNER_GAIN_MIN = 0.72;
 const CORNER_GAIN_MAX = 0.88;
-/** weak pull toward x = 0 inside the desired-steer mix (per half-width
-    of offset) — the bot corrects AFTER drifting out, never before */
-const RECENTER_GAIN = 0.35;
 /** idle wander: a slow sine on the steering, per-bot amplitude/rate */
 const WANDER_AMP_MIN = 0.06;
 const WANDER_AMP_MAX = 0.14;
 const WANDER_RATE_MIN = 0.5; // rad/s
 const WANDER_RATE_MAX = 1.1;
+/** lane pull toward the target line (center, a can, a dodge) per
+    half-width of error — weak enough that the car corrects AFTER
+    drifting, like a scrub */
+const LANE_GAIN = 1.1;
+/** how far the pilot sees, per bot: ~human screen distance in segments */
+const PERCEPTION_MIN = 60;
+const PERCEPTION_MAX = 80;
+/** per-can attempt probability, per bot — the rest are driven past
+    (ignored cans are how bots feel real fuel pressure). A dry-ish tank
+    (< DESPERATE_FUEL dots) makes every can worth the detour */
+const EAGERNESS_MIN = 0.65;
+const EAGERNESS_MAX = 0.9;
+const DESPERATE_FUEL = 2;
+/** hole dodging: reaction distance in segments and dodge strength, per
+    bot — a low-caution bot notices late and clips the odd hole at the
+    steering lag */
+const CAUTION_MIN = 0.6;
+const CAUTION_MAX = 1;
 /** cruise cap in a bend: this fraction of the corner's hold speed
-    (p·|curve|·CENTRIFUGAL = 1), so bots visibly slow for curves */
+    (p·|curve|·CENTRIFUGAL = 1) — over it, the pilot BRAKES */
 const CORNER_MARGIN = 0.85;
-/** speed chases its target with this time constant — bots don't snap
-    to the corner speed, they ease off like a lifting driver */
-const SPEED_LAG = 0.8;
 /** rubber banding: past this gap to the best human (world units — 3
     segments) the cruise stretches/shrinks by RUBBER_GAIN */
 const RUBBER_DIST = 600;
 const RUBBER_GAIN = 0.08;
-/** mild human avoidance (ghosts never collide — this only keeps a bot
-    from parking INSIDE a player's sprite for minutes): lateral nudge
-    when within AVOID_SEGS and |Δx| < AVOID_X */
-const AVOID_SEGS = 1.5;
-const AVOID_X = 0.5;
-const AVOID_RATE = 0.8; // half-widths/s
-/** bots never leave the tarmac (they're scenery with stakes, not
-    crashers) — a hard clamp under the stranded threshold */
-const X_CLAMP = 1.05;
-
-const SEGMENT_LENGTH = 200; // mirrors engine.ts (kept local: units note)
 
 export interface Bot {
   id: string; // "cpu-N"
   name: string; // "CPU N"
-  /** world position along the track (same units as EngineState.position) */
-  pos: number;
-  /** lateral, road half-widths (±1 = edge) */
-  x: number;
-  /** world units/s (same scale as EngineState.speed) */
-  speed: number;
-  score: number;
+  /** the real engine this bot drives (leader-local, never rendered) */
+  engine: RacerEngine;
+  dead: boolean;
+  deadScore: number;
+  /** per-bot decision-hash seed (can-attempt rolls stay consistent per
+      can — no flapping frame to frame) */
+  seed: number;
   /** low-passed steering currently applied, -1..1 */
   steer: number;
-  /** per-bot calibration (rolled from the race seed at createBots) */
-  skill: number;
+  /* per-bot bronze calibration (rolled from the race seed) */
+  cruise: number;
   steerLag: number;
   cornerGain: number;
   wanderAmp: number;
   wanderRate: number;
   wanderPhase: number;
+  eagerness: number;
+  caution: number;
+  perception: number;
 }
 
-/** a human pose for the mild avoidance nudge + rubber band reference */
+/** a human pose — the rubber band's reference (best along-track pos) */
 export interface BotHuman {
   pos: number;
   x: number;
+}
+
+/** everything a bot engine needs that the leader already has loaded */
+export interface BotEngineDeps {
+  car: CarFrames;
+  gasCan: CarFrame;
+  gasCanGolden?: CarFrame;
+  cat?: CatFrames | null;
+  mapDifficulty?: number;
+  /** a bot fell into a pothole: broadcast `hole(segIdx)` — the same
+      shared-hazard rule humans follow (consumed for everyone) */
+  onHoleHit?: (botId: string, absSegIdx: number) => void;
 }
 
 /* mulberry32 — small seeded PRNG, same style as track.ts */
@@ -108,125 +148,197 @@ const mulberry32 = (seed: number) => {
   };
 };
 
+/* deterministic 0..1 hash — the per-can attempt roll: the same can gets
+   the same decision every frame (no flapping), different cans differ */
+const hash01 = (a: number, b: number) => {
+  let h = (Math.imul(a, 374761393) + Math.imul(b, 668265263)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, v));
 
-/** create `count` bots (ids cpu-1..cpu-N, names CPU 1…CPU N) with per-bot
-    bronze calibration rolled from the race seed — a rematch reshuffles
-    the field. Cars start parked at the origin; the caller places them on
-    the grid (pos/x from RACE_GRID, after the humans) */
-export function createBots(count: number, seed: number): Bot[] {
+/** create `count` bots (ids cpu-1..cpu-N, names CPU 1…CPU N), each with
+    its own engine on a FRESH generator of the race seed — same layout as
+    the humans, private pickup/hole state, exactly like every player's
+    own engine. `grid[i]` is the bot's start slot (x / possibly-negative
+    pos). Per-bot calibration is rolled from the race seed — a rematch
+    reshuffles the field */
+export function createBots(
+  count: number,
+  seed: number,
+  grid: { x: number; pos: number }[],
+  deps: BotEngineDeps,
+): Bot[] {
   const rng = mulberry32(seed);
   const out: Bot[] = [];
   for (let i = 0; i < count; i++) {
+    const id = `cpu-${i + 1}`;
+    const track = createTrackGenerator(seed);
+    const slot = grid[i] ?? { x: 0, pos: 0 };
+    const engine = createEngine({
+      segments: track.segments,
+      extend: track.extend,
+      firstIndex: track.firstIndex,
+      generated: track.generated,
+      // render-only (tree crashes read seg.sprites) — bots never render,
+      // so no roadside sprite assets are built per bot
+      roadside: [],
+      car: deps.car,
+      gasCan: deps.gasCan,
+      gasCanGolden: deps.gasCanGolden,
+      cat: deps.cat ?? null,
+      view: "chase",
+      mapDifficulty: deps.mapDifficulty,
+      startX: slot.x,
+      startPos: slot.pos,
+      onHoleHit: (absSegIdx: number) => deps.onHoleHit?.(id, absSegIdx),
+      // no audio hooks, no onTakeCan (cans respawn in 0.01 s — takes are
+      // effectively per-player), no debug probe
+    });
     out.push({
-      id: `cpu-${i + 1}`,
+      id,
       name: `CPU ${i + 1}`,
-      pos: 0,
-      x: 0,
-      speed: 0,
-      score: 0,
+      engine,
+      dead: false,
+      deadScore: 0,
+      seed: (seed ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0,
       steer: 0,
-      skill: SKILL_MIN + rng() * (SKILL_MAX - SKILL_MIN),
+      cruise: CRUISE_MIN + rng() * (CRUISE_MAX - CRUISE_MIN),
       steerLag: STEER_LAG_MIN + rng() * (STEER_LAG_MAX - STEER_LAG_MIN),
       cornerGain: CORNER_GAIN_MIN + rng() * (CORNER_GAIN_MAX - CORNER_GAIN_MIN),
       wanderAmp: WANDER_AMP_MIN + rng() * (WANDER_AMP_MAX - WANDER_AMP_MIN),
       wanderRate: WANDER_RATE_MIN + rng() * (WANDER_RATE_MAX - WANDER_RATE_MIN),
       wanderPhase: rng() * Math.PI * 2,
+      eagerness: EAGERNESS_MIN + rng() * (EAGERNESS_MAX - EAGERNESS_MIN),
+      caution: CAUTION_MIN + rng() * (CAUTION_MAX - CAUTION_MIN),
+      perception: Math.round(
+        PERCEPTION_MIN + rng() * (PERCEPTION_MAX - PERCEPTION_MIN),
+      ),
     });
   }
   return out;
 }
 
-/** advance the whole field one frame. `curveAt(pos)` MUST return the
-    difficulty-adjusted curve of the segment AT that world position only
-    (engine.curveAt) — the bots get no preview of the road ahead */
-export function updateBots(
-  bots: Bot[],
-  dt: number,
-  curveAt: (pos: number) => number,
-  humans: BotHuman[],
-): void {
-  if (dt <= 0) return;
-  const bestHuman = humans.length
-    ? Math.max(...humans.map((h) => h.pos))
-    : null;
-  for (const b of bots) {
-    const curve = curveAt(b.pos);
-    const p = clamp(b.speed / MAX_SPEED, 0, 1.2);
+/* the pilot: turn one frame of limited perception into a RacerInput.
+   Everything here is reaction, never prediction */
+function pilotInput(b: Bot, dt: number, humans: BotHuman[]): RacerInput {
+  const st = b.engine.state;
+  const p = clamp(st.speed / MAX_SPEED, 0, 1.2);
+  const curve = b.engine.curveAt(st.position); // current segment only
+  const seen = b.engine.perceive(st.position, b.perception);
+  const carSeg = Math.floor(
+    (Math.max(0, st.position) + PLAYER_Z) / SEGMENT_LENGTH,
+  );
 
-    // ── speed: per-bot cruise, rubber-banded against the best human,
-    // capped at a margin under the CURRENT bend's hold speed ──
-    let target = b.skill * MAX_SPEED;
-    if (bestHuman !== null) {
-      if (b.pos < bestHuman - RUBBER_DIST) target *= 1 + RUBBER_GAIN;
-      else if (b.pos > bestHuman + RUBBER_DIST) target *= 1 - RUBBER_GAIN;
+  // ── lane target: road centre by default (the weak recentering pull),
+  // the nearest can this bot BOTHERED with (eagerness roll — the rest
+  // are driven straight past), a threatening hole overrides everything ──
+  let laneTarget = 0;
+  for (const obj of seen) {
+    if (obj.kind !== "can") continue;
+    if (hash01(b.seed, obj.segIdx) < b.eagerness || st.fuel < DESPERATE_FUEL) {
+      laneTarget = clamp(obj.x, -1, 1);
+      break; // nearest attempted can only
     }
-    if (Math.abs(curve) > 0.5) {
-      target = Math.min(
-        target,
-        (CORNER_MARGIN * MAX_SPEED) / (Math.abs(curve) * CENTRIFUGAL),
+  }
+  const holeReactSegs = Math.round(18 + b.caution * 22);
+  for (const obj of seen) {
+    if (obj.kind !== "hole") continue;
+    if (obj.segIdx - carSeg > holeReactSegs) continue; // too far to matter
+    if (Math.abs(obj.x - st.playerX) < 0.55) {
+      // dodge to the far side; low-caution bots aim shallow (and the lag
+      // makes even a good dodge late sometimes — holes DO get clipped)
+      laneTarget = clamp(
+        obj.x + (obj.x > st.playerX ? -1 : 1) * (0.7 + 0.4 * b.caution),
+        -1,
+        1,
       );
+      break;
     }
-    b.speed += (target - b.speed) * Math.min(1, dt / SPEED_LAG);
-    b.pos += b.speed * dt;
+  }
 
-    // ── steering: react to the bend we're IN (no preview), low-passed
-    // through the reaction lag, with an imperfect gain so the car rides
-    // wide before the weak recentering pulls it back — plus idle wander ──
-    b.wanderPhase += b.wanderRate * dt;
-    const authority = 2.2 * (1 - 0.45 * Math.min(1, p)); // engine.ts
-    const holdSteer = (p * curve * CENTRIFUGAL) / Math.max(0.6, authority);
-    const desired = clamp(
-      b.cornerGain * holdSteer -
-        RECENTER_GAIN * b.x +
-        b.wanderAmp * Math.sin(b.wanderPhase),
-      -1,
-      1,
+  // ── steering: hold the CURRENT bend (imperfect gain), chase the lane,
+  // wander — all low-passed through the reaction lag ──
+  b.wanderPhase += b.wanderRate * dt;
+  const authority = 2.2 * (1 - 0.45 * Math.min(1, p)); // engine.ts
+  const holdSteer = (p * curve * CENTRIFUGAL) / Math.max(0.6, authority);
+  const desired = clamp(
+    b.cornerGain * holdSteer -
+      LANE_GAIN * (st.playerX - laneTarget) +
+      b.wanderAmp * Math.sin(b.wanderPhase),
+    -1,
+    1,
+  );
+  b.steer += (desired - b.steer) * Math.min(1, dt / b.steerLag);
+
+  // ── pedals: rubber-banded cruise, capped under the CURRENT bend's
+  // hold speed — too hot means actual brake, not a magic slowdown ──
+  let cruise = b.cruise;
+  if (humans.length > 0) {
+    const best = Math.max(...humans.map((h) => h.pos));
+    if (st.position < best - RUBBER_DIST) cruise *= 1 + RUBBER_GAIN;
+    else if (st.position > best + RUBBER_DIST) cruise *= 1 - RUBBER_GAIN;
+  }
+  let target = cruise * MAX_SPEED;
+  if (Math.abs(curve) > 0.5) {
+    target = Math.min(
+      target,
+      (CORNER_MARGIN * MAX_SPEED) / (Math.abs(curve) * CENTRIFUGAL),
     );
-    b.steer += (desired - b.steer) * Math.min(1, dt / b.steerLag);
+  }
+  const err = target - st.speed;
+  const gasAmt = err > 0 ? clamp(0.35 + (err / MAX_SPEED) * 6, 0, 1) : 0;
+  const brakeAmt =
+    err < -MAX_SPEED * 0.01 ? clamp((-err / MAX_SPEED) * 10, 0, 1) : 0;
 
-    // ── lateral: mirror the engine's integration (authority-scaled steer
-    // minus the centrifugal push) so the line reads like a real driver ──
-    const dxx = dt * authority * Math.min(1, 3 * p);
-    b.x += dxx * b.steer;
-    b.x -= dxx * clamp(p * curve * CENTRIFUGAL, -1.6, 1.6);
+  return {
+    left: false,
+    right: false,
+    gas: false,
+    brake: false,
+    steer: clamp(b.steer, -1, 1),
+    gasAmt,
+    brakeAmt,
+  };
+}
 
-    // ── mild human avoidance: ghosts pass through cars, but a bot that
-    // shares a lane with a player for minutes reads as broken — drift
-    // off their line gently. This is courtesy, not collision ──
-    for (const h of humans) {
-      if (Math.abs(b.pos - h.pos) > AVOID_SEGS * SEGMENT_LENGTH) continue;
-      const dx = b.x - h.x;
-      if (Math.abs(dx) >= AVOID_X) continue;
-      b.x += (dx === 0 ? (b.x >= 0 ? 1 : -1) : Math.sign(dx)) * AVOID_RATE * dt;
+/** advance the whole field one frame (leader only). A bot whose engine
+    reached game over is marked dead with its final score — its wreck
+    parks through the normal remote path on the next botStates() */
+export function updateBots(bots: Bot[], dt: number, humans: BotHuman[]): void {
+  if (dt <= 0) return;
+  for (const b of bots) {
+    if (b.dead) continue;
+    b.engine.update(dt, pilotInput(b, dt, humans));
+    if (b.engine.state.gameOver) {
+      b.dead = true;
+      b.deadScore = Math.floor(b.engine.state.score);
     }
-
-    b.x = clamp(b.x, -X_CLAMP, X_CLAMP);
-
-    // score: the player's own formula (metres × the ×0.5 arcade scale,
-    // multiplier 1 — bots don't farm the speed tiers)
-    const kmh = (b.speed / MAX_SPEED) * 180;
-    b.score += ((kmh * dt) / 3.6) * 0.5;
   }
 }
 
 /** snapshot the field as remote-car states for the net broadcast and the
-    leader's own engine feed (identical shape — both go through the same
-    interpolation buffer) */
+    leader's own engine feed. Dead bots keep their final pose with the
+    dead flag — receivers park the wreck (markRemoteDead), the same way a
+    human's final dead-carrying packet is handled */
 export function botStates(
   bots: Bot[],
 ): { id: string; name: string; state: NetCarState }[] {
-  return bots.map((b) => ({
-    id: b.id,
-    name: b.name,
-    state: {
-      pos: b.pos,
-      x: b.x,
-      speed: b.speed,
-      score: Math.floor(b.score),
-      dead: false,
-      steer: clamp(b.steer, -1, 1),
-    },
-  }));
+  return bots.map((b) => {
+    const st = b.engine.state;
+    return {
+      id: b.id,
+      name: b.name,
+      state: {
+        pos: st.position,
+        x: st.playerX,
+        speed: b.dead ? 0 : st.speed,
+        score: b.dead ? b.deadScore : Math.floor(st.score),
+        dead: b.dead,
+        steer: clamp(b.steer, -1, 1),
+      },
+    };
+  });
 }
