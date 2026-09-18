@@ -75,6 +75,10 @@ export interface RacerAudio {
   streak(streak: number): void;
   /** crash respawn (stranded off-road / pothole): deep thud + rattle */
   crash(): void;
+  /** car-car contact in a P2P race: a short soft thud — crash()'s building
+      blocks at a fraction of the gain and decay, no rattle (throttled by
+      the caller; a nudge, not a crash) */
+  bump(): void;
   /** third crash = fatal: a classic arcade explosion — noise burst with
       a collapsing lowpass over a pitch-diving square boom */
   breakdown(): void;
@@ -822,6 +826,35 @@ export function createRacerAudio(): RacerAudio {
       rattle.connect(f2).connect(g2).connect(engineBus);
       rattle.start(t + 0.02);
       rattle.stop(t + 0.24);
+    },
+
+    bump() {
+      if (!ctx || !engineBus) return;
+      const t = ctx.currentTime;
+      // soft contact thud: crash()'s lowpassed body hit at a third of the
+      // gain and well under 120 ms, with a faint panel knock on top — a
+      // nudge against another racer, not a crash (no rattle tail)
+      const thud = makeNoise(ctx);
+      const f1 = ctx.createBiquadFilter();
+      f1.type = "lowpass";
+      f1.frequency.value = 150;
+      const g1 = ctx.createGain();
+      g1.gain.setValueAtTime(0.16, t);
+      g1.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      thud.connect(f1).connect(g1).connect(engineBus);
+      thud.start(t);
+      thud.stop(t + 0.12);
+      const knock = makeNoise(ctx);
+      const f2 = ctx.createBiquadFilter();
+      f2.type = "bandpass";
+      f2.frequency.value = 900;
+      f2.Q.value = 3;
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.05, t);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+      knock.connect(f2).connect(g2).connect(engineBus);
+      knock.start(t);
+      knock.stop(t + 0.08);
     },
 
     breakdown() {

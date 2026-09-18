@@ -9,6 +9,12 @@
  * once START is pressed there. ESC / ✕ closes it and returns focus to
  * the CRT START button. The engine itself lives in ./racer and is
  * framework-free.
+ *
+ * VS RACE: a DOM chip on the title screen opens the P2P lobby (Trystero,
+ * see ./racer/net.ts) — CREATE/JOIN a 4-char room code, READY up, the
+ * lobby leader (oldest joinedAt) starts a 3·2·1·GO countdown and the
+ * race boots through the normal START path. A shared link
+ * (/<lang>/?race=CODE) auto-opens the overlay straight into the room.
  */
 
 import type { CSSProperties } from "react";
@@ -30,6 +36,14 @@ import {
   type RacerView,
 } from "./racer/engine";
 import { type PadAction, type PadState, pollPad } from "./racer/gamepad";
+import {
+  MAX_RACERS,
+  type NetCarState,
+  type RaceHello,
+  type RaceNet,
+  type RacePeer,
+  TrysteroNet,
+} from "./racer/net";
 import {
   loadCarFrames,
   loadCat,
@@ -63,6 +77,74 @@ const turkeyDay = () => Math.floor((Date.now() + TR_OFFSET_MS) / 86400000);
 
 /* arcade initials spinner alphabet — same charset the text input enforces */
 const SPIN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+/* VS RACE lobby: 4-char room codes without look-alike glyphs (no I/O/0/1) */
+const ROOM_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const ROOM_FILTER = new RegExp(`[^${ROOM_CHARS}]`, "g");
+const VALID_ROOM = new RegExp(`^[${ROOM_CHARS}]{4}$`);
+const makeRoomCode = () =>
+  Array.from(
+    { length: 4 },
+    () => ROOM_CHARS[Math.floor(Math.random() * ROOM_CHARS.length)],
+  ).join("");
+
+/* lobby sub-views: home (CREATE/JOIN choice) → join (code input) → room
+   (peer roster); "full" is the bounce screen for a 5th arrival */
+type LobbyView = "home" | "join" | "room" | "full";
+
+/* VS race start grid: lateral slot (road half-widths) per roster index —
+   everyone starts at position 0, spread across the lanes by join order
+   (roster is sorted by joinedAt; index 0 is the lobby leader) */
+const RACE_GRID: readonly (readonly number[])[] = [
+  [0],
+  [-0.45, 0.45],
+  [-0.7, 0, 0.7],
+  [-0.75, -0.25, 0.25, 0.75],
+];
+
+/* live race bookkeeping per peer (standingsRef): the last state packet,
+   the lobby name and the death notice once it arrives */
+interface PeerStanding {
+  name: string;
+  state: NetCarState;
+  dead: boolean;
+  deadScore: number;
+}
+
+/* one row of the standings HUD / results panel */
+interface StandingRow {
+  id: string;
+  name: string;
+  score: number;
+  dead: boolean;
+  self: boolean;
+}
+
+/* the game-over action row gains a SPECTATE entry in a VS race while at
+   least one peer is still alive */
+type GoSelection = "again" | "spectate" | "quit";
+
+/* the armed-row layout per lobby view — shared by the keyboard handler
+   and the JSX so the selection index always points at the same button */
+const lobbyRowIds = (view: LobbyView, leader: boolean): string[] =>
+  view === "home"
+    ? ["create", "join", "back"]
+    : view === "room"
+      ? leader
+        ? ["ready", "copy", "start", "leave"]
+        : ["ready", "copy", "leave"]
+      : ["back"];
+
+/* the player's arcade initials — persisted on every successful highscore
+   submit ("twingo:name"), reused as the lobby display name */
+const savedName = (): string => {
+  try {
+    const n = localStorage.getItem("twingo:name") ?? "";
+    return /^[A-Z0-9]{3}$/.test(n) ? n : "YOU";
+  } catch {
+    return "YOU";
+  }
+};
 
 /** "HH:MM:SS" until the next TR midnight — the daily track reset */
 function resetCountdown(): string {
@@ -105,14 +187,35 @@ function BracketGem({ score }: { score: number }) {
 export function TwingoRacer() {
   const [open, setOpen] = useState(false);
   /* the overlay opens on the title screen; the engine only boots once
-     START is pressed (or PLAY AGAIN after a run) */
-  const [screen, setScreen] = useState<"title" | "playing">("title");
+     START is pressed (or PLAY AGAIN after a run). "lobby" is the VS RACE
+     P2P room flow, which also ends in a normal run start */
+  const [screen, setScreen] = useState<"title" | "playing" | "lobby">("title");
   /* title screen: which artwork button is armed for Enter, and whether
-     the read-only leaderboard panel is open over the title */
-  const [titleSel, setTitleSel] = useState<"start" | "board" | "settings">(
-    "start",
-  );
+     the read-only leaderboard panel is open over the title. "race" is
+     the VS RACE lobby chip (a DOM button, not painted artwork) */
+  const [titleSel, setTitleSel] = useState<
+    "start" | "board" | "race" | "settings"
+  >("start");
   const [titleBoard, setTitleBoard] = useState(false);
+  /* VS RACE lobby (P2P via Trystero): the net instance lives in a ref so
+     the later gameplay-sync stage can stream car states through it
+     mid-run; the view / roster / countdown are plain panel state */
+  const [lobbyView, setLobbyView] = useState<LobbyView>("home");
+  const [lobbySel, setLobbySel] = useState(0);
+  const [joinCode, setJoinCode] = useState("");
+  const [roomCode, setRoomCode] = useState("");
+  const [peers, setPeers] = useState<RacePeer[]>([]);
+  const [selfPeerId, setSelfPeerId] = useState("");
+  /* netConnected flips on the first onPeersChanged; if it stays off for
+     15 s the relay path is presumed slow/blocked and a Retry is offered */
+  const [netConnected, setNetConnected] = useState(false);
+  const [connectStuck, setConnectStuck] = useState(false);
+  const [copied, setCopied] = useState(false);
+  /* set by onStart (everyone, the leader included): the countdown overlay
+     runs off startAt - Date.now() (clamped ≥ 0) and boots the race at
+     zero */
+  const [countdownAt, setCountdownAt] = useState<number | null>(null);
+  const [countRemain, setCountRemain] = useState(0);
   /* TODAY'S TRACK: 1-5 star difficulty card of the first ~3 km, rated
      once per session from the same daily seed the engine races on */
   const [trackStats, setTrackStats] = useState<TrackStats | null>(null);
@@ -129,8 +232,10 @@ export function TwingoRacer() {
   /* STATS option expands the current run's numbers inside the menu */
   const [pauseStats, setPauseStats] = useState(false);
   /* game over: which action button is armed for Enter / pad A. ←/→ moves
-     it; while the initials form is pending it owns the keys instead */
-  const [goSel, setGoSel] = useState<"again" | "quit">("again");
+     it; while the initials form is pending it owns the keys instead. A VS
+     race adds SPECTATE (peers still alive) and turns PLAY AGAIN into
+     REMATCH (results screen, lobby leader only) */
+  const [goSel, setGoSel] = useState<GoSelection>("again");
   const [coarse, setCoarse] = useState(false);
   /* FPS counter — F toggles it (in the desktop key legend); sampled 2×/s
      so the overlay doesn't re-render every frame */
@@ -260,6 +365,42 @@ export function TwingoRacer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<RacerEngine | null>(null);
+  /* the live P2P room (null = single player). Kept across the countdown
+     and the whole run so the gameplay-sync stage can stream states;
+     leaveNet() drops it */
+  const netRef = useRef<RaceNet | null>(null);
+  /* generation guard: handlers of a replaced/abandoned net instance must
+     not write into the new room's state (Retry re-creates the net) */
+  const netGenRef = useRef(0);
+  /* the latest roster exactly as onPeersChanged delivered it (sorted by
+     joinedAt, index 0 = lobby leader) — the race-time code (start grid,
+     seed lock, names) reads it without depending on render timing */
+  const rosterRef = useRef<RacePeer[]>([]);
+  const selfPeerIdRef = useRef("");
+  /* live race standings: peers' last packets + death notices, updated by
+     the net handlers at packet rate; the HUD reads it on a slow 4 Hz
+     interval instead of re-rendering per packet */
+  const standingsRef = useRef<Map<string, PeerStanding>>(new Map());
+  const [standings, setStandings] = useState<StandingRow[]>([]);
+  /* spectate mode after our own death: which peer the camera rides
+     (null = not spectating). Ref mirror for the key/net handlers */
+  const [spectating, setSpectating] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const spectatingRef = useRef<{ id: string; name: string } | null>(null);
+  /* race results once EVERY participant is dead (incl. self): sorted rows
+     + winner names. Null while the race is still on */
+  const [raceResults, setRaceResults] = useState<{
+    rows: StandingRow[];
+    winners: string[];
+  } | null>(null);
+  const raceResultsRef = useRef<{
+    rows: StandingRow[];
+    winners: string[];
+  } | null>(null);
+  const isLeaderRef = useRef(false);
+  const countdownAtRef = useRef<number | null>(null);
   /* record chase: each period's #1 score, fetched at run start — applied
      to the engine both when the fetch lands and when the engine boots,
      whichever happens last */
@@ -273,7 +414,10 @@ export function TwingoRacer() {
     "resume" | "stats" | "settings" | "restart" | "quit"
   >("resume");
   /* game-over button selection mirrors (same stale-closure reason) */
-  const goSelRef = useRef<"again" | "quit">("again");
+  const goSelRef = useRef<GoSelection>("again");
+  /* lobby row selection mirror for the window-level lobby key handler
+     (same stale-closure reason as goSelRef) */
+  const lobbySelRef = useRef(0);
   /* true while the initials form owns Enter/arrows on the game-over
      screen (score qualifies and hasn't been submitted yet) */
   const goFormPendingRef = useRef(false);
@@ -316,9 +460,374 @@ export function TwingoRacer() {
   pauseMenuRef.current = pauseMenu;
   pauseSelRef.current = pauseSel;
   goSelRef.current = goSel;
+  lobbySelRef.current = lobbySel;
   showFpsRef.current = showFps;
   screenRef.current = screen;
   titleBoardRef.current = titleBoard;
+  countdownAtRef.current = countdownAt;
+
+  /* ── VS RACE lobby (P2P) ── */
+
+  /* the lobby leader is the peer with the oldest joinedAt — index 0 of
+     the roster, which onPeersChanged delivers pre-sorted */
+  const isLeader = peers.length > 0 && peers[0]?.id === selfPeerId;
+  isLeaderRef.current = isLeader;
+  const myReady = peers.find((p) => p.id === selfPeerId)?.ready ?? false;
+  /* the leader's START RACE unlocks at ≥ 2 racers with everyone READY */
+  const canStart = isLeader && peers.length >= 2 && peers.every((p) => p.ready);
+
+  /* ── VS RACE race-time flow (standings / spectate / results / rematch) ──
+     All stable ([] deps): they touch refs + setState only, so the net
+     handlers in joinNet can close over them safely */
+
+  const setSpectateMode = useCallback(
+    (v: { id: string; name: string } | null) => {
+      spectatingRef.current = v;
+      setSpectating(v);
+    },
+    [],
+  );
+
+  /* the peer the camera should ride: the highest-scoring participant that
+     is still alive and still in the room (null = nobody worth watching) */
+  const bestSpectateTarget = useCallback((): {
+    id: string;
+    name: string;
+    state: NetCarState;
+  } | null => {
+    const rosterIds = new Set(rosterRef.current.map((p) => p.id));
+    let best: { id: string; name: string; state: NetCarState } | null = null;
+    for (const [id, p] of standingsRef.current) {
+      if (p.dead || !rosterIds.has(id)) continue;
+      if (!best || p.state.score > best.state.score)
+        best = { id, name: p.name, state: p.state };
+    }
+    return best;
+  }, []);
+
+  /* the spectate target died or left: ride the next-best live peer, or
+     drop out of spectate when nobody is left */
+  const repickSpectate = useCallback(() => {
+    if (!spectatingRef.current) return;
+    const t = bestSpectateTarget();
+    const e = engineRef.current;
+    if (t && e) {
+      e.setSpectate({ pos: t.state.pos, x: t.state.x, speed: t.state.speed });
+      setSpectateMode({ id: t.id, name: t.name });
+    } else {
+      e?.setSpectate(null);
+      setSpectateMode(null);
+    }
+  }, [bestSpectateTarget, setSpectateMode]);
+
+  /* switch the camera to the previous/next ALIVE peer (standings order,
+     wrap around) — ←/→ keys, pad LB/RB (twingo:board-step), or a tap on
+     the spectate chip. A no-op with only one peer left alive */
+  const cycleSpectate = useCallback(
+    (dir: 1 | -1) => {
+      const cur = spectatingRef.current;
+      const e = engineRef.current;
+      if (!cur || !e) return;
+      const rosterIds = new Set(rosterRef.current.map((p) => p.id));
+      const alive = [...standingsRef.current.entries()]
+        .filter(([id, p]) => !p.dead && rosterIds.has(id))
+        .sort((a, b) => b[1].state.score - a[1].state.score);
+      if (alive.length < 2) return;
+      const i = alive.findIndex(([id]) => id === cur.id);
+      const next =
+        alive[
+          ((((i < 0 ? 0 : i) + dir) % alive.length) + alive.length) %
+            alive.length
+        ];
+      audioRef.current?.menuMove();
+      e.setSpectate({
+        pos: next[1].state.pos,
+        x: next[1].state.x,
+        speed: next[1].state.speed,
+      });
+      setSpectateMode({ id: next[0], name: next[1].name });
+    },
+    [setSpectateMode],
+  );
+
+  /* race over = we are dead AND every participant (a peer that sent at
+     least one packet — a mid-race lobby idler never blocks this) is dead.
+     Builds the results panel; spectate becomes moot */
+  const checkRaceOver = useCallback(() => {
+    const net = netRef.current;
+    if (!net || !gameOverRef.current || raceResultsRef.current) return;
+    const parts = [...standingsRef.current.entries()];
+    // an empty set would pass every() vacuously — require participants
+    if (parts.length === 0 || !parts.every(([, p]) => p.dead)) return;
+    const nameOf = (id: string, fallback: string) =>
+      rosterRef.current.find((p) => p.id === id)?.name ?? fallback;
+    const rows: StandingRow[] = [
+      {
+        id: net.selfId,
+        name: net.me.name,
+        score: Math.floor(engineRef.current?.state.score ?? 0),
+        dead: true,
+        self: true,
+      },
+      ...parts.map(([id, p]) => ({
+        id,
+        name: nameOf(id, p.name || "???"),
+        score: Math.floor(p.deadScore),
+        dead: true,
+        self: false,
+      })),
+    ].sort((a, b) => b.score - a.score);
+    // a score tie is a shared win — keep it simple
+    const top = rows[0]?.score ?? 0;
+    const res = {
+      rows,
+      winners: rows.filter((r) => r.score === top).map((r) => r.name),
+    };
+    raceResultsRef.current = res;
+    setRaceResults(res);
+    engineRef.current?.setSpectate(null);
+    setSpectateMode(null);
+    // arm REMATCH for the leader, QUIT for everyone else
+    const sel: GoSelection = isLeaderRef.current ? "again" : "quit";
+    setGoSel(sel);
+    goSelRef.current = sel;
+  }, [setSpectateMode]);
+
+  /* the game-over action list for the current situation — the keyboard
+     handler and the buttons both read this so they never disagree */
+  const goOptions = useCallback((): GoSelection[] => {
+    if (!netRef.current) return ["again", "quit"];
+    if (raceResultsRef.current)
+      return isLeaderRef.current ? ["again", "quit"] : ["quit"];
+    return bestSpectateTarget() ? ["spectate", "quit"] : ["quit"];
+  }, [bestSpectateTarget]);
+
+  const enterSpectate = useCallback(() => {
+    const t = bestSpectateTarget();
+    const e = engineRef.current;
+    if (!t || !e) return;
+    audioRef.current?.menuSelect();
+    e.setSpectate({ pos: t.state.pos, x: t.state.x, speed: t.state.speed });
+    setSpectateMode({ id: t.id, name: t.name });
+  }, [bestSpectateTarget, setSpectateMode]);
+
+  const exitSpectate = useCallback(() => {
+    audioRef.current?.menuSelect();
+    engineRef.current?.setSpectate(null);
+    setSpectateMode(null);
+  }, [setSpectateMode]);
+
+  /* REMATCH (lobby leader, results screen): broadcasts the bare message —
+     every client (us included, via TrysteroNet.rematch's local echo) runs
+     its own 3 s countdown off its own clock */
+  const requestRematch = useCallback(() => {
+    if (countdownAtRef.current !== null) return; // countdown already running
+    audioRef.current?.menuSelect();
+    netRef.current?.rematch();
+  }, []);
+
+  /* leave the P2P room: the LEAVE button, ESC, QUIT and ✕ all funnel
+     through here */
+  const leaveNet = useCallback(() => {
+    netGenRef.current++;
+    netRef.current?.leave();
+    netRef.current = null;
+    rosterRef.current = [];
+    selfPeerIdRef.current = "";
+    standingsRef.current.clear();
+    engineRef.current?.setSpectate(null);
+    setSpectateMode(null);
+    raceResultsRef.current = null;
+    setRaceResults(null);
+    setPeers([]);
+    setSelfPeerId("");
+    setRoomCode("");
+    setCountdownAt(null);
+    setNetConnected(false);
+    setConnectStuck(false);
+  }, [setSpectateMode]);
+
+  /* create (or re-create, on Retry) the Trystero room. The handlers close
+     over setState + the hello + stable race-flow callbacks + refs — never
+     the net instance itself: LoopbackNet fires onPeersChanged synchronously
+     from its constructor, before the instance exists. The engine is
+     recreated every race, so handlers always resolve it through
+     engineRef at call time */
+  const joinNet = useCallback(
+    (code: string) => {
+      netRef.current?.leave();
+      const gen = ++netGenRef.current;
+      const hello: RaceHello = {
+        name: savedName(),
+        seed: turkeyDay(),
+        joinedAt: Date.now(),
+        ready: false,
+      };
+      const rosterName = (id: string) =>
+        rosterRef.current.find((p) => p.id === id)?.name ?? "";
+      let delivered = false;
+      const net = new TrysteroNet(code.toUpperCase(), hello, {
+        onPeersChanged: (ps) => {
+          if (gen !== netGenRef.current) return; // a stale net (leave/retry)
+          delivered = true;
+          setNetConnected(true);
+          // over capacity and WE are the newest arrival → bounced. The
+          // leave itself runs in the lobbyView === "full" effect below —
+          // the net instance isn't reliably reachable from in here
+          const newest = Math.max(...ps.map((p) => p.joinedAt));
+          if (ps.length > MAX_RACERS && hello.joinedAt >= newest) {
+            setLobbyView("full");
+            return;
+          }
+          // race-time bookkeeping: name the live remote cars, drop the
+          // departed ones (their standings row goes with them)
+          const prevIds = rosterRef.current.map((p) => p.id);
+          rosterRef.current = ps;
+          const ids = new Set(ps.map((p) => p.id));
+          const e = engineRef.current;
+          if (e) {
+            for (const p of ps)
+              if (p.id !== selfPeerIdRef.current) e.setRemoteName(p.id, p.name);
+            for (const oldId of prevIds)
+              if (!ids.has(oldId) && oldId !== selfPeerIdRef.current)
+                e.removeRemote(oldId);
+          }
+          for (const oldId of prevIds)
+            if (!ids.has(oldId)) standingsRef.current.delete(oldId);
+          setPeers(ps);
+          // the spectate target may have just left; a departure can also
+          // complete the all-dead set
+          if (spectatingRef.current && !ids.has(spectatingRef.current.id))
+            repickSpectate();
+          checkRaceOver();
+        },
+        onStart: (startAt) => {
+          if (gen !== netGenRef.current) return;
+          // a start only counts while we're actually waiting in the lobby
+          if (screenRef.current !== "lobby") return;
+          setCountRemain(Math.max(0, startAt - Date.now()));
+          setCountdownAt(startAt);
+        },
+        onState: (id, s) => {
+          if (gen !== netGenRef.current) return;
+          const e = engineRef.current;
+          e?.setRemoteState(id, s);
+          // the name may have arrived (onPeersChanged) before the first
+          // packet created the remote entry — re-attach it here too
+          const name = rosterName(id);
+          if (e && name) e.setRemoteName(id, name);
+          const prev = standingsRef.current.get(id);
+          const dead = prev?.dead || s.dead;
+          standingsRef.current.set(id, {
+            name: name || prev?.name || "???",
+            state: s,
+            dead,
+            deadScore: prev?.dead ? prev.deadScore : s.dead ? s.score : 0,
+          });
+          if (s.dead && !prev?.dead) {
+            // a state packet can carry the death flag before/with the
+            // dead message — mark the wreck either way
+            e?.markRemoteDead(id, s.score);
+            if (spectatingRef.current?.id === id) repickSpectate();
+            checkRaceOver();
+          } else if (spectatingRef.current?.id === id && !dead) {
+            // keep the camera riding the spectate target
+            e?.setSpectate({ pos: s.pos, x: s.x, speed: s.speed });
+          }
+        },
+        onTake: (_id, segIdx) => {
+          if (gen !== netGenRef.current) return;
+          engineRef.current?.applyRemoteTake(segIdx);
+        },
+        onHole: (_id, segIdx) => {
+          if (gen !== netGenRef.current) return;
+          engineRef.current?.applyRemoteHole(segIdx);
+        },
+        onDead: (id, score) => {
+          if (gen !== netGenRef.current) return;
+          engineRef.current?.markRemoteDead(id, score);
+          const prev = standingsRef.current.get(id);
+          standingsRef.current.set(id, {
+            name: rosterName(id) || prev?.name || "???",
+            state: prev?.state ?? {
+              pos: 0,
+              x: 0,
+              speed: 0,
+              score,
+              dead: true,
+            },
+            dead: true,
+            deadScore: score,
+          });
+          if (spectatingRef.current?.id === id) repickSpectate();
+          checkRaceOver();
+        },
+        onRematch: () => {
+          if (gen !== netGenRef.current) return;
+          // the message carries no timestamp: each client counts down its
+          // own 3 s, then startRun() (via the countdown effect) resets the
+          // finished run — playAgain — and boots a fresh engine off the
+          // CURRENT roster (grid slots) and the CURRENT leader's seed
+          setCountRemain(3000);
+          setCountdownAt(Date.now() + 3000);
+        },
+      });
+      netRef.current = net;
+      setSelfPeerId(net.selfId);
+      selfPeerIdRef.current = net.selfId;
+      setRoomCode(net.code);
+      setNetConnected(false);
+      setConnectStuck(false);
+      setCopied(false);
+      setJoinCode("");
+      setLobbySel(0);
+      setLobbyView("room");
+      // alone in a room TrysteroNet never emits — show ourselves at once
+      if (!delivered) {
+        rosterRef.current = [{ id: net.selfId, ...hello }];
+        setPeers([{ id: net.selfId, ...hello }]);
+      }
+    },
+    [repickSpectate, checkRaceOver],
+  );
+
+  /* shareable join link: <origin>/<lang>/?race=CODE — the lang comes from
+     the current path (the component itself doesn't know the locale) */
+  const copyRaceLink = useCallback(() => {
+    audioRef.current?.menuSelect();
+    const lang =
+      /^\/([a-z]{2})(?:\/|$)/.exec(window.location.pathname)?.[1] ?? "en";
+    const url = `${window.location.origin}/${lang}/?race=${roomCode}`;
+    const done = () => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    };
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {}
+      ta.remove();
+      done();
+    };
+    if (navigator.clipboard?.writeText)
+      navigator.clipboard.writeText(url).then(done, fallback);
+    else fallback();
+  }, [roomCode]);
+
+  /* VS RACE chip on the title screen: open the lobby panel */
+  const openLobby = useCallback(() => {
+    audioRef.current?.menuSelect();
+    setScreen("lobby");
+    setLobbyView("home");
+    setLobbySel(0);
+    setJoinCode("");
+  }, []);
 
   /* each run gets a fresh single-use submit token; PLAY AGAIN re-issues.
      On failure the leaderboard UI stays hidden and the game just plays.
@@ -329,7 +838,7 @@ export function TwingoRacer() {
     if (!open || screen !== "playing") return;
     tokenRef.current = null;
     setBoard(null);
-    setInitials("");
+    setInitials(savedName() === "YOU" ? "" : savedName());
     setSubmitState("idle");
     setMyRank(null);
     // stale-score poison: finalScore survives across runs (it's only
@@ -395,6 +904,11 @@ export function TwingoRacer() {
       setBoardPeriod("all");
       setBoard(d.scores);
       setSubmitState("done");
+      // remember the initials — the VS RACE lobby reuses them as the
+      // player name (and the form prefills from them next run)
+      try {
+        localStorage.setItem("twingo:name", initials);
+      } catch {}
     } catch {
       // failed before/without consuming server-side (network, invalid
       // input): hand the token back so the retry button works
@@ -433,13 +947,22 @@ export function TwingoRacer() {
     });
   }, []);
 
-  /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly */
+  /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly. In a
+     VS race this is also the per-client rematch reset (fired by startRun
+     when the countdown reaches GO): the net itself survives — same room,
+     fresh grid slots and leader seed at engine boot */
   const playAgain = useCallback(() => {
     audioRef.current?.menuSelect();
     audioRef.current?.setInterior(false);
     engineRef.current = null;
     gameOverRef.current = false;
     keysRef.current = { left: false, right: false, gas: false, brake: false };
+    // VS race run state: standings/spectate/results belong to the run
+    standingsRef.current.clear();
+    spectatingRef.current = null;
+    setSpectating(null);
+    raceResultsRef.current = null;
+    setRaceResults(null);
     setGameOver(false);
     setQualifyBoards(null);
     setPauseMenu(false);
@@ -450,6 +973,8 @@ export function TwingoRacer() {
 
   const close = useCallback(() => {
     audioRef.current?.stop();
+    leaveNet();
+    setLobbyView("home");
     setOpen(false);
     setPaused(false);
     setPauseMenu(false);
@@ -464,7 +989,7 @@ export function TwingoRacer() {
       document.getElementById("crt-start-btn") ??
       document.getElementById("ticker-start-btn");
     btn?.focus();
-  }, []);
+  }, [leaveNet]);
 
   /* ESC / ⏸ during a run: freeze the engine and open the pause menu */
   const openPauseMenu = useCallback(() => {
@@ -488,6 +1013,9 @@ export function TwingoRacer() {
     engineRef.current = null;
     gameOverRef.current = false;
     keysRef.current = { left: false, right: false, gas: false, brake: false };
+    // a VS race room ends here too — the next VS RACE starts a fresh lobby
+    leaveNet();
+    setLobbyView("home");
     // silence the engine hum; the music keeps playing over the title art
     audioRef.current?.menuSelect();
     audioRef.current?.setInterior(false);
@@ -501,7 +1029,7 @@ export function TwingoRacer() {
     setTitleSel("start");
     setTitleBoard(false);
     setTitleSettingsOpen(false);
-  }, []);
+  }, [leaveNet]);
 
   /* START on the title screen: boot the engine and drop into the READY
      flash. If the previous session ended mid-overlay (game over never
@@ -578,12 +1106,17 @@ export function TwingoRacer() {
 
   /* LB/RB on a gamepad steps the leaderboard period tabs — but only
      while a board is actually on screen (title panel or the game-over
-     overlay), never mid-run */
+     overlay), never mid-run. While spectating they switch the camera
+     between alive peers instead (the board is hidden behind the ride) */
   useEffect(() => {
     if (!open) return;
     const order: ScorePeriod[] = ["all", "monthly", "weekly", "daily"];
     const onStep = (ev: Event) => {
       const dir = (ev as CustomEvent<number>).detail;
+      if (spectatingRef.current) {
+        cycleSpectate(dir > 0 ? 1 : -1);
+        return;
+      }
       const visible =
         screenRef.current === "title"
           ? titleBoardRef.current
@@ -596,7 +1129,7 @@ export function TwingoRacer() {
     };
     window.addEventListener("twingo:board-step", onStep);
     return () => window.removeEventListener("twingo:board-step", onStep);
-  }, [open, selectPeriod]);
+  }, [open, selectPeriod, cycleSpectate]);
 
   /* LEADERBOARD on the title screen: read-only top-10 panel — no token
      needed to look, only to submit after a run */
@@ -604,6 +1137,107 @@ export function TwingoRacer() {
     setTitleBoard(true);
     fetchBoard(boardPeriod);
   }, [fetchBoard, boardPeriod]);
+
+  /* bounced from a full room: drop the connection here. The peers handler
+     only flips the view — it can't touch the net instance (LoopbackNet
+     delivers peers synchronously from its constructor, before the
+     instance exists) */
+  useEffect(() => {
+    if (lobbyView !== "full") return;
+    netRef.current?.leave();
+    netRef.current = null;
+    setPeers([]);
+    setNetConnected(false);
+  }, [lobbyView]);
+
+  /* connection failure tolerance: no peer traffic within 15 s of joining
+     (relay slow/blocked) → a subtle CONNECTING… + RETRY that re-creates
+     the room */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: roomCode intentionally re-arms the timer after a Retry re-creates the room (netConnected stays false, so it alone wouldn't re-fire)
+  useEffect(() => {
+    if (lobbyView !== "room" || netConnected) return;
+    const id = window.setTimeout(() => setConnectStuck(true), 15000);
+    return () => window.clearTimeout(id);
+  }, [lobbyView, netConnected, roomCode]);
+
+  /* onStart(startAt): everyone counts down off the leader's timestamp
+     (3·2·1·GO), then the race boots through the normal START path — the
+     engine is the plain single-player one for now; remote cars arrive
+     with the engine-sync stage. The GO beat lingers 0.5 s before boot */
+  useEffect(() => {
+    if (countdownAt === null) return;
+    let goTimer = 0;
+    const tick = () => {
+      const rem = Math.max(0, countdownAt - Date.now());
+      setCountRemain(rem);
+      if (rem === 0 && goTimer === 0) {
+        goTimer = window.setTimeout(() => {
+          setCountdownAt(null);
+          startRun();
+        }, 500);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 60);
+    return () => {
+      window.clearInterval(id);
+      window.clearTimeout(goTimer);
+    };
+  }, [countdownAt, startRun]);
+
+  /* standings HUD + spectate watchdog: remote packets land in
+     standingsRef at 20 Hz per peer — far too hot for React. This 4 Hz
+     ticker composes the sorted rows (self from the live engine state)
+     and setStates only when something actually changed. It also re-picks
+     a lost spectate target in case a death/departure edge was missed */
+  useEffect(() => {
+    if (!open || screen !== "playing") return;
+    const tick = () => {
+      const net = netRef.current;
+      if (!net) {
+        setStandings((s) => (s.length ? [] : s));
+        return;
+      }
+      if (spectatingRef.current) {
+        const cur = standingsRef.current.get(spectatingRef.current.id);
+        if (!cur || cur.dead) repickSpectate();
+      }
+      const rows: StandingRow[] = [
+        {
+          id: net.selfId,
+          name: net.me.name,
+          score: Math.floor(engineRef.current?.state.score ?? 0),
+          dead: gameOverRef.current,
+          self: true,
+        },
+      ];
+      for (const [id, p] of standingsRef.current) {
+        rows.push({
+          id,
+          name: p.name || "???",
+          score: Math.floor(p.dead ? p.deadScore : p.state.score),
+          dead: p.dead,
+          self: false,
+        });
+      }
+      rows.sort((a, b) => b.score - a.score);
+      setStandings((prev) =>
+        prev.length === rows.length &&
+        prev.every(
+          (r, i) =>
+            r.id === rows[i].id &&
+            r.name === rows[i].name &&
+            r.score === rows[i].score &&
+            r.dead === rows[i].dead,
+        )
+          ? prev
+          : rows,
+      );
+    };
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [open, screen, repickSpectate]);
 
   /* V key / CAM button: flip between chase cam and cockpit */
   const toggleView = useCallback(() => {
@@ -690,28 +1324,45 @@ export function TwingoRacer() {
     };
   }, [open, tilt]);
 
-  /* the START buttons dispatch this event — the overlay opens on the
+  /* the START buttons dispatch "twingo:start" — the overlay opens on the
      title screen, the engine boots only when START is pressed there.
-     The click is a user gesture, so the audio context is born here */
-  useEffect(() => {
-    const onStart = () => {
-      if (!audioRef.current) {
-        audioRef.current = createRacerAudio();
-        audioRef.current.setMuted(mutedRef.current);
-        audioRef.current.setVolumes(volsRef.current);
-      }
-      audioRef.current.start();
-      setBuf(computeBuf());
-      setOpen(true);
-      setScreen("title");
-      setTitleSel("start");
-      setTitleBoard(false);
-      setTitleSettingsOpen(false);
-      setCoarse(window.matchMedia("(pointer: coarse)").matches);
-    };
-    window.addEventListener("twingo:start", onStart);
-    return () => window.removeEventListener("twingo:start", onStart);
+     The click is a user gesture, so the audio context is born here. The
+     ?race= link flow opens the overlay through the same path (no gesture
+     there — the context stays suspended until the first input, which
+     pays the resume through the usual ensureRunning entry points) */
+  const openOverlay = useCallback(() => {
+    if (!audioRef.current) {
+      audioRef.current = createRacerAudio();
+      audioRef.current.setMuted(mutedRef.current);
+      audioRef.current.setVolumes(volsRef.current);
+    }
+    audioRef.current.start();
+    setBuf(computeBuf());
+    setOpen(true);
+    setScreen("title");
+    setTitleSel("start");
+    setTitleBoard(false);
+    setTitleSettingsOpen(false);
+    setCoarse(window.matchMedia("(pointer: coarse)").matches);
   }, []);
+
+  useEffect(() => {
+    window.addEventListener("twingo:start", openOverlay);
+    return () => window.removeEventListener("twingo:start", openOverlay);
+  }, [openOverlay]);
+
+  /* ?race=CODE share link: auto-open the overlay straight into that
+     room's lobby (joins immediately — the room code is validated against
+     the same alphabet the JOIN input enforces) */
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search)
+      .get("race")
+      ?.toUpperCase();
+    if (!code || !VALID_ROOM.test(code)) return;
+    openOverlay();
+    setScreen("lobby");
+    joinNet(code);
+  }, [openOverlay, joinNet]);
 
   /* lock page scroll and grab focus while the overlay is open (title
      screen included, not just the running game) */
@@ -774,7 +1425,7 @@ export function TwingoRacer() {
       if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
         ev.preventDefault();
         audioRef.current?.menuMove();
-        const order = ["start", "board", "settings"] as const;
+        const order = ["start", "board", "race", "settings"] as const;
         setTitleSel((s) => {
           const i = order.indexOf(s);
           const step = k === "arrowup" || k === "w" ? order.length - 1 : 1;
@@ -787,6 +1438,7 @@ export function TwingoRacer() {
         audioRef.current?.menuSelect();
         if (titleSel === "start") startRun();
         else if (titleSel === "board") openTitleBoard();
+        else if (titleSel === "race") openLobby();
         else {
           setSettingsRow(0);
           setTitleSettingsOpen(true);
@@ -806,10 +1458,82 @@ export function TwingoRacer() {
     close,
     startRun,
     openTitleBoard,
+    openLobby,
     toggleMute,
     adjustVol,
     toggleTilt,
     adjustTiltSens,
+  ]);
+
+  /* lobby keyboard control — the gamepad poller turns pad presses into
+     synthetic keyboard events, so pads work here with zero extra code:
+     ↑/↓ arm a row, Enter/Space activates, ESC steps back (in a room it
+     also drops the net, same as LEAVE). The JOIN input owns the keys
+     while it's open (it stops propagation, like the initials input) */
+  useEffect(() => {
+    if (!open || screen !== "lobby") return;
+    const rows = lobbyRowIds(lobbyView, isLeader);
+    const activate = (row: string) => {
+      if (row === "create") {
+        audioRef.current?.menuSelect();
+        joinNet(makeRoomCode());
+      } else if (row === "join") {
+        audioRef.current?.menuSelect();
+        setLobbyView("join");
+      } else if (row === "ready") {
+        audioRef.current?.menuSelect();
+        netRef.current?.setReady(!myReady);
+      } else if (row === "copy") {
+        copyRaceLink();
+      } else if (row === "start") {
+        if (canStart) {
+          audioRef.current?.menuSelect();
+          netRef.current?.startRace(Date.now() + 3000);
+        }
+      } else {
+        // back / leave: drop the room and return to the title
+        audioRef.current?.menuSelect();
+        leaveNet();
+        setLobbyView("home");
+        setScreen("title");
+      }
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        if (lobbyView === "join") setLobbyView("home");
+        else {
+          leaveNet();
+          setLobbyView("home");
+          setScreen("title");
+        }
+        return;
+      }
+      if (lobbyView === "join" || lobbyView === "full") return;
+      const k = ev.key.toLowerCase();
+      if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
+        ev.preventDefault();
+        audioRef.current?.menuMove();
+        const step = k === "arrowup" || k === "w" ? rows.length - 1 : 1;
+        setLobbySel((s) => (Math.min(s, rows.length - 1) + step) % rows.length);
+        return;
+      }
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        activate(rows[Math.min(lobbySelRef.current, rows.length - 1)]);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    open,
+    screen,
+    lobbyView,
+    isLeader,
+    canStart,
+    myReady,
+    joinNet,
+    leaveNet,
+    copyRaceLink,
   ]);
 
   /* gamepad: one rAF poller for the whole overlay (the title screen has
@@ -1118,8 +1842,19 @@ export function TwingoRacer() {
           setFinalScore(Math.floor(e.state.score));
           setFinalTime(e.state.time);
           setGameOver(true);
-          setGoSel("again");
-          goSelRef.current = "again";
+          if (netRef.current) {
+            // VS race: report the death, then arm SPECTATE while at least
+            // one peer is still out there (checkRaceOver may immediately
+            // flip to RESULTS + REMATCH if we were the last one alive)
+            netRef.current.sendDead(Math.floor(e.state.score));
+            const sel: GoSelection = bestSpectateTarget() ? "spectate" : "quit";
+            setGoSel(sel);
+            goSelRef.current = sel;
+            checkRaceOver();
+          } else {
+            setGoSel("again");
+            goSelRef.current = "again";
+          }
           // fetch the current period's top-10 alongside the overlay
           fetchBoard(boardPeriodRef.current);
           // ...and ALL four periods for the qualify check — the initials
@@ -1160,15 +1895,34 @@ export function TwingoRacer() {
         setCockpitReady(cockpit !== null);
         // daily seed: everyone races the same layout on the same Turkey-
         // time day (midnight TR, UTC+3), so same-day highscores are
-        // comparable — a fresh track every day.
+        // comparable — a fresh track every day. In a VS race the seed is
+        // LOCKED to the lobby leader's hello seed (roster index 0), so the
+        // whole room keeps racing the leader's day even across a midnight
+        // TR rollover.
         // The seeded generator deals sections forever under its geometric
         // limits (alternating curve sides, sea-level-sprung hills)
+        const net = netRef.current;
+        const roster = net ? rosterRef.current : [];
+        const seed = net ? (roster[0]?.seed ?? turkeyDay()) : turkeyDay();
         const { segments, extend, firstIndex, generated } =
-          createTrackGenerator(turkeyDay());
+          createTrackGenerator(seed);
         // the difficulty card is normally rated while the title sits open;
         // an impatient START within that beat re-rates here synchronously
-        // (same seed, same result) so scarcity never falls back blind
-        const stats = trackStats ?? analyzeTrack(turkeyDay(), 3000);
+        // (same seed, same result) so scarcity never falls back blind. A
+        // leader-seed mismatch (rollover) re-rates off the locked seed
+        const stats =
+          trackStats && seed === turkeyDay()
+            ? trackStats
+            : analyzeTrack(seed, 3000);
+        // start grid: lateral slot by roster index (join order) — solo
+        // races pass NOTHING so single-player behaviour is byte-identical
+        const myIdx = net ? roster.findIndex((p) => p.id === net.selfId) : -1;
+        const gridX =
+          net && myIdx >= 0
+            ? (RACE_GRID[
+                Math.min(Math.max(roster.length, 1), RACE_GRID.length) - 1
+              ][myIdx] ?? 0)
+            : 0;
         engineRef.current = createEngine({
           segments,
           extend,
@@ -1193,6 +1947,16 @@ export function TwingoRacer() {
           onBreakdown: () => audioRef.current?.breakdown(),
           onCatHit: () => audioRef.current?.catHit(),
           onBracket: () => audioRef.current?.bracket(),
+          // P2P hooks — broadcast consumption + contact sounds; resolved
+          // through netRef at fire time so a room swap never stale-sends
+          ...(net
+            ? {
+                startX: gridX,
+                onTakeCan: (i: number) => netRef.current?.sendTake(i),
+                onHoleHit: (i: number) => netRef.current?.sendHole(i),
+                onBump: () => audioRef.current?.bump(),
+              }
+            : {}),
           debug: process.env.NODE_ENV !== "production",
         });
         setView(engineRef.current.state.view);
@@ -1211,6 +1975,25 @@ export function TwingoRacer() {
       }
       raf = requestAnimationFrame(frame);
     })();
+
+    /* VS race: stream our car state to the room at 20 Hz — 50 ms spacing
+       keeps 2-3 packets inside the remote's ~120 ms interpolation window
+       (see remotes.ts) despite DataChannel arrival jitter. Solo runs have
+       no net — one null check per tick, zero behaviour change. After the
+       local death the `dead` message (sent once in the frame loop) is the
+       final word, so the stream stops there */
+    const netSend = window.setInterval(() => {
+      const net = netRef.current;
+      const e = engineRef.current;
+      if (!net || !e || gameOverRef.current) return;
+      net.sendState({
+        pos: e.state.position,
+        x: e.state.playerX,
+        speed: e.state.speed,
+        score: Math.floor(e.state.score),
+        dead: false,
+      });
+    }, 50);
 
     const onKey = (down: boolean) => (ev: KeyboardEvent) => {
       const k = ev.key.toLowerCase();
@@ -1233,19 +2016,34 @@ export function TwingoRacer() {
       };
       if (down && ev.key === "Escape") {
         // ESC peels one layer at a time: settings panel → pause menu →
-        // game over back to the title → (during a run) open the pause
-        // menu
+        // spectate back to the game-over panel → game over back to the
+        // title → (during a run) open the pause menu. A pad's B/Start
+        // lands here as a synthetic Escape, so B exits spectate too
         if (pauseSettingsOpenRef.current) setPauseSettingsOpen(false);
         else if (pauseMenuRef.current) resumeFromPause();
+        else if (spectatingRef.current) exitSpectate();
         else if (gameOverRef.current) quitToTitle();
         else openPauseMenu();
         return;
       }
-      // game over: ←/→ (or ↑/↓) arms PLAY AGAIN / QUIT, Enter/Space runs
+      // spectate mode: ←/→ (keyboard or pad d-pad synthetic keys) cycle
+      // the camera between alive peers; every other key is swallowed —
+      // the run is over (the engine ignores input), and the game-over
+      // nav must not fire PLAY AGAIN/QUIT from under the camera
+      if (spectatingRef.current) {
+        if (down && (k === "arrowleft" || k === "arrowright")) {
+          ev.preventDefault();
+          cycleSpectate(k === "arrowright" ? 1 : -1);
+        }
+        return;
+      }
+      // game over: ←/→ (or ↑/↓) arms the action buttons, Enter/Space runs
       // the armed one — this is also the gamepad path, whose d-pad + A
       // land here as synthetic keys once the initials spinner has
       // released them. While the initials form is pending it owns Enter
-      // and the arrows (input focus / spinner routing)
+      // and the arrows (input focus / spinner routing). In a VS race the
+      // options come from goOptions(): SPECTATE while peers live, REMATCH
+      // (leader) on the results screen, QUIT always
       if (gameOverRef.current && !goFormPendingRef.current) {
         if (!down) return;
         if (
@@ -1256,18 +2054,35 @@ export function TwingoRacer() {
         ) {
           ev.preventDefault();
           audioRef.current?.menuMove();
-          setGoSel((s) => (s === "again" ? "quit" : "again"));
+          const opts = goOptions();
+          setGoSel((s) => {
+            const i = opts.indexOf(s);
+            return opts[(Math.max(i, 0) + 1) % opts.length];
+          });
           return;
         }
         if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
+          const opts = goOptions();
+          const sel = opts.includes(goSelRef.current)
+            ? goSelRef.current
+            : opts[0];
+          if (sel === "spectate") {
+            enterSpectate();
+            return;
+          }
           audioRef.current?.menuSelect();
-          if (goSelRef.current === "again") playAgain();
-          else quitToTitle();
+          if (sel === "again") {
+            // VS results screen: "again" is the REMATCH button — solo
+            // PLAY AGAIN keeps its exact old behaviour
+            if (netRef.current) requestRematch();
+            else playAgain();
+          } else quitToTitle();
           return;
         }
-        // R / pad Select stays a PLAY AGAIN shortcut on game over
-        if (k === "r" || ev.code === "KeyR") {
+        // R / pad Select stays a PLAY AGAIN shortcut on game over (solo —
+        // a VS race restarts only through the leader's REMATCH)
+        if ((k === "r" || ev.code === "KeyR") && !netRef.current) {
           playAgain();
           return;
         }
@@ -1397,6 +2212,7 @@ export function TwingoRacer() {
       cancelled = true;
       cancelAnimationFrame(raf);
       window.clearTimeout(introTimer);
+      window.clearInterval(netSend);
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
       document.removeEventListener("visibilitychange", autoPause);
@@ -1716,6 +2532,19 @@ export function TwingoRacer() {
     </>
   );
 
+  /* lobby armed-row bookkeeping: lobbyRowIds is the single source shared
+     with the key handler; sel stays clamped when the roster change drops
+     the leader-only START RACE row from under the cursor */
+  const lobbyRows = lobbyRowIds(lobbyView, isLeader);
+  const lobbyAt = (id: string) => lobbyRows.indexOf(id);
+  const sel = Math.min(lobbySel, lobbyRows.length - 1);
+
+  /* VS race render gates: mpActive = a room is attached (netRef isn't
+     reactive, but selfPeerId is cleared by leaveNet, so it mirrors it);
+     spectateAvail = at least one peer in the standings is still alive */
+  const mpActive = selfPeerId !== "";
+  const spectateAvail = standings.some((r) => !r.self && !r.dead);
+
   return (
     <div
       ref={overlayRef}
@@ -1726,7 +2555,260 @@ export function TwingoRacer() {
       onClick={() => paused && !pauseMenu && setPaused(false)}
       onKeyDown={() => paused && !pauseMenu && setPaused(false)}
     >
-      {screen === "title" ? (
+      {screen === "lobby" ? (
+        /* VS RACE lobby: replaces the title art inside the same overlay
+           box, same panel language as the leaderboard */
+        <div className="racer-lobby-screen">
+          <div
+            className="racer-gameover racer-title-panel racer-lobby font-pixel"
+            role="dialog"
+            aria-label="VS race lobby"
+          >
+            <div className="racer-gameover-title">VS RACE</div>
+
+            {lobbyView === "home" && (
+              <>
+                <div className="racer-lobby-sub">
+                  2-4 PLAYERS — TODAY&apos;S TRACK
+                </div>
+                <div className="racer-lobby-menu">
+                  <button
+                    type="button"
+                    className={`racer-playagain font-pixel${
+                      sel === lobbyAt("create") ? " racer-go-armed" : ""
+                    }`}
+                    onClick={() => {
+                      audioRef.current?.menuSelect();
+                      joinNet(makeRoomCode());
+                    }}
+                    onPointerEnter={() => setLobbySel(lobbyAt("create"))}
+                  >
+                    CREATE ROOM
+                  </button>
+                  <button
+                    type="button"
+                    className={`racer-quit font-pixel${
+                      sel === lobbyAt("join") ? " racer-go-armed" : ""
+                    }`}
+                    onClick={() => {
+                      audioRef.current?.menuSelect();
+                      setLobbyView("join");
+                    }}
+                    onPointerEnter={() => setLobbySel(lobbyAt("join"))}
+                  >
+                    JOIN ROOM
+                  </button>
+                  <button
+                    type="button"
+                    className={`racer-quit font-pixel${
+                      sel === lobbyAt("back") ? " racer-go-armed" : ""
+                    }`}
+                    onClick={() => {
+                      audioRef.current?.menuSelect();
+                      setScreen("title");
+                    }}
+                    onPointerEnter={() => setLobbySel(lobbyAt("back"))}
+                  >
+                    BACK
+                  </button>
+                </div>
+              </>
+            )}
+
+            {lobbyView === "join" && (
+              <>
+                <label
+                  className="racer-initials-label"
+                  htmlFor="racer-join-code"
+                >
+                  ENTER ROOM CODE
+                </label>
+                <div className="racer-initials-row">
+                  <input
+                    id="racer-join-code"
+                    className="racer-initials-input racer-lobby-input font-pixel"
+                    value={joinCode}
+                    maxLength={4}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="K7X2"
+                    onChange={(e) =>
+                      setJoinCode(
+                        e.target.value.toUpperCase().replace(ROOM_FILTER, ""),
+                      )
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && VALID_ROOM.test(joinCode)) {
+                        audioRef.current?.menuSelect();
+                        joinNet(joinCode);
+                      } else if (e.key === "Escape") setLobbyView("home");
+                      e.stopPropagation();
+                    }}
+                    ref={(el) => el?.focus()}
+                  />
+                  <button
+                    type="button"
+                    className="racer-initials-submit font-pixel"
+                    disabled={!VALID_ROOM.test(joinCode)}
+                    onClick={() => {
+                      audioRef.current?.menuSelect();
+                      joinNet(joinCode);
+                    }}
+                  >
+                    JOIN
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="racer-quit font-pixel"
+                  onClick={() => {
+                    audioRef.current?.menuSelect();
+                    setLobbyView("home");
+                  }}
+                >
+                  BACK
+                </button>
+              </>
+            )}
+
+            {lobbyView === "room" && (
+              <>
+                <div className="racer-lobby-code-label">ROOM CODE</div>
+                <div className="racer-lobby-code">{roomCode}</div>
+                {/* roster: onPeersChanged delivers it sorted by joinedAt —
+                    index 0 is the lobby leader (» marker), self is (YOU) */}
+                <ol className="racer-lobby-list">
+                  {peers.map((p, i) => (
+                    <li
+                      key={p.id}
+                      className={p.id === selfPeerId ? "racer-lobby-me" : ""}
+                    >
+                      <span className="racer-lobby-name">
+                        {i === 0 ? "» " : ""}
+                        {p.name}
+                        {p.id === selfPeerId ? " (YOU)" : ""}
+                      </span>
+                      <span className="racer-lobby-dots" aria-hidden="true" />
+                      <span
+                        className={`racer-lobby-status${
+                          p.ready ? " racer-lobby-status-ready" : ""
+                        }`}
+                      >
+                        {p.ready ? "READY" : "NOT READY"}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                {peers.length < 2 && (
+                  <div className="racer-lobby-sub">WAITING FOR RACERS…</div>
+                )}
+                <div className="racer-lobby-menu">
+                  <button
+                    type="button"
+                    className={`racer-quit font-pixel${
+                      myReady ? " racer-lobby-ready-on" : ""
+                    }${sel === lobbyAt("ready") ? " racer-go-armed" : ""}`}
+                    onClick={() => {
+                      audioRef.current?.menuSelect();
+                      netRef.current?.setReady(!myReady);
+                    }}
+                    onPointerEnter={() => setLobbySel(lobbyAt("ready"))}
+                  >
+                    {myReady ? "READY!" : "READY?"}
+                  </button>
+                  <button
+                    type="button"
+                    className={`racer-quit font-pixel${
+                      sel === lobbyAt("copy") ? " racer-go-armed" : ""
+                    }`}
+                    onClick={copyRaceLink}
+                    onPointerEnter={() => setLobbySel(lobbyAt("copy"))}
+                  >
+                    {copied ? "COPIED!" : "COPY LINK"}
+                  </button>
+                  {isLeader && (
+                    <button
+                      type="button"
+                      className={`racer-playagain font-pixel${
+                        sel === lobbyAt("start") ? " racer-go-armed" : ""
+                      }`}
+                      disabled={!canStart}
+                      onClick={() => {
+                        if (!canStart) return;
+                        audioRef.current?.menuSelect();
+                        netRef.current?.startRace(Date.now() + 3000);
+                      }}
+                      onPointerEnter={() => setLobbySel(lobbyAt("start"))}
+                    >
+                      START RACE
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`racer-quit font-pixel${
+                      sel === lobbyAt("leave") ? " racer-go-armed" : ""
+                    }`}
+                    onClick={() => {
+                      audioRef.current?.menuSelect();
+                      leaveNet();
+                      setLobbyView("home");
+                      setScreen("title");
+                    }}
+                    onPointerEnter={() => setLobbySel(lobbyAt("leave"))}
+                  >
+                    LEAVE
+                  </button>
+                </div>
+                {!isLeader && (
+                  <div className="racer-pausemenu-hint">
+                    LEADER STARTS THE RACE
+                  </div>
+                )}
+                {connectStuck && !netConnected && (
+                  <div className="racer-lobby-retry">
+                    CONNECTING…
+                    <button
+                      type="button"
+                      className="racer-quit font-pixel"
+                      onClick={() => joinNet(roomCode)}
+                    >
+                      RETRY
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {lobbyView === "full" && (
+              <>
+                <div className="racer-gameover-score">
+                  ROOM FULL — MAX {MAX_RACERS} RACERS
+                </div>
+                <button
+                  type="button"
+                  className="racer-playagain font-pixel"
+                  onClick={() => {
+                    audioRef.current?.menuSelect();
+                    setLobbyView("home");
+                    setScreen("title");
+                  }}
+                  ref={(el) => el?.focus()}
+                >
+                  BACK
+                </button>
+              </>
+            )}
+
+            <div className="racer-pausemenu-hint">
+              {lobbyView === "join"
+                ? "TYPE CODE · ENTER JOIN · ESC BACK"
+                : padConnected
+                  ? "D-PAD SELECT · A OK · B BACK"
+                  : "↑↓ SELECT · ENTER OK · ESC BACK"}
+            </div>
+          </div>
+        </div>
+      ) : screen === "title" ? (
         <div className="racer-title">
           {/* blurred cover copy of the art fills the letterbox bands;
               display:contents keeps the picture wrapper out of layout */}
@@ -1799,6 +2881,23 @@ export function TwingoRacer() {
             }}
           >
             SETTINGS
+          </button>
+          {/* VS RACE: P2P multiplayer lobby — a DOM chip like SETTINGS
+              (the artwork's painted buttons can't grow a sibling), parked
+              under it in the top-right sky corner */}
+          <button
+            type="button"
+            className={`racer-title-race font-pixel${
+              titleSel === "race" ? " racer-title-race-sel" : ""
+            }`}
+            onClick={openLobby}
+            onPointerEnter={() => setTitleSel("race")}
+            ref={(el) => {
+              if (titleSel === "race" && !titleBoard && !titleSettingsOpen)
+                el?.focus();
+            }}
+          >
+            VS RACE
           </button>
           {/* TODAY'S TRACK: 1-5 star difficulty card of the first 3 km of
               today's seeded layout — a slim bottom strip, hidden while a
@@ -1915,6 +3014,13 @@ export function TwingoRacer() {
 
       {/* no DOM HUD — speed and score live on the in-canvas LCD cluster */}
 
+      {/* VS race countdown: 3·2·1·GO driven off the leader's startAt,
+          then the normal engine boot path takes over (READY... flash) */}
+      {countdownAt !== null && (
+        <div className="racer-countdown font-pixel" role="status">
+          {countRemain > 0 ? Math.ceil(countRemain / 1000) : "GO!"}
+        </div>
+      )}
       {intro && (
         <div className="racer-ready font-pixel" aria-hidden="true">
           READY...
@@ -2045,7 +3151,69 @@ export function TwingoRacer() {
           )}
         </div>
       )}
-      {gameOver && screen === "playing" && (
+      {/* VS race results: once EVERY participant is dead the game-over
+          panel is replaced by the final standings — REMATCH (leader only)
+          starts a fresh countdown in the same room, others wait */}
+      {gameOver && screen === "playing" && !spectating && raceResults && (
+        <div className="racer-gameover font-pixel" role="alert">
+          <div className="racer-gameover-title">RESULTS</div>
+          <div className="racer-gameover-score">
+            {raceResults.winners.length > 1 ? "WINNERS: " : "WINNER: "}
+            {raceResults.winners.join(" · ")}
+          </div>
+          <ol className="racer-lobby-list racer-results">
+            {raceResults.rows.map((r, i) => (
+              <li key={r.id} className={r.self ? "racer-lobby-me" : ""}>
+                <span className="racer-lobby-name">
+                  {String(i + 1).padStart(2, "0")}. {r.name}
+                  {r.self ? " (YOU)" : ""}
+                </span>
+                <span className="racer-lobby-dots" aria-hidden="true" />
+                <span>{r.score}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="racer-gameover-actions">
+            {isLeader ? (
+              <button
+                type="button"
+                className={`racer-playagain font-pixel${
+                  goSel === "again" ? " racer-go-armed" : ""
+                }`}
+                disabled={countdownAt !== null}
+                onClick={requestRematch}
+                ref={(el) => el?.focus()}
+              >
+                {countdownAt !== null ? "STARTING…" : "REMATCH"}
+              </button>
+            ) : (
+              <div className="racer-pausemenu-hint">
+                {countdownAt !== null ? "STARTING…" : "WAITING FOR REMATCH…"}
+              </div>
+            )}
+            <button
+              type="button"
+              className={`racer-quit font-pixel${
+                goSel === "quit" ? " racer-go-armed" : ""
+              }`}
+              onClick={quitToTitle}
+              ref={(el) => {
+                if (!isLeader) el?.focus();
+              }}
+            >
+              QUIT
+            </button>
+          </div>
+          {!coarse && (
+            <div className="racer-pausemenu-hint">
+              {padConnected
+                ? "◀ ▶ SELECT · A OK · B QUIT"
+                : "← → SELECT · ENTER OK · ESC QUIT"}
+            </div>
+          )}
+        </div>
+      )}
+      {gameOver && screen === "playing" && !spectating && !raceResults && (
         <div className="racer-gameover font-pixel" role="alert">
           <div className="racer-gameover-title">GAME OVER</div>
           <div className="racer-gameover-score">SCORE {finalScore}</div>
@@ -2170,28 +3338,62 @@ export function TwingoRacer() {
           )}
 
           <div className="racer-gameover-actions">
-            <button
-              type="button"
-              className={`racer-playagain font-pixel${
-                goSel === "again" ? " racer-go-armed" : ""
-              }`}
-              onClick={playAgain}
-              ref={(el) => {
-                if (!qualifies || submitState === "done") el?.focus();
-              }}
-            >
-              PLAY AGAIN
-            </button>
+            {/* VS race, peers still racing: no solo PLAY AGAIN — watch the
+                survivor instead (results + REMATCH arrive once everyone is
+                dead). Solo keeps PLAY AGAIN byte-identical */}
+            {mpActive && spectateAvail && (
+              <button
+                type="button"
+                className={`racer-playagain font-pixel${
+                  goSel === "spectate" ? " racer-go-armed" : ""
+                }`}
+                onClick={enterSpectate}
+                ref={(el) => {
+                  if (!qualifies || submitState === "done") el?.focus();
+                }}
+              >
+                SPECTATE
+              </button>
+            )}
+            {!mpActive && (
+              <button
+                type="button"
+                className={`racer-playagain font-pixel${
+                  goSel === "again" ? " racer-go-armed" : ""
+                }`}
+                onClick={playAgain}
+                ref={(el) => {
+                  if (!qualifies || submitState === "done") el?.focus();
+                }}
+              >
+                PLAY AGAIN
+              </button>
+            )}
             <button
               type="button"
               className={`racer-quit font-pixel${
                 goSel === "quit" ? " racer-go-armed" : ""
               }`}
               onClick={quitToTitle}
+              ref={(el) => {
+                if (
+                  mpActive &&
+                  !spectateAvail &&
+                  (!qualifies || submitState === "done")
+                )
+                  el?.focus();
+              }}
             >
               QUIT
             </button>
           </div>
+          {mpActive && (
+            <div className="racer-pausemenu-hint">
+              {spectateAvail
+                ? "RACE STILL ON — RESULTS WHEN ALL ARE OUT"
+                : "WAITING FOR THE ROOM…"}
+            </div>
+          )}
           {!coarse && (
             <div className="racer-pausemenu-hint">
               {padConnected
@@ -2210,6 +3412,57 @@ export function TwingoRacer() {
       >
         ✕
       </button>
+
+      {/* VS race standings: top-right, parked under the ✕/touch top bar.
+          Rows refresh at 4 Hz from standingsRef (see the ticker effect);
+          self in amber, dead peers dimmed with their score swapped for
+          OUT, the current leader marked » like the lobby roster */}
+      {screen === "playing" && standings.length > 0 && (
+        <div
+          className="racer-standings font-pixel"
+          role="status"
+          aria-label="Standings"
+        >
+          {standings.map((r, i) => (
+            <div
+              key={r.id}
+              className={`racer-standings-row${
+                r.self ? " racer-standings-me" : ""
+              }${r.dead ? " racer-standings-dead" : ""}`}
+            >
+              <span className="racer-standings-name">
+                {i === 0 ? "» " : ""}
+                {r.name}
+              </span>
+              <span className="racer-standings-score">
+                {r.dead ? "OUT" : r.score}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* spectate mode: the game-over panel hides behind the camera ride;
+          ESC / pad B drops back to it. With 2+ peers alive ←/→, pad LB/RB
+          or a tap on the chip cycles the camera between them */}
+      {spectating &&
+        (() => {
+          const canSwitch =
+            standings.filter((r) => !r.self && !r.dead).length >= 2;
+          return (
+            // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard control lives on the window-level handler — ←/→ cycle the camera while spectating
+            <div
+              className="racer-spectate font-pixel"
+              role="status"
+              onClick={canSwitch ? () => cycleSpectate(1) : undefined}
+            >
+              SPECTATING {spectating.name}
+              {canSwitch &&
+                (padConnected ? " — LB/RB SWITCH" : " — ←/→ SWITCH")}{" "}
+              — {padConnected ? "B" : "ESC"} EXIT
+            </div>
+          );
+        })()}
 
       {/* FPS counter — toggled with F */}
       {screen === "playing" && showFps && (
