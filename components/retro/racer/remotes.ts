@@ -1,10 +1,22 @@
 /**
- * Remote car buffer for P2P races (see net.ts): keeps the last two state
- * packets per peer and samples them ~100 ms in the past (the interpolation
- * buffer), dead-reckoning up to 250 ms past the newest packet on loss so a
- * lagging peer drifts smoothly instead of freezing. A peer silent for
- * >1.5 s is `stale` (the UI fades it out, a disconnect removes it); a dead
- * peer is parked as a wreck at its final position and never extrapolates.
+ * Remote car buffer for P2P races (see net.ts): keeps the last four state
+ * packets per peer and samples them ~120 ms in the past (the interpolation
+ * buffer). States stream at 20 Hz (50 ms spacing), so the window always
+ * holds 2-3 packets and the sample stays bracketed despite ±60 ms of
+ * DataChannel arrival jitter. On loss the newest packet is dead-reckoned
+ * up to 250 ms — along the track at the last known speed AND laterally at
+ * the estimated dx/dt (clamped), so steering motion doesn't freeze while
+ * the car drifts — then holds. A peer silent for >1.5 s is `stale` (the
+ * UI fades it out, a disconnect removes it); a dead peer is parked as a
+ * wreck at its final position and never extrapolates.
+ *
+ * Two guards keep the sampled pose honest:
+ * - reorder-drop: the car never moves backwards along the track, so a
+ *   packet behind the newest known pos is out-of-order and is discarded,
+ *   not stored (a >50-segment backwards jump is a rematch/reset instead —
+ *   that one clears the history and passes through);
+ * - monotonic pos: the sampled pos never steps backwards within a run, so
+ *   an extrapolation overshoot can't snap back when fresh packets land.
  *
  * All times are milliseconds on the caller's clock (performance.now()) —
  * the store never reads a clock itself, so tests can drive it manually.
@@ -28,23 +40,47 @@ export interface RemoteCarView {
 }
 
 /** render the field this far in the past so two packets bracket the sample */
-const INTERP_DELAY_MS = 100;
+const INTERP_DELAY_MS = 120;
 /** dead-reckoning past the newest packet is capped: drift, then hold */
 const EXTRAP_CAP_MS = 250;
 /** silence longer than this = faded out (disconnect cleanup is the net's job) */
 const STALE_MS = 1500;
+/** packets kept per peer — at 20 Hz the 120 ms window spans ~3 of them */
+const KEEP_PACKETS = 4;
+/** estimated lateral velocity cap (half-widths/s) for extrapolated x */
+const MAX_LATERAL_VEL = 2.5;
+/** never extrapolate x past here — the verge line is ±1.35 */
+const MAX_EXTRAP_X = 1.5;
+/** a backwards jump this large is a rematch/reset, not a reorder
+    (50 segments × 200 world units — engine.ts SEGMENT_LENGTH) */
+const RESET_JUMP = 50 * 200;
+/** lerp brackets shorter than this are arrival-jitter artefacts (two
+    packets landing together): clamping the span caps the lerp slope at
+    ~1.7× instead of teleporting through the bracket in one frame */
+const MIN_LERP_SPAN_MS = 30;
+/** packets are stamped at least this far apart (80% of the 50 ms send
+    spacing): a burst of jitter-compressed arrivals is spread over the
+    following frames instead of collapsing into a zero-span bracket that
+    would jump the car a full packet-step in one frame. Stamps may drift
+    slightly into the future during a burst; a normal 50 ms gap lets the
+    clock catch up, so the drift never accumulates */
+const MIN_PACKET_GAP_MS = 40;
 
 interface Packet {
-  t: number; // arrival time, ms
+  /** jitter-buffered arrival time, ms (≥ actual arrival — bursts are
+      spread MIN_PACKET_GAP_MS apart at upsert time) */
+  t: number;
   s: NetCarState;
 }
 
 interface Peer {
-  prev: Packet | null;
-  cur: Packet;
+  /** oldest → newest, capped at KEEP_PACKETS */
+  packets: Packet[];
   name: string;
   dead: boolean;
   deadScore: number;
+  /** last sampled pos — the monotonic along-track guard's baseline */
+  lastOutPos: number | null;
 }
 
 export interface RemoteCars {
@@ -60,8 +96,26 @@ export interface RemoteCars {
   readonly size: number;
 }
 
+const clamp = (v: number, lo: number, hi: number) =>
+  Math.max(lo, Math.min(hi, v));
+
 export function createRemoteCars(): RemoteCars {
   const peers = new Map<string, Peer>();
+
+  /* lateral velocity from the last two packets — a parked car estimates 0 */
+  const lateralVel = (p: Peer): number => {
+    const pk = p.packets;
+    if (pk.length < 2) return 0;
+    const a = pk[pk.length - 2];
+    const b = pk[pk.length - 1];
+    const dt = b.t - a.t;
+    if (dt <= 0) return 0;
+    return clamp(
+      (b.s.x - a.s.x) / (dt / 1000),
+      -MAX_LATERAL_VEL,
+      MAX_LATERAL_VEL,
+    );
+  };
 
   const sampleOne = (id: string, p: Peer, now: number): RemoteCarView => {
     let pos: number;
@@ -71,31 +125,64 @@ export function createRemoteCars(): RemoteCars {
     if (p.dead) {
       // parked wreck: hold the last known pose exactly — a spectating
       // peer's camera keeps moving, but its wreck must not
-      pos = p.cur.s.pos;
-      x = p.cur.s.x;
+      pos = p.packets[p.packets.length - 1].s.pos;
+      x = p.packets[p.packets.length - 1].s.x;
       speed = 0;
       score = p.deadScore;
     } else {
       const rt = now - INTERP_DELAY_MS;
-      if (p.prev && rt <= p.cur.t) {
-        // bracketed: lerp the two packets at the render time
-        const span = Math.max(1, p.cur.t - p.prev.t);
-        const t = Math.max(0, Math.min(1, (rt - p.prev.t) / span));
-        pos = p.prev.s.pos + (p.cur.s.pos - p.prev.s.pos) * t;
-        x = p.prev.s.x + (p.cur.s.x - p.prev.s.x) * t;
-        speed = p.prev.s.speed + (p.cur.s.speed - p.prev.s.speed) * t;
-        score = p.prev.s.score + (p.cur.s.score - p.prev.s.score) * t;
+      const pk = p.packets;
+      const newest = pk[pk.length - 1];
+      if (rt >= newest.t) {
+        // past the window: extrapolate along the track at the last known
+        // speed and laterally at the estimated velocity, capped — a lost
+        // stream drifts a quarter second, then holds (the stale fade takes
+        // over from there)
+        const over = Math.min(EXTRAP_CAP_MS, Math.max(0, rt - newest.t));
+        pos = newest.s.pos + newest.s.speed * (over / 1000);
+        x = clamp(
+          newest.s.x + lateralVel(p) * (over / 1000),
+          -MAX_EXTRAP_X,
+          MAX_EXTRAP_X,
+        );
+        speed = newest.s.speed;
+        score = newest.s.score;
       } else {
-        // past (or before) the window: extrapolate along the track at the
-        // last known speed, capped — a lost stream drifts a quarter second,
-        // then holds (the stale fade takes over from there)
-        const over = Math.min(EXTRAP_CAP_MS, Math.max(0, rt - p.cur.t));
-        pos = p.cur.s.pos + p.cur.s.speed * (over / 1000);
-        x = p.cur.s.x;
-        speed = p.cur.s.speed;
-        score = p.cur.s.score;
+        // bracketed: lerp the surrounding pair at the render time — hi is
+        // the last packet at or before rt, and rt < newest.t guarantees
+        // pk[hi + 1] exists past it
+        let hi = pk.length - 1;
+        while (hi > 0 && pk[hi].t > rt) hi--;
+        const a = pk[hi];
+        const b = pk[hi + 1];
+        if (!b) {
+          // a single packet and rt sits before it: hold its pose
+          pos = a.s.pos;
+          x = a.s.x;
+          speed = a.s.speed;
+          score = a.s.score;
+        } else {
+          const span = Math.max(MIN_LERP_SPAN_MS, b.t - a.t);
+          const t = clamp((rt - a.t) / span, 0, 1);
+          pos = a.s.pos + (b.s.pos - a.s.pos) * t;
+          x = a.s.x + (b.s.x - a.s.x) * t;
+          speed = a.s.speed + (b.s.speed - a.s.speed) * t;
+          score = a.s.score + (b.s.score - a.s.score) * t;
+        }
+      }
+      // monotonic along-track guard: a lerp against a stale packet or an
+      // extrapolation overshoot must never move the car backwards — unless
+      // the peer clearly reset (rematch/respawn jumps the pos back to ~0,
+      // far past RESET_JUMP), which passes through
+      if (
+        p.lastOutPos !== null &&
+        pos < p.lastOutPos &&
+        p.lastOutPos - pos <= RESET_JUMP
+      ) {
+        pos = p.lastOutPos;
       }
     }
+    p.lastOutPos = pos;
     return {
       id,
       pos,
@@ -104,7 +191,7 @@ export function createRemoteCars(): RemoteCars {
       score,
       name: p.name,
       dead: p.dead,
-      stale: !p.dead && now - p.cur.t > STALE_MS,
+      stale: !p.dead && now - p.packets[p.packets.length - 1].t > STALE_MS,
     };
   };
 
@@ -113,19 +200,39 @@ export function createRemoteCars(): RemoteCars {
       const p = peers.get(id);
       if (p) {
         if (p.dead) return; // the wreck is parked — late packets can't move it
-        p.prev = p.cur;
-        p.cur = { t: now, s };
+        const newest = p.packets[p.packets.length - 1];
+        const back = newest.s.pos - s.pos;
+        if (back > RESET_JUMP) {
+          // rematch/reset: the car jumped back to the start — drop the old
+          // run's packets so no lerp ever spans across the two runs
+          p.packets = [{ t: now, s }];
+          p.lastOutPos = null;
+        } else if (back > 0) {
+          // out-of-order (DataChannel reordering): the car never moves
+          // backwards along the track, so a stale packet is dropped, not
+          // stored — a dead flag on it is still honoured below
+          if (s.dead) {
+            p.dead = true;
+            p.deadScore = s.score;
+          }
+          return;
+        } else {
+          // stamp jitter-compressed arrivals apart (see MIN_PACKET_GAP_MS)
+          const t = Math.max(now, newest.t + MIN_PACKET_GAP_MS);
+          p.packets.push({ t, s });
+          if (p.packets.length > KEEP_PACKETS) p.packets.shift();
+        }
         if (s.dead) {
           p.dead = true;
           p.deadScore = s.score;
         }
       } else {
         peers.set(id, {
-          prev: null,
-          cur: { t: now, s },
+          packets: [{ t: now, s }],
           name: "",
           dead: s.dead,
           deadScore: s.dead ? s.score : 0,
+          lastOutPos: null,
         });
       }
     },

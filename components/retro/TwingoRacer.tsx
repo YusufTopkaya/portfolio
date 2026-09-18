@@ -1151,7 +1151,7 @@ export function TwingoRacer() {
   }, [countdownAt, startRun]);
 
   /* standings HUD + spectate watchdog: remote packets land in
-     standingsRef at 10 Hz per peer — far too hot for React. This 4 Hz
+     standingsRef at 20 Hz per peer — far too hot for React. This 4 Hz
      ticker composes the sorted rows (self from the live engine state)
      and setStates only when something actually changed. It also re-picks
      a lost spectate target in case a death/departure edge was missed */
@@ -1941,7 +1941,9 @@ export function TwingoRacer() {
       raf = requestAnimationFrame(frame);
     })();
 
-    /* VS race: stream our car state to the room at 10 Hz. Solo runs have
+    /* VS race: stream our car state to the room at 20 Hz — 50 ms spacing
+       keeps 2-3 packets inside the remote's ~120 ms interpolation window
+       (see remotes.ts) despite DataChannel arrival jitter. Solo runs have
        no net — one null check per tick, zero behaviour change. After the
        local death the `dead` message (sent once in the frame loop) is the
        final word, so the stream stops there */
@@ -1956,7 +1958,7 @@ export function TwingoRacer() {
         score: Math.floor(e.state.score),
         dead: false,
       });
-    }, 100);
+    }, 50);
 
     const onKey = (down: boolean) => (ev: KeyboardEvent) => {
       const k = ev.key.toLowerCase();
