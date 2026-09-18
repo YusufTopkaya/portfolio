@@ -20,7 +20,7 @@ export const NET_APP_ID = "yusuf-twingo-racer";
 export const MAX_RACERS = 4;
 
 export interface RaceHello {
-  name: string; // 3-letter arcade initials
+  name: string; // display name, up to 10 chars (A-Z 0-9 space)
   seed: number; // the player's turkeyDay() at join time
   joinedAt: number; // Date.now() — oldest peer is the lobby leader
   ready: boolean;
@@ -57,6 +57,10 @@ export interface RaceNet {
   readonly code: string;
   readonly me: RaceHello;
   setReady(ready: boolean): void;
+  /** lobby display name change: updates `me` and re-announces the hello
+      (peers keep the ORIGINAL joinedAt/seed, so a rename never moves the
+      lobby lead or the track seed) */
+  setName(name: string): void;
   /** lobby leader only: everyone starts when Date.now() reaches startAt */
   startRace(startAt: number): void;
   rematch(): void;
@@ -209,6 +213,11 @@ export class TrysteroNet implements RaceNet {
     this.senders.hello(this.me);
     this.emitPeers();
   }
+  setName(name: string) {
+    this.me.name = name;
+    this.senders.hello(this.me);
+    this.emitPeers();
+  }
   startRace(startAt: number) {
     this.senders.start(startAt);
     this.h.onStart?.(startAt); // the leader's own countdown too
@@ -278,6 +287,14 @@ export class LoopbackNet implements RaceNet {
 
   setReady(ready: boolean) {
     this.me.ready = ready;
+    this.each((o) => {
+      o.peers.set(this.selfId, { ...this.me });
+      o.emitPeers();
+    });
+    this.emitPeers();
+  }
+  setName(name: string) {
+    this.me.name = name;
     this.each((o) => {
       o.peers.set(this.selfId, { ...this.me });
       o.emitPeers();

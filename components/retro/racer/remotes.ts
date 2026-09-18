@@ -32,7 +32,7 @@ export interface RemoteCarView {
   x: number;
   speed: number;
   score: number;
-  /** 3-letter arcade initials ("" until setName lands) */
+  /** lobby display name ("" until setName lands) */
   name: string;
   dead: boolean;
   /** no packet for >1.5 s — render faded, on the way to removal */

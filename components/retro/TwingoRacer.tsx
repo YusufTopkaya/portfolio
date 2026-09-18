@@ -128,21 +128,49 @@ type GoSelection = "again" | "spectate" | "quit";
    and the JSX so the selection index always points at the same button */
 const lobbyRowIds = (view: LobbyView, leader: boolean): string[] =>
   view === "home"
-    ? ["create", "join", "back"]
+    ? ["name", "create", "join", "back"]
     : view === "room"
       ? leader
-        ? ["ready", "copy", "start", "leave"]
-        : ["ready", "copy", "leave"]
+        ? ["name", "ready", "copy", "start", "leave"]
+        : ["name", "ready", "copy", "leave"]
       : ["back"];
 
-/* the player's arcade initials — persisted on every successful highscore
-   submit ("twingo:name"), reused as the lobby display name */
+/* the player's display name — owned by the VS RACE lobby, persisted as
+   "twingo:name" (up to 10 chars, A-Z 0-9 and space). The highscore
+   initials moved to their own "twingo:initials" key; it's the middle
+   fallback here so an old player who only ever submitted initials still
+   gets them as their name */
+const NAME_FILTER = /[^A-Z0-9 ]/g;
+const sanitizeName = (v: string): string =>
+  v.toUpperCase().replace(NAME_FILTER, "").slice(0, 10);
 const savedName = (): string => {
   try {
-    const n = localStorage.getItem("twingo:name") ?? "";
-    return /^[A-Z0-9]{3}$/.test(n) ? n : "YOU";
+    const n = (localStorage.getItem("twingo:name") ?? "").trim();
+    if (/^[A-Z0-9 ]{1,10}$/.test(n)) return n;
+    const i = localStorage.getItem("twingo:initials") ?? "";
+    return /^[A-Z0-9]{3}$/.test(i) ? i : "YOU";
   } catch {
     return "YOU";
+  }
+};
+
+/* highscore initials prefill: the dedicated "twingo:initials" key first,
+   else derive from the display name — first 3 chars that exist in the
+   spinner alphabet, padded with A. "" when nothing is saved (the form
+   stays empty, same as before) */
+const savedInitials = (): string => {
+  try {
+    const i = localStorage.getItem("twingo:initials") ?? "";
+    if (/^[A-Z0-9]{3}$/.test(i)) return i;
+    const n = savedName();
+    if (n === "YOU") return "";
+    const derived = [...n]
+      .filter((c) => SPIN_CHARS.includes(c))
+      .join("")
+      .slice(0, 3);
+    return derived.padEnd(3, "A");
+  } catch {
+    return "";
   }
 };
 
@@ -203,6 +231,13 @@ export function TwingoRacer() {
   const [lobbyView, setLobbyView] = useState<LobbyView>("home");
   const [lobbySel, setLobbySel] = useState(0);
   const [joinCode, setJoinCode] = useState("");
+  /* display name (up to 10 chars, A-Z 0-9 space): editable on the lobby
+     home and room screens, persisted as "twingo:name"; while a room is
+     attached, edits re-hello through net.setName (debounced) so the
+     roster and the remote name tags update live */
+  const [playerName, setPlayerName] = useState(() => savedName());
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const nameDebounceRef = useRef<number | null>(null);
   const [roomCode, setRoomCode] = useState("");
   const [peers, setPeers] = useState<RacePeer[]>([]);
   const [selfPeerId, setSelfPeerId] = useState("");
@@ -780,7 +815,9 @@ export function TwingoRacer() {
       setConnectStuck(false);
       setCopied(false);
       setJoinCode("");
-      setLobbySel(0);
+      // row 0 is the NAME input — land on READY so a quick Enter still
+      // readies up instead of focusing the text field
+      setLobbySel(1);
       setLobbyView("room");
       // alone in a room TrysteroNet never emits — show ourselves at once
       if (!delivered) {
@@ -825,9 +862,45 @@ export function TwingoRacer() {
     audioRef.current?.menuSelect();
     setScreen("lobby");
     setLobbyView("home");
-    setLobbySel(0);
+    // row 0 is the NAME input — land on CREATE ROOM
+    setLobbySel(1);
     setJoinCode("");
   }, []);
+
+  /* announce the current name to the room (no-op solo — netRef is null).
+     Empty trims down to the "YOU" fallback so the roster never shows a
+     blank tag; peers keep the original joinedAt/seed on the re-hello */
+  const pushName = useCallback((raw: string) => {
+    const name = sanitizeName(raw).trim() || "YOU";
+    netRef.current?.setName(name);
+  }, []);
+
+  /* name input: sanitize live (uppercase, A-Z 0-9 space, ≤10), persist,
+     and debounce the re-hello ~400 ms — blur/Enter flush it immediately */
+  const changeName = useCallback(
+    (v: string) => {
+      const clean = sanitizeName(v);
+      setPlayerName(clean);
+      try {
+        localStorage.setItem("twingo:name", clean.trim());
+      } catch {}
+      if (nameDebounceRef.current !== null)
+        window.clearTimeout(nameDebounceRef.current);
+      nameDebounceRef.current = window.setTimeout(() => {
+        nameDebounceRef.current = null;
+        pushName(clean);
+      }, 400);
+    },
+    [pushName],
+  );
+
+  const flushName = useCallback(() => {
+    if (nameDebounceRef.current !== null) {
+      window.clearTimeout(nameDebounceRef.current);
+      nameDebounceRef.current = null;
+      pushName(playerName);
+    }
+  }, [pushName, playerName]);
 
   /* each run gets a fresh single-use submit token; PLAY AGAIN re-issues.
      On failure the leaderboard UI stays hidden and the game just plays.
@@ -838,7 +911,7 @@ export function TwingoRacer() {
     if (!open || screen !== "playing") return;
     tokenRef.current = null;
     setBoard(null);
-    setInitials(savedName() === "YOU" ? "" : savedName());
+    setInitials(savedInitials());
     setSubmitState("idle");
     setMyRank(null);
     // stale-score poison: finalScore survives across runs (it's only
@@ -904,10 +977,10 @@ export function TwingoRacer() {
       setBoardPeriod("all");
       setBoard(d.scores);
       setSubmitState("done");
-      // remember the initials — the VS RACE lobby reuses them as the
-      // player name (and the form prefills from them next run)
+      // remember the initials in their OWN key — "twingo:name" belongs to
+      // the lobby display name now (the form prefills from them next run)
       try {
-        localStorage.setItem("twingo:name", initials);
+        localStorage.setItem("twingo:initials", initials);
       } catch {}
     } catch {
       // failed before/without consuming server-side (network, invalid
@@ -1468,13 +1541,20 @@ export function TwingoRacer() {
   /* lobby keyboard control — the gamepad poller turns pad presses into
      synthetic keyboard events, so pads work here with zero extra code:
      ↑/↓ arm a row, Enter/Space activates, ESC steps back (in a room it
-     also drops the net, same as LEAVE). The JOIN input owns the keys
-     while it's open (it stops propagation, like the initials input) */
+     also drops the net, same as LEAVE). The text inputs own the keys
+     while focused — the JOIN code input stops propagation like the
+     initials input, the NAME row is part of the nav (Enter focuses it,
+     ESC inside blurs back to the nav) */
   useEffect(() => {
     if (!open || screen !== "lobby") return;
     const rows = lobbyRowIds(lobbyView, isLeader);
     const activate = (row: string) => {
-      if (row === "create") {
+      if (row === "name") {
+        // arming the NAME row + Enter focuses the input (typing itself is
+        // keyboard-only — same limitation as the JOIN code input)
+        audioRef.current?.menuSelect();
+        nameInputRef.current?.focus();
+      } else if (row === "create") {
         audioRef.current?.menuSelect();
         joinNet(makeRoomCode());
       } else if (row === "join") {
@@ -1499,6 +1579,25 @@ export function TwingoRacer() {
       }
     };
     const onKey = (ev: KeyboardEvent) => {
+      // a focused text input owns the keys (real events stop propagation
+      // before reaching us, but pad-synthesised ones target window): ESC
+      // blurs the NAME input back into the row nav, everything else is
+      // left to the field so arrows edit the text instead of the menu.
+      // The JOIN view is exempt — its input stops real propagation
+      // itself and the view-level ESC path must keep working for pads
+      const ae = document.activeElement;
+      if (
+        lobbyView !== "join" &&
+        (ev.target instanceof HTMLInputElement ||
+          ae instanceof HTMLInputElement)
+      ) {
+        if (ev.key === "Escape" && ae === nameInputRef.current) {
+          ev.preventDefault();
+          flushName();
+          nameInputRef.current?.blur();
+        }
+        return;
+      }
       if (ev.key === "Escape") {
         if (lobbyView === "join") setLobbyView("home");
         else {
@@ -1534,6 +1633,7 @@ export function TwingoRacer() {
     joinNet,
     leaveNet,
     copyRaceLink,
+    flushName,
   ]);
 
   /* gamepad: one rAF poller for the whole overlay (the title screen has
@@ -2539,6 +2639,48 @@ export function TwingoRacer() {
   const lobbyAt = (id: string) => lobbyRows.indexOf(id);
   const sel = Math.min(lobbySel, lobbyRows.length - 1);
 
+  /* the NAME row: part of the lobby row nav on the home and room views —
+     armed like the buttons (Enter focuses the input, ESC inside blurs
+     back to the nav). Edits persist immediately and re-hello through
+     net.setName while a room is attached (debounced, flushed on
+     blur/Enter/Escape) */
+  const nameRow = (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard control lives on the window-level lobby handler — the row arms via ↑/↓ and focuses on Enter
+    <div
+      className={`racer-lobby-name-row${
+        sel === lobbyAt("name") ? " racer-lobby-name-armed" : ""
+      }`}
+      onClick={() => nameInputRef.current?.focus()}
+      onPointerEnter={() => setLobbySel(lobbyAt("name"))}
+    >
+      <label className="racer-initials-label" htmlFor="racer-lobby-name">
+        NAME
+      </label>
+      <input
+        id="racer-lobby-name"
+        ref={nameInputRef}
+        className="racer-initials-input racer-lobby-input racer-lobby-name-input font-pixel"
+        value={playerName}
+        maxLength={10}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="YOU"
+        onChange={(e) => changeName(e.target.value)}
+        onFocus={() => setLobbySel(lobbyAt("name"))}
+        onBlur={flushName}
+        onKeyDown={(e) => {
+          // Enter / ESC commit and hand the keys back to the row nav
+          if (e.key === "Enter" || e.key === "Escape") {
+            e.preventDefault();
+            flushName();
+            nameInputRef.current?.blur();
+          }
+          e.stopPropagation();
+        }}
+      />
+    </div>
+  );
+
   /* VS race render gates: mpActive = a room is attached (netRef isn't
      reactive, but selfPeerId is cleared by leaveNet, so it mirrors it);
      spectateAvail = at least one peer in the standings is still alive */
@@ -2571,6 +2713,7 @@ export function TwingoRacer() {
                 <div className="racer-lobby-sub">
                   2-4 PLAYERS — TODAY&apos;S TRACK
                 </div>
+                {nameRow}
                 <div className="racer-lobby-menu">
                   <button
                     type="button"
@@ -2675,6 +2818,7 @@ export function TwingoRacer() {
               <>
                 <div className="racer-lobby-code-label">ROOM CODE</div>
                 <div className="racer-lobby-code">{roomCode}</div>
+                {nameRow}
                 {/* roster: onPeersChanged delivers it sorted by joinedAt —
                     index 0 is the lobby leader (» marker), self is (YOU) */}
                 <ol className="racer-lobby-list">

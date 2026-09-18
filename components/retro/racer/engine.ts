@@ -3384,12 +3384,20 @@ export function createEngine(opts: {
             }
             ctx.globalAlpha = 1;
           }
-          // initials tag above the car — skipped at a distance where the
-          // text would be a smudge
+          // name tag above the car — skipped at a distance where the
+          // text would be a smudge. Display names run up to 10 chars, so
+          // the font shrinks to keep the tag within ~1.15× the car's
+          // width instead of letting a long name spill past the body
           if (rv.name && destW >= 16) {
-            const fs = Math.max(6, Math.min(11, Math.round(destW * 0.22)));
+            let fs = Math.max(6, Math.min(11, Math.round(destW * 0.22)));
             ctx.font = `bold ${fs}px monospace`;
-            const tw = ctx.measureText(rv.name).width;
+            let tw = ctx.measureText(rv.name).width;
+            const maxTw = destW * 1.15;
+            if (tw > maxTw) {
+              fs = Math.max(5, Math.floor((fs * maxTw) / tw));
+              ctx.font = `bold ${fs}px monospace`;
+              tw = ctx.measureText(rv.name).width;
+            }
             const tx = Math.round(destX + destW / 2 - tw / 2);
             const ty = Math.round(destY - 2);
             ctx.globalAlpha = rAlpha;

@@ -1168,7 +1168,9 @@ html.crt-boot::after {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  min-width: 128px;
+  /* sized for the worst row at 8px Press Start 2P: "» " + a 10-char
+     display name + gap + a 6-digit score ≈ 172px */
+  min-width: 172px;
   font-size: 8px;
   color: #d7ff9e;
   background: #1c1a16;
@@ -1207,6 +1209,11 @@ html.crt-boot::after {
   border: 2px solid #6e6650;
   padding: 4px 10px;
   white-space: nowrap;
+  /* last-resort clip for long names on narrow screens: the full chip
+     (SPECTATING + 10-char name + hints) is ~46 chars ≈ 368px */
+  max-width: 94vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: auto;
   cursor: pointer;
   z-index: 5;
@@ -1838,6 +1845,13 @@ html.crt-boot::after {
   gap: 8px;
   font-size: 8px;
   color: #d7ff9e;
+  white-space: nowrap;
+}
+
+/* names (up to 10 chars + » / (YOU) affixes) and the status/score column
+   keep their width — the dotted leader absorbs all the shrinking */
+.racer-lobby-list li > span:not(.racer-lobby-dots) {
+  flex-shrink: 0;
 }
 
 .racer-lobby-list li.racer-lobby-me {
@@ -1900,6 +1914,29 @@ html.crt-boot::after {
 /* JOIN: 4-char room code input — same LCD inset as the initials field */
 .racer-lobby-input {
   width: 96px;
+}
+
+/* NAME row: a lobby-nav row wrapping the 10-char display-name input —
+   armed like the menu buttons (Enter focuses, ESC blurs back) */
+.racer-lobby-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  border: 2px solid transparent;
+  cursor: text;
+}
+
+.racer-lobby-name-row.racer-lobby-name-armed {
+  border-color: #ffd75e;
+}
+
+.racer-lobby-name-input {
+  /* 10 chars of Press Start 2P at 10px + 2px tracking ≈ 118px */
+  width: 132px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-align: left;
 }
 
 /* 3·2·1·GO before a VS race, driven off the leader's startAt */
