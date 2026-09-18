@@ -12,8 +12,10 @@
  *
  * VS RACE: a DOM chip on the title screen opens the P2P lobby (Trystero,
  * see ./racer/net.ts) — CREATE/JOIN a 4-char room code, READY up, the
- * lobby leader (oldest joinedAt) starts a 3·2·1·GO countdown and the
- * race boots through the normal START path. A shared link
+ * lobby leader (oldest joinedAt) rolls a fresh random track seed and
+ * starts the race: everyone's engine boots IMMEDIATELY (cars idling on
+ * the grid, driving input suppressed) and a 3·2·1·GO counts down over
+ * the canvas, receipt-relative — no shared clock needed. A shared link
  * (/<lang>/?race=CODE) auto-opens the overlay straight into the room.
  */
 
@@ -42,6 +44,7 @@ import {
   type RaceHello,
   type RaceNet,
   type RacePeer,
+  START_COUNTDOWN_MS,
   TrysteroNet,
 } from "./racer/net";
 import {
@@ -89,18 +92,60 @@ const makeRoomCode = () =>
   ).join("");
 
 /* lobby sub-views: home (CREATE/JOIN choice) → join (code input) → room
-   (peer roster); "full" is the bounce screen for a 5th arrival */
+   (peer roster); "full" is the bounce screen for a 6th arrival */
 type LobbyView = "home" | "join" | "room" | "full";
 
-/* VS race start grid: lateral slot (road half-widths) per roster index —
-   everyone starts at position 0, spread across the lanes by join order
-   (roster is sorted by joinedAt; index 0 is the lobby leader) */
-const RACE_GRID: readonly (readonly number[])[] = [
-  [0],
-  [-0.45, 0.45],
-  [-0.7, 0, 0.7],
-  [-0.75, -0.25, 0.25, 0.75],
+/* VS race start grid: lateral slot (road half-widths) + along-track slot
+   (world units, negative = behind the start line) per roster index —
+   the roster is sorted by joinedAt, index 0 is the lobby leader. The 5th
+   arrival takes a back row: dead centre, 3 segments (600 world units)
+   behind the start line */
+interface GridSlot {
+  x: number;
+  pos: number;
+}
+const RACE_GRID: readonly (readonly GridSlot[])[] = [
+  [{ x: 0, pos: 0 }],
+  [
+    { x: -0.45, pos: 0 },
+    { x: 0.45, pos: 0 },
+  ],
+  [
+    { x: -0.7, pos: 0 },
+    { x: 0, pos: 0 },
+    { x: 0.7, pos: 0 },
+  ],
+  [
+    { x: -0.75, pos: 0 },
+    { x: -0.25, pos: 0 },
+    { x: 0.25, pos: 0 },
+    { x: 0.75, pos: 0 },
+  ],
+  [
+    { x: -0.75, pos: 0 },
+    { x: -0.25, pos: 0 },
+    { x: 0.25, pos: 0 },
+    { x: 0.75, pos: 0 },
+    { x: 0, pos: -600 },
+  ],
 ];
+
+/* per-race VS track seed: the lobby leader rolls a fresh one for every
+   race (rematch included) — the daily track is solo-only */
+const newSeed = () => Math.floor(Math.random() * 1e9);
+
+/* input bag fed to the engine while a VS race countdown holds the grid:
+   every channel zeroed, the analog ones included — the car idles in
+   place no matter what the player is holding down */
+const HELD_INPUT: RacerInput = {
+  left: false,
+  right: false,
+  gas: false,
+  brake: false,
+  steer: 0,
+  gasAmt: 0,
+  brakeAmt: 0,
+};
 
 /* live race bookkeeping per peer (standingsRef): the last state packet,
    the lobby name and the death notice once it arrives */
@@ -212,6 +257,121 @@ function BracketGem({ score }: { score: number }) {
   );
 }
 
+/* spectate instruments: blocky 7-segment digits in the engine cluster's
+   palette (a=top … g=middle, same segment order as the engine's own
+   SEG_MAP) */
+const SPEC_SEG: Record<string, readonly boolean[]> = {
+  "0": [true, true, true, true, true, true, false],
+  "1": [false, true, true, false, false, false, false],
+  "2": [true, true, false, true, true, false, true],
+  "3": [true, true, true, true, false, false, true],
+  "4": [false, true, true, false, false, true, true],
+  "5": [true, false, true, true, false, true, true],
+  "6": [true, false, true, true, true, true, true],
+  "7": [true, true, true, false, false, false, false],
+  "8": [true, true, true, true, true, true, true],
+  "9": [true, true, true, true, false, true, true],
+};
+
+function specDigit(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  ch: string,
+  color: string,
+) {
+  const on = SPEC_SEG[ch];
+  if (!on) return;
+  const t = Math.max(1, Math.round(size * 0.2));
+  const w = Math.round(size);
+  const h = Math.round(size * 2);
+  x = Math.round(x);
+  y = Math.round(y);
+  ctx.fillStyle = color;
+  if (on[0]) ctx.fillRect(x, y, w, t);
+  if (on[1]) ctx.fillRect(x + w - t, y, t, Math.round(h / 2));
+  if (on[2])
+    ctx.fillRect(x + w - t, y + Math.round(h / 2), t, Math.round(h / 2));
+  if (on[3]) ctx.fillRect(x, y + h - t, w, t);
+  if (on[4]) ctx.fillRect(x, y + Math.round(h / 2), t, Math.round(h / 2));
+  if (on[5]) ctx.fillRect(x, y, t, Math.round(h / 2));
+  if (on[6]) ctx.fillRect(x, y + Math.round(h / 2 - t / 2), w, t);
+}
+
+/* spectate instruments restamp: covers the engine's LCD cluster rect
+   wholesale (bottom-right desktop / top-left touch, 150×52 ui — the same
+   geometry renderCluster uses) and redraws it with the FOLLOWED player's
+   live speed + score. The local fuel gauge row is dropped — our tank is
+   nobody's business once our own run is over */
+function drawSpectateCluster(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  kmh: number,
+  score: number,
+  topLeft: boolean,
+) {
+  const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
+  const pw = Math.round(150 * ui);
+  const ph = Math.round(52 * ui);
+  const x0 = topLeft ? Math.round(8 * ui) : width - pw - Math.round(8 * ui);
+  const y0 = topLeft ? Math.round(16 * ui) : height - ph - Math.round(8 * ui);
+  const pad = Math.round(3 * ui);
+  const segColor = "#243320";
+  const ghostColor = "rgba(36,51,32,0.10)";
+
+  // bezel + LCD inset, covering the stale local cluster
+  ctx.fillStyle = "#141611";
+  ctx.beginPath();
+  ctx.roundRect(x0, y0, pw, ph, Math.round(6 * ui));
+  ctx.fill();
+  ctx.fillStyle = "#a7c57d";
+  ctx.beginPath();
+  ctx.roundRect(
+    x0 + pad,
+    y0 + pad,
+    pw - pad * 2,
+    ph - pad * 2,
+    Math.round(4 * ui),
+  );
+  ctx.fill();
+
+  // big speed readout (the followed car's), ghost 8s behind live digits
+  const size = 13 * ui;
+  const gap = 3 * ui;
+  const digitW = size + gap;
+  const digitsX = x0 + pad + Math.round(7 * ui);
+  const digitsY = y0 + pad + Math.round(12 * ui);
+  const text = String(Math.min(999, Math.round(kmh))).padStart(3, " ");
+  for (let i = 0; i < 3; i++) {
+    specDigit(ctx, digitsX + i * digitW, digitsY, size, "8", ghostColor);
+    if (text[i] !== " ") {
+      specDigit(ctx, digitsX + i * digitW, digitsY, size, text[i], segColor);
+    }
+  }
+  ctx.fillStyle = segColor;
+  ctx.font = `${Math.round(6 * ui)}px monospace`;
+  ctx.fillText(
+    "km/h",
+    digitsX + 3 * digitW + Math.round(2 * ui),
+    digitsY + size * 2,
+  );
+
+  // followed score, top-right (where the real cluster shows the trip)
+  const tSize = 5 * ui;
+  const tW = tSize + 1.5 * ui;
+  const scoreText = String(Math.floor(score)).padStart(5, " ");
+  const scoreX = x0 + pw - pad - Math.round(7 * ui) - scoreText.length * tW;
+  const scoreY = y0 + pad + Math.round(4 * ui);
+  for (let i = 0; i < scoreText.length; i++) {
+    specDigit(ctx, scoreX + i * tW, scoreY, tSize, "8", ghostColor);
+    if (scoreText[i] !== " ") {
+      specDigit(ctx, scoreX + i * tW, scoreY, tSize, scoreText[i], segColor);
+    }
+  }
+}
+
 export function TwingoRacer() {
   const [open, setOpen] = useState(false);
   /* the overlay opens on the title screen; the engine only boots once
@@ -246,10 +406,17 @@ export function TwingoRacer() {
   const [netConnected, setNetConnected] = useState(false);
   const [connectStuck, setConnectStuck] = useState(false);
   const [copied, setCopied] = useState(false);
-  /* set by onStart (everyone, the leader included): the countdown overlay
-     runs off startAt - Date.now() (clamped ≥ 0) and boots the race at
-     zero */
-  const [countdownAt, setCountdownAt] = useState<number | null>(null);
+  /* a VS race start/rematch the room announced: the engine boots
+     IMMEDIATELY (cars idle on the grid behind the countdown overlay) and
+     endsAt counts down RECEIPT-RELATIVE (s.ms after the message arrived,
+     never an absolute timestamp — device clocks can be minutes apart).
+     Driving input is suppressed while this is set; GO gates on the
+     engine existing, so a slow sprite load just holds the overlay on
+     "GO!" a moment longer */
+  const [pendingRace, setPendingRace] = useState<{
+    endsAt: number;
+    seed: number;
+  } | null>(null);
   const [countRemain, setCountRemain] = useState(0);
   /* TODAY'S TRACK: 1-5 star difficulty card of the first ~3 km, rated
      once per session from the same daily seed the engine races on */
@@ -435,7 +602,11 @@ export function TwingoRacer() {
     winners: string[];
   } | null>(null);
   const isLeaderRef = useRef(false);
-  const countdownAtRef = useRef<number | null>(null);
+  const pendingRaceRef = useRef<{ endsAt: number; seed: number } | null>(null);
+  /* the seed the CURRENT VS race is running on (the pending race's seed,
+     remembered at engine boot): a mid-race RESTART replays the same
+     layout instead of falling back to the daily track */
+  const raceSeedRef = useRef<number | null>(null);
   /* record chase: each period's #1 score, fetched at run start — applied
      to the engine both when the fetch lands and when the engine boots,
      whichever happens last */
@@ -481,6 +652,10 @@ export function TwingoRacer() {
     gas: false,
     brake: false,
   });
+  /* the merged steering value actually applied this frame (-1..1 — pad
+     analog, tilt or the digital flags, clamped): broadcast in the VS
+     state packets so the remote cars render our steering frames */
+  const steerOutRef = useRef(0);
   /* gamepad: latest polled continuous state (steer/gas/brake) merged into
      the engine input each frame; padConnected drives the hints HUD */
   const padInputRef = useRef<PadState | null>(null);
@@ -499,7 +674,7 @@ export function TwingoRacer() {
   showFpsRef.current = showFps;
   screenRef.current = screen;
   titleBoardRef.current = titleBoard;
-  countdownAtRef.current = countdownAt;
+  pendingRaceRef.current = pendingRace;
 
   /* ── VS RACE lobby (P2P) ── */
 
@@ -547,7 +722,12 @@ export function TwingoRacer() {
     const t = bestSpectateTarget();
     const e = engineRef.current;
     if (t && e) {
-      e.setSpectate({ pos: t.state.pos, x: t.state.x, speed: t.state.speed });
+      e.setSpectate({
+        id: t.id,
+        pos: t.state.pos,
+        x: t.state.x,
+        speed: t.state.speed,
+      });
       setSpectateMode({ id: t.id, name: t.name });
     } else {
       e?.setSpectate(null);
@@ -576,6 +756,7 @@ export function TwingoRacer() {
         ];
       audioRef.current?.menuMove();
       e.setSpectate({
+        id: next[0],
         pos: next[1].state.pos,
         x: next[1].state.x,
         speed: next[1].state.speed,
@@ -642,7 +823,12 @@ export function TwingoRacer() {
     const e = engineRef.current;
     if (!t || !e) return;
     audioRef.current?.menuSelect();
-    e.setSpectate({ pos: t.state.pos, x: t.state.x, speed: t.state.speed });
+    e.setSpectate({
+      id: t.id,
+      pos: t.state.pos,
+      x: t.state.x,
+      speed: t.state.speed,
+    });
     setSpectateMode({ id: t.id, name: t.name });
   }, [bestSpectateTarget, setSpectateMode]);
 
@@ -652,13 +838,14 @@ export function TwingoRacer() {
     setSpectateMode(null);
   }, [setSpectateMode]);
 
-  /* REMATCH (lobby leader, results screen): broadcasts the bare message —
-     every client (us included, via TrysteroNet.rematch's local echo) runs
-     its own 3 s countdown off its own clock */
+  /* REMATCH (lobby leader, results screen): broadcasts a fresh random
+     track seed — every client (us included, via TrysteroNet.rematch's
+     local echo) boots the new layout at once and counts down its own
+     START_COUNTDOWN_MS from receipt */
   const requestRematch = useCallback(() => {
-    if (countdownAtRef.current !== null) return; // countdown already running
+    if (pendingRaceRef.current !== null) return; // countdown already running
     audioRef.current?.menuSelect();
-    netRef.current?.rematch();
+    netRef.current?.rematch(newSeed());
   }, []);
 
   /* leave the P2P room: the LEAVE button, ESC, QUIT and ✕ all funnel
@@ -677,10 +864,91 @@ export function TwingoRacer() {
     setPeers([]);
     setSelfPeerId("");
     setRoomCode("");
-    setCountdownAt(null);
+    setPendingRace(null);
+    pendingRaceRef.current = null;
+    raceSeedRef.current = null;
     setNetConnected(false);
     setConnectStuck(false);
   }, [setSpectateMode]);
+
+  /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly. In a
+     VS race this is also the per-client rematch reset (fired by startRun
+     when a rematch arrives): the net itself survives — same room, fresh
+     grid slots and a fresh per-race track seed at engine boot */
+  const playAgain = useCallback(() => {
+    audioRef.current?.menuSelect();
+    audioRef.current?.setInterior(false);
+    engineRef.current = null;
+    gameOverRef.current = false;
+    keysRef.current = { left: false, right: false, gas: false, brake: false };
+    // VS race run state: standings/spectate/results belong to the run
+    standingsRef.current.clear();
+    spectatingRef.current = null;
+    setSpectating(null);
+    raceResultsRef.current = null;
+    setRaceResults(null);
+    setGameOver(false);
+    setQualifyBoards(null);
+    setPauseMenu(false);
+    setPaused(false);
+    setView("chase"); // every run starts on the chase cam
+    setRunId((r) => r + 1);
+  }, []);
+
+  /* START on the title screen: boot the engine and drop into the READY
+     flash. If the previous session ended mid-overlay (game over never
+     replayed), reset the run first — same as PLAY AGAIN. Also kick off
+     the record-chase fetch: the run's targets are each period's #1. */
+  const startRun = useCallback(() => {
+    setTitleBoard(false);
+    if (gameOverRef.current) playAgain();
+    setScreen("playing");
+    setIntro(true);
+    // ascending prestige: later entries win the dedupe when two period
+    // tops sit on the same score (the same run holding 24H and 7D fires
+    // one banner, the more prestigious one)
+    const CHASE: [ScorePeriod, string][] = [
+      ["daily", "24H"],
+      ["weekly", "7D"],
+      ["monthly", "30D"],
+      ["all", "ALL-TIME"],
+    ];
+    void Promise.all(
+      CHASE.map(([p]) =>
+        fetch(`/api/highscore?period=${p}`, { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    ).then((boards) => {
+      const byScore = new Map<number, { score: number; label: string }>();
+      boards.forEach((d: { scores?: ScoreEntry[] } | null, i) => {
+        const top = d?.scores?.[0]?.score;
+        if (typeof top === "number" && top > 0) {
+          byScore.set(top, { score: top, label: CHASE[i][1] });
+        }
+      });
+      const targets = [...byScore.values()].sort((a, b) => a.score - b.score);
+      recordTargetsRef.current = targets;
+      engineRef.current?.setRecordTargets(targets);
+    });
+  }, [playAgain]);
+
+  /* a VS race start/rematch just arrived: set the pending race (the
+     countdown effect + the input suppression key off it) and boot the
+     engine IMMEDIATELY through the normal START path — the cars sit on
+     the grid idling while the countdown runs over the canvas. A rematch
+     lands on the game-over/results screen, where startRun's playAgain
+     reset rebuilds the run; a mid-race lobby idler gets pulled in the
+     same way */
+  const beginVsRace = useCallback(
+    (seed: number, ms: number) => {
+      pendingRaceRef.current = { endsAt: Date.now() + ms, seed };
+      setPendingRace(pendingRaceRef.current);
+      setCountRemain(ms);
+      startRun();
+    },
+    [startRun],
+  );
 
   /* create (or re-create, on Retry) the Trystero room. The handlers close
      over setState + the hello + stable race-flow callbacks + refs — never
@@ -736,12 +1004,11 @@ export function TwingoRacer() {
             repickSpectate();
           checkRaceOver();
         },
-        onStart: (startAt) => {
+        onStart: (s) => {
           if (gen !== netGenRef.current) return;
           // a start only counts while we're actually waiting in the lobby
           if (screenRef.current !== "lobby") return;
-          setCountRemain(Math.max(0, startAt - Date.now()));
-          setCountdownAt(startAt);
+          beginVsRace(s.seed, s.ms);
         },
         onState: (id, s) => {
           if (gen !== netGenRef.current) return;
@@ -767,7 +1034,7 @@ export function TwingoRacer() {
             checkRaceOver();
           } else if (spectatingRef.current?.id === id && !dead) {
             // keep the camera riding the spectate target
-            e?.setSpectate({ pos: s.pos, x: s.x, speed: s.speed });
+            e?.setSpectate({ id, pos: s.pos, x: s.x, speed: s.speed });
           }
         },
         onTake: (_id, segIdx) => {
@@ -797,14 +1064,14 @@ export function TwingoRacer() {
           if (spectatingRef.current?.id === id) repickSpectate();
           checkRaceOver();
         },
-        onRematch: () => {
+        onRematch: (seed) => {
           if (gen !== netGenRef.current) return;
-          // the message carries no timestamp: each client counts down its
-          // own 3 s, then startRun() (via the countdown effect) resets the
-          // finished run — playAgain — and boots a fresh engine off the
-          // CURRENT roster (grid slots) and the CURRENT leader's seed
-          setCountRemain(3000);
-          setCountdownAt(Date.now() + 3000);
+          // the leader rolled a fresh per-race track seed: every client
+          // boots the new layout at once and counts down its own
+          // START_COUNTDOWN_MS from receipt — playAgain (via startRun)
+          // resets the finished run, then the engine rebuilds off the
+          // CURRENT roster's grid slots
+          beginVsRace(seed, START_COUNTDOWN_MS);
         },
       });
       netRef.current = net;
@@ -825,7 +1092,7 @@ export function TwingoRacer() {
         setPeers([{ id: net.selfId, ...hello }]);
       }
     },
-    [repickSpectate, checkRaceOver],
+    [repickSpectate, checkRaceOver, beginVsRace],
   );
 
   /* shareable join link: <origin>/<lang>/?race=CODE — the lang comes from
@@ -1020,30 +1287,6 @@ export function TwingoRacer() {
     });
   }, []);
 
-  /* PLAY AGAIN: drop the engine and re-run the boot effect cleanly. In a
-     VS race this is also the per-client rematch reset (fired by startRun
-     when the countdown reaches GO): the net itself survives — same room,
-     fresh grid slots and leader seed at engine boot */
-  const playAgain = useCallback(() => {
-    audioRef.current?.menuSelect();
-    audioRef.current?.setInterior(false);
-    engineRef.current = null;
-    gameOverRef.current = false;
-    keysRef.current = { left: false, right: false, gas: false, brake: false };
-    // VS race run state: standings/spectate/results belong to the run
-    standingsRef.current.clear();
-    spectatingRef.current = null;
-    setSpectating(null);
-    raceResultsRef.current = null;
-    setRaceResults(null);
-    setGameOver(false);
-    setQualifyBoards(null);
-    setPauseMenu(false);
-    setPaused(false);
-    setView("chase"); // every run starts on the chase cam
-    setRunId((r) => r + 1);
-  }, []);
-
   const close = useCallback(() => {
     audioRef.current?.stop();
     leaveNet();
@@ -1103,44 +1346,6 @@ export function TwingoRacer() {
     setTitleBoard(false);
     setTitleSettingsOpen(false);
   }, [leaveNet]);
-
-  /* START on the title screen: boot the engine and drop into the READY
-     flash. If the previous session ended mid-overlay (game over never
-     replayed), reset the run first — same as PLAY AGAIN. Also kick off
-     the record-chase fetch: the run's targets are each period's #1. */
-  const startRun = useCallback(() => {
-    setTitleBoard(false);
-    if (gameOverRef.current) playAgain();
-    setScreen("playing");
-    setIntro(true);
-    // ascending prestige: later entries win the dedupe when two period
-    // tops sit on the same score (the same run holding 24H and 7D fires
-    // one banner, the more prestigious one)
-    const CHASE: [ScorePeriod, string][] = [
-      ["daily", "24H"],
-      ["weekly", "7D"],
-      ["monthly", "30D"],
-      ["all", "ALL-TIME"],
-    ];
-    void Promise.all(
-      CHASE.map(([p]) =>
-        fetch(`/api/highscore?period=${p}`, { cache: "no-store" })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
-      ),
-    ).then((boards) => {
-      const byScore = new Map<number, { score: number; label: string }>();
-      boards.forEach((d: { scores?: ScoreEntry[] } | null, i) => {
-        const top = d?.scores?.[0]?.score;
-        if (typeof top === "number" && top > 0) {
-          byScore.set(top, { score: top, label: CHASE[i][1] });
-        }
-      });
-      const targets = [...byScore.values()].sort((a, b) => a.score - b.score);
-      recordTargetsRef.current = targets;
-      engineRef.current?.setRecordTargets(targets);
-    });
-  }, [playAgain]);
 
   /* leaderboard fetch for the visible period tab; the game-over overlay
      and the title panel share it. Generation guard: a slow fetch started
@@ -1233,30 +1438,29 @@ export function TwingoRacer() {
     return () => window.clearTimeout(id);
   }, [lobbyView, netConnected, roomCode]);
 
-  /* onStart(startAt): everyone counts down off the leader's timestamp
-     (3·2·1·GO), then the race boots through the normal START path — the
-     engine is the plain single-player one for now; remote cars arrive
-     with the engine-sync stage. The GO beat lingers 0.5 s before boot */
+  /* VS race countdown ON THE TRACK: the engine boots the moment the
+     start/rematch arrives (beginVsRace) and idles on the grid — the
+     frame loop feeds it HELD_INPUT while pendingRace is set, so nobody
+     moves. This ticker counts down from receipt (each client on its own
+     clock; the GO beats land within one-way relay latency of each
+     other). GO gates on the engine existing: if the sprite load outlives
+     the countdown the overlay simply holds on "GO!" until engineRef is
+     there, then the start cue plays and the throttle releases */
   useEffect(() => {
-    if (countdownAt === null) return;
-    let goTimer = 0;
+    if (pendingRace === null) return;
     const tick = () => {
-      const rem = Math.max(0, countdownAt - Date.now());
+      const rem = Math.max(0, pendingRace.endsAt - Date.now());
       setCountRemain(rem);
-      if (rem === 0 && goTimer === 0) {
-        goTimer = window.setTimeout(() => {
-          setCountdownAt(null);
-          startRun();
-        }, 500);
+      if (rem === 0 && engineRef.current) {
+        pendingRaceRef.current = null;
+        setPendingRace(null);
+        audioRef.current?.menuSelect(); // the GO start cue
       }
     };
     tick();
     const id = window.setInterval(tick, 60);
-    return () => {
-      window.clearInterval(id);
-      window.clearTimeout(goTimer);
-    };
-  }, [countdownAt, startRun]);
+    return () => window.clearInterval(id);
+  }, [pendingRace]);
 
   /* standings HUD + spectate watchdog: remote packets land in
      standingsRef at 20 Hz per peer — far too hot for React. This 4 Hz
@@ -1568,7 +1772,7 @@ export function TwingoRacer() {
       } else if (row === "start") {
         if (canStart) {
           audioRef.current?.menuSelect();
-          netRef.current?.startRace(Date.now() + 3000);
+          netRef.current?.startRace(newSeed());
         }
       } else {
         // back / leave: drop the room and return to the title
@@ -1919,16 +2123,51 @@ export function TwingoRacer() {
           (keysRef.current.gasAmt ?? (keysRef.current.gas ? 1 : 0)) > 0.05;
         const brakeOn =
           (keysRef.current.brakeAmt ?? (keysRef.current.brake ? 1 : 0)) > 0.05;
-        e.update(dt, keysRef.current);
+        // VS race countdown: the engine is on the grid but ALL driving
+        // input is suppressed until GO (keyboard, pad AND tilt — the
+        // merge above is overridden, not skipped, so nothing latches on
+        // at the release). Solo runs never see a pending race
+        const hold = pendingRaceRef.current !== null;
+        steerOutRef.current = hold
+          ? 0
+          : Math.max(
+              -1,
+              Math.min(
+                1,
+                keysRef.current.steer ??
+                  (keysRef.current.left ? -1 : 0) +
+                    (keysRef.current.right ? 1 : 0),
+              ),
+            );
+        e.update(dt, hold ? HELD_INPUT : keysRef.current);
         e.render(ctx);
+        // spectate instruments: the canvas LCD cluster still shows OUR
+        // finished run's frozen score/fuel — restamp it with the followed
+        // player's live numbers (their latest state packet), so the ride
+        // reads like driving that car. The hearts/streak HUDs are gone
+        // already (the engine gates them on !gameOver)
+        const spec = spectatingRef.current;
+        if (spec) {
+          const pk = standingsRef.current.get(spec.id)?.state;
+          if (pk) {
+            drawSpectateCluster(
+              ctx,
+              buf.w,
+              buf.h,
+              (pk.speed / ENGINE_CONSTANTS.MAX_SPEED) * 180,
+              pk.score,
+              coarseRef.current,
+            );
+          }
+        }
         // after the tank ran dry the engine stays silent — gameOver()
         // already faded it out; drive() would revive an idle drone
         if (!gameOverRef.current) {
           audioRef.current?.setPaused(false);
           audioRef.current?.drive(
             e.state.speed / ENGINE_CONSTANTS.MAX_SPEED,
-            gasOn,
-            brakeOn,
+            !hold && gasOn,
+            !hold && brakeOn,
             e.state.skid,
             e.state.rpm01,
             e.state.shiftT > 0,
@@ -1993,36 +2232,43 @@ export function TwingoRacer() {
         if (cancelled) return;
         cockpitReadyRef.current = cockpit !== null;
         setCockpitReady(cockpit !== null);
-        // daily seed: everyone races the same layout on the same Turkey-
-        // time day (midnight TR, UTC+3), so same-day highscores are
-        // comparable — a fresh track every day. In a VS race the seed is
-        // LOCKED to the lobby leader's hello seed (roster index 0), so the
-        // whole room keeps racing the leader's day even across a midnight
-        // TR rollover.
+        // solo races the daily track: everyone races the same layout on
+        // the same Turkey-time day (midnight TR, UTC+3), so same-day
+        // highscores are comparable — a fresh track every day. A VS race
+        // runs the pending race's RANDOM seed instead (per-race layout
+        // the leader rolled; a rematch is a fresh roll, never the daily
+        // track). A mid-race RESTART (pending already consumed at GO)
+        // replays the current race's seed.
         // The seeded generator deals sections forever under its geometric
         // limits (alternating curve sides, sea-level-sprung hills)
         const net = netRef.current;
         const roster = net ? rosterRef.current : [];
-        const seed = net ? (roster[0]?.seed ?? turkeyDay()) : turkeyDay();
+        const seed = net
+          ? (pendingRaceRef.current?.seed ?? raceSeedRef.current ?? turkeyDay())
+          : turkeyDay();
+        if (net) raceSeedRef.current = seed;
         const { segments, extend, firstIndex, generated } =
           createTrackGenerator(seed);
         // the difficulty card is normally rated while the title sits open;
         // an impatient START within that beat re-rates here synchronously
         // (same seed, same result) so scarcity never falls back blind. A
-        // leader-seed mismatch (rollover) re-rates off the locked seed
+        // VS race seed never matches the daily card, so every race rates
+        // its own layout
         const stats =
           trackStats && seed === turkeyDay()
             ? trackStats
             : analyzeTrack(seed, 3000);
-        // start grid: lateral slot by roster index (join order) — solo
-        // races pass NOTHING so single-player behaviour is byte-identical
+        // start grid: lateral + along-track slot by roster index (join
+        // order; the 5th arrival takes the back row 3 segments behind
+        // the line) — solo races pass NOTHING so single-player behaviour
+        // is byte-identical
         const myIdx = net ? roster.findIndex((p) => p.id === net.selfId) : -1;
-        const gridX =
+        const slot =
           net && myIdx >= 0
-            ? (RACE_GRID[
+            ? RACE_GRID[
                 Math.min(Math.max(roster.length, 1), RACE_GRID.length) - 1
-              ][myIdx] ?? 0)
-            : 0;
+              ][myIdx]
+            : undefined;
         engineRef.current = createEngine({
           segments,
           extend,
@@ -2051,10 +2297,11 @@ export function TwingoRacer() {
           // through netRef at fire time so a room swap never stale-sends
           ...(net
             ? {
-                startX: gridX,
+                startX: slot?.x ?? 0,
+                startPos: slot?.pos ?? 0,
                 onTakeCan: (i: number) => netRef.current?.sendTake(i),
                 onHoleHit: (i: number) => netRef.current?.sendHole(i),
-                onBump: () => audioRef.current?.bump(),
+                onBump: (i: number) => audioRef.current?.bump(i),
               }
             : {}),
           debug: process.env.NODE_ENV !== "production",
@@ -2092,6 +2339,7 @@ export function TwingoRacer() {
         speed: e.state.speed,
         score: Math.floor(e.state.score),
         dead: false,
+        steer: steerOutRef.current,
       });
     }, 50);
 
@@ -2711,7 +2959,7 @@ export function TwingoRacer() {
             {lobbyView === "home" && (
               <>
                 <div className="racer-lobby-sub">
-                  2-4 PLAYERS — TODAY&apos;S TRACK
+                  2-5 PLAYERS — FRESH TRACK EVERY RACE
                 </div>
                 {nameRow}
                 <div className="racer-lobby-menu">
@@ -2880,7 +3128,7 @@ export function TwingoRacer() {
                       onClick={() => {
                         if (!canStart) return;
                         audioRef.current?.menuSelect();
-                        netRef.current?.startRace(Date.now() + 3000);
+                        netRef.current?.startRace(newSeed());
                       }}
                       onPointerEnter={() => setLobbySel(lobbyAt("start"))}
                     >
@@ -3158,14 +3406,17 @@ export function TwingoRacer() {
 
       {/* no DOM HUD — speed and score live on the in-canvas LCD cluster */}
 
-      {/* VS race countdown: 3·2·1·GO driven off the leader's startAt,
-          then the normal engine boot path takes over (READY... flash) */}
-      {countdownAt !== null && (
+      {/* VS race countdown ON THE TRACK: the engine is already booted
+          and idling on the grid behind this overlay (input suppressed).
+          The numbers count down from the start message's receipt — each
+          client on its own clock, no sync needed — and GO holds until
+          the engine ref exists */}
+      {pendingRace !== null && (
         <div className="racer-countdown font-pixel" role="status">
-          {countRemain > 0 ? Math.ceil(countRemain / 1000) : "GO!"}
+          {countRemain > 0 ? Math.min(3, Math.ceil(countRemain / 1000)) : "GO!"}
         </div>
       )}
-      {intro && (
+      {intro && pendingRace === null && (
         <div className="racer-ready font-pixel" aria-hidden="true">
           READY...
         </div>
@@ -3324,15 +3575,15 @@ export function TwingoRacer() {
                 className={`racer-playagain font-pixel${
                   goSel === "again" ? " racer-go-armed" : ""
                 }`}
-                disabled={countdownAt !== null}
+                disabled={pendingRace !== null}
                 onClick={requestRematch}
                 ref={(el) => el?.focus()}
               >
-                {countdownAt !== null ? "STARTING…" : "REMATCH"}
+                {pendingRace !== null ? "STARTING…" : "REMATCH"}
               </button>
             ) : (
               <div className="racer-pausemenu-hint">
-                {countdownAt !== null ? "STARTING…" : "WAITING FOR REMATCH…"}
+                {pendingRace !== null ? "STARTING…" : "WAITING FOR REMATCH…"}
               </div>
             )}
             <button

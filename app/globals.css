@@ -1939,7 +1939,9 @@ html.crt-boot::after {
   text-align: left;
 }
 
-/* 3·2·1·GO before a VS race, driven off the leader's startAt */
+/* 3·2·1·GO before a VS race: rendered OVER the playing canvas (the
+   engine boots at the start message and idles on the grid behind it),
+   counting down from receipt on each client's own clock */
 .racer-countdown {
   position: absolute;
   top: 38%;

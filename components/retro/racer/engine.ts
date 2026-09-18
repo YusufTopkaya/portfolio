@@ -197,21 +197,36 @@ const DYING_STOP_T = 1.66;
 const DOOM_KMH = 25;
 const DOOM_FADE_T = 1.0;
 const PICKUP_GRACE_T = 0.3; // fuel burns free for this long after a can grab
-// P2P race (all inert in solo play): a can a peer bagged vanishes for this
-// long, then respawns for everyone else — hazards never respawn
+// P2P race (all inert in solo play): a can a peer bagged vanishes only
+// briefly — long enough for the blink to signal the take and to keep the
+// missed-can streak logic coherent — then it respawns, so every player
+// effectively races their own cans again. Hazards never respawn
 // (applyRemoteHole consumes them for good)
-const REMOTE_TAKE_T = 4;
-// car-car contact, griefing-proof arcade: a lateral shove plus a touch of
-// drag per contact frame — NO fuel/heart penalty, so nobody can be killed
-// on purpose. The first RACE_GRACE_T seconds are contact-free so the
-// start-grid scramble doesn't register
-const BUMP_PUSH = 0.8; // road half-widths/s shoved away from the other car
-const BUMP_DRAG = 0.98; // speed kept per contact frame
-const BUMP_AUDIO_T = 0.3; // at most one bump sound per 300 ms of contact
+const REMOTE_TAKE_T = 0.5;
+// car-car contact, griefing-proof arcade: positional separation plus
+// impulse exchanges on contact ENTRY — NO fuel/heart penalty, so nobody
+// can be killed on purpose. The first RACE_GRACE_T seconds are
+// contact-free so the start-grid scramble doesn't register
+const BUMP_SEP = 5; // separation speed (hw/s) per hw of lateral overlap —
+// proportional: a graze nudges, a deep overlap shoves
+const BUMP_REST = 0.4; // restitution of the lateral velocity exchange
+// (equal masses: we keep (1-e)/2 of ours, take (1+e)/2 of theirs)
+const BUMP_HIT_LOSS = 0.6; // share of the CLOSING speed lost when rear-ending
+const BUMP_SHOVE_GAIN = 0.25; // share of the closing speed gained when rear-ended
+const BUMP_GRIND = 0.2; // sustained-contact drag, fraction of speed per second
+const BUMP_LAT_DECAY = 5; // /s — the exchanged lateral kick bleeds off fast
+const BUMP_AUDIO_T = 0.3; // at most one bump sound per 300 ms
 const RACE_GRACE_T = 1.5; // collision grace at race start
 // remote car sprite scale factor: sits mid-range of the player sprite's
 // speed-dependent carScale (1.1-1.45) so a peer alongside reads the same size
 const REMOTE_CAR_SCALE = 1.3;
+// the player car "pulls away" as speed builds: near scale at standstill,
+// far scale at top speed — a smooth zoom-out instead of switching between
+// discrete sprite sizes (the sheet's smaller sizes stay unused). The
+// spectate-followed peer reuses these so it renders exactly like the
+// local car would at its speed
+const CAR_SCALE_NEAR = 1.45; // ~29% of buffer width at standstill
+const CAR_SCALE_FAR = 1.1; // ~22% at top speed
 const FUEL_MAX = 8; // dots on the cluster's fuel gauge
 // the tank is the run's death clock, OutRun-style: the drain is (nearly)
 // FLAT per second, so fuel-per-km falls monotonically with speed —
@@ -1410,7 +1425,8 @@ export interface RacerEngine {
   /* ── P2P race (multiplayer) — all inert until used: a solo engine never
      sets a remote and every new code path is guarded off ── */
   /** a peer grabbed the can on this absolute segment: hide it locally for
-      REMOTE_TAKE_T seconds, then it respawns for everyone else. No-op when
+      REMOTE_TAKE_T seconds (a brief blink that signals the take), then it
+      respawns — effectively everyone races their own cans. No-op when
       the ring no longer holds that segment or the can is already gone */
   applyRemoteTake(absSegIdx: number): void;
   /** a peer fell into the pothole on this absolute segment: consumed for
@@ -1427,8 +1443,13 @@ export interface RacerEngine {
   markRemoteDead(id: string, score: number): void;
   /** spectate a live peer after our own death: render-only mode — the
       camera rides the target, the player car is hidden and its input,
-      fuel, pickups and collisions are all suspended. null restores play */
-  setSpectate(target: { pos: number; x: number; speed: number } | null): void;
+      fuel, pickups and collisions are all suspended. null restores play.
+      `id` names the followed peer (its car gets the local player's own
+      treatment — speed-scaled sprite, no name tag); without it the
+      nearest remote to `pos` is followed */
+  setSpectate(
+    target: { pos: number; x: number; speed: number; id?: string } | null,
+  ): void;
   /** dev-only (e2e probes): the next active gas can ahead of the car,
       with its effective lateral position after the level spread */
   debugNextPickup?: () => {
@@ -1531,15 +1552,24 @@ export function createEngine(opts: {
   /** P2P race: the start-grid lateral slot (road half-widths) — everyone
       starts at position 0, spread across the lanes by join order */
   startX?: number;
+  /** P2P race: the start-grid ALONG-TRACK slot in world units — may be
+      NEGATIVE for a back-row start (the 5th gridded player launches 3
+      segments behind the line and simply drives forward into segment 0+;
+      findSegment clamps the camera segment, the pickup scan clamps its
+      window, and the pickup point sits PLAYER_Z ≈ 4.2 segments ahead of
+      the camera so it is on real road from the first frame). Solo: 0 */
+  startPos?: number;
   /** fired when THIS player grabs a can (absolute segment index) — the
-      net layer broadcasts it so peers hide the can for REMOTE_TAKE_T */
+      net layer broadcasts it so peers blink the can out for REMOTE_TAKE_T */
   onTakeCan?: (absSegIdx: number) => void;
   /** fired when THIS player falls into a pothole (absolute segment index)
       — the net layer broadcasts it so the hole is consumed for everyone */
   onHoleHit?: (absSegIdx: number) => void;
-  /** fired on car-car contact with a live peer (throttled by the engine
-      to at most once per BUMP_AUDIO_T seconds) — wire to audio.bump() */
-  onBump?: () => void;
+  /** fired on car-car contact ENTRY with a live peer (throttled by the
+      engine to at most once per BUMP_AUDIO_T seconds) — wire to
+      audio.bump(). intensity 0..1 scales with how hard the hit was
+      (closing speed + lateral approach), ~0.15 for a grazing touch */
+  onBump?: (intensity: number) => void;
   /** dev-only (e2e probes): collect per-render road diagnostics into
       `probe` — off in production so the game ships zero per-frame garbage */
   debug?: boolean;
@@ -1583,7 +1613,9 @@ export function createEngine(opts: {
   extend(AHEAD_SEGMENTS);
 
   const state: EngineState = {
-    position: 0,
+    // P2P start-grid along-track slot; NEGATIVE = a back row behind the
+    // start line (the car drives forward into segment 0+). 0 solo
+    position: opts.startPos ?? 0,
     playerX: opts.startX ?? 0, // P2P start-grid slot; 0 (centre) solo
     speed: 0,
     time: 0,
@@ -1611,8 +1643,19 @@ export function createEngine(opts: {
   // remotes.size / spectateTarget so solo play is byte-identical
   const remotes: RemoteCars = createRemoteCars();
   const nowMs = () => performance.now();
-  let spectateTarget: { pos: number; x: number; speed: number } | null = null;
+  let spectateTarget: {
+    pos: number;
+    x: number;
+    speed: number;
+    id?: string;
+  } | null = null;
   let lastBumpAt = -10; // engine time of the last bump sound
+  // car-car contact bookkeeping: which peers we are CURRENTLY touching
+  // (entry impulses fire once per touch, separation runs every frame) and
+  // the residual lateral kick left over from the last velocity exchange
+  const bumpContact = new Set<string>();
+  let bumpLatVel = 0; // half-widths/s, decays at BUMP_LAT_DECAY
+  let lastBumpX = 0; // playerX last contact-frame — our lateral velocity est.
 
   // horizon parallax offsets (Lou: horizon slides opposite the curve)
   let skyOffset = 0;
@@ -1866,8 +1909,8 @@ export function createEngine(opts: {
       state.boostT += BOOST_CHAIN_T;
     }
     opts.onPickup?.(pk.big ?? false, pk.golden ?? false);
-    // P2P race: tell the room this can is ours (peers hide it for a few
-    // seconds, then it respawns for everyone else)
+    // P2P race: tell the room this can is ours (peers blink it out for
+    // REMOTE_TAKE_T, then it respawns — everyone races their own cans)
     opts.onTakeCan?.(seg.index);
   }
 
@@ -1937,8 +1980,12 @@ export function createEngine(opts: {
     // no double jeopardy: sweep every pothole under and just ahead of the
     // respawn spot — a hole on the car's own segment is invisible under
     // the sprite, and one a couple of segments out is unreadable from a
-    // standstill; either would punish the same mistake twice
-    const carSeg = Math.floor((state.position + PLAYER_Z) / SEGMENT_LENGTH);
+    // standstill; either would punish the same mistake twice. (Clamped at
+    // 0: a back-row P2P start can crash while still behind the line)
+    const carSeg = Math.max(
+      0,
+      Math.floor((state.position + PLAYER_Z) / SEGMENT_LENGTH),
+    );
     for (let i = 0; i < RESPAWN_CLEAR_SEGMENTS; i++) {
       segments[ringSlot(carSeg + i)].hole = undefined;
     }
@@ -2299,8 +2346,11 @@ export function createEngine(opts: {
       // ones). A taken can is gone for good — the road behind is never
       // revisited on an endless track. Scan EVERY segment crossed this
       // frame: at full speed a slow frame spans 2+ segments and a can on
-      // a skipped one would be tunnelled through without a sound
-      for (let si = prevPickupSeg; si <= nextPickupSeg; si++) {
+      // a skipped one would be tunnelled through without a sound. (The
+      // window start is clamped at 0: a back-row P2P startPos puts the
+      // camera behind the start line, and a negative slot would read a
+      // stale ring slot or miss the array entirely)
+      for (let si = Math.max(0, prevPickupSeg); si <= nextPickupSeg; si++) {
         const seg = segments[ringSlot(si)];
         // pothole: falling in costs the same as running stranded —
         // CRASH_FUEL dots, a centre-line respawn and a broken chain.
@@ -2602,12 +2652,16 @@ export function createEngine(opts: {
       recordTargets = recordTargets.slice(1);
     }
 
-    // car-car contact (P2P race only): overlap with a live peer shoves us
-    // apart laterally and bleeds a touch of speed per contact frame — no
-    // fuel/heart penalty (griefing-proof), and the first RACE_GRACE_T
-    // seconds are contact-free so the start-grid scramble doesn't count.
-    // The shove is clamped just INSIDE the stranded threshold: being
-    // pushed must never by itself trigger the off-road respawn
+    // car-car contact (P2P race only): positional separation EVERY contact
+    // frame, plus impulse exchanges once per contact ENTRY — no fuel/heart
+    // penalty (griefing-proof), and the first RACE_GRACE_T seconds are
+    // contact-free so the start-grid scramble doesn't count. Entry vs
+    // sustained is tracked per peer in bumpContact, with hysteresis on the
+    // exit window so two cars grinding along in parallel don't flap
+    // in/out of contact every frame (which would re-fire the impulses and
+    // the sound). Both the separation and the lateral kick are clamped
+    // just INSIDE the stranded threshold: being pushed must never by
+    // itself trigger the off-road respawn
     if (
       remotes.size > 0 &&
       state.time > RACE_GRACE_T &&
@@ -2616,22 +2670,98 @@ export function createEngine(opts: {
     ) {
       const views = remotes.sample(nowMs());
       const playerSegFloat = (state.position + PLAYER_Z) / SEGMENT_LENGTH;
+      // our own lateral velocity (hw/s): the physics above integrates
+      // position directly, so estimate it from the last frame's playerX —
+      // the elastic exchange below needs both cars' velocities
+      const playerLat = dt > 0 ? (state.playerX - lastBumpX) / dt : 0;
+      lastBumpX = state.playerX;
       for (const v of views) {
-        if (v.dead) continue;
         const dSeg = v.pos / SEGMENT_LENGTH - playerSegFloat;
         const dX = v.x - state.playerX;
-        if (Math.abs(dSeg) >= 1 || Math.abs(dX) >= 0.4) continue;
-        // away from the other car; exactly overlapped: toward the near edge
+        // hysteresis: a peer already in contact leaves through a wider
+        // window than it entered — no boundary flapping while grinding
+        const wasTouching = bumpContact.has(v.id);
+        const touching =
+          !v.dead &&
+          Math.abs(dSeg) < (wasTouching ? 1.1 : 1) &&
+          Math.abs(dX) < (wasTouching ? 0.45 : 0.4);
+        if (!touching) {
+          bumpContact.delete(v.id);
+          continue;
+        }
+        // positional separation FIRST, every contact frame: push out of
+        // the overlap proportionally to its depth — a graze nudges, a
+        // deep overlap shoves. Away from the other car; exactly
+        // overlapped: toward the near edge
+        const overlapX = 0.4 - Math.abs(dX);
         const away = dX === 0 ? (state.playerX >= 0 ? 1 : -1) : -Math.sign(dX);
         state.playerX = Math.max(
           -FAR_OFFROAD + 0.01,
-          Math.min(FAR_OFFROAD - 0.01, state.playerX + away * BUMP_PUSH * dt),
+          Math.min(
+            FAR_OFFROAD - 0.01,
+            state.playerX + away * Math.max(0, overlapX) * BUMP_SEP * dt,
+          ),
         );
-        state.speed *= BUMP_DRAG;
+        // sustained contact costs a touch of speed — grinding paint, not
+        // a wall (dt-scaled, so the frame rate can't change the penalty)
+        state.speed -= state.speed * BUMP_GRIND * dt;
+        if (wasTouching) continue; // sustained contact: separation only
+        bumpContact.add(v.id);
+        // ── contact ENTRY: one impulse per touch ──
+        // lateral: equal-mass elastic-ish exchange (restitution 0.4) — we
+        // come away with 30% of our own + 70% of the OTHER car's lateral
+        // velocity, as a decaying kick integrated below. Only when the
+        // relative motion is actually closing along the contact normal —
+        // otherwise the exchange would add energy and two cars driving
+        // parallel in contact would oscillate
+        const relLat = v.latVel - playerLat;
+        if (
+          (dX > 0 && relLat < 0) ||
+          (dX < 0 && relLat > 0) ||
+          (dX === 0 && relLat !== 0)
+        ) {
+          bumpLatVel =
+            (playerLat * (1 - BUMP_REST)) / 2 +
+            (v.latVel * (1 + BUMP_REST)) / 2;
+        }
+        // longitudinal: the closing-speed impulse. Rear-ending them costs
+        // us a chunk of the closing speed; being rear-ended shoves us
+        // forward by a smaller share (never past the damaged/boosted
+        // ceiling); side-by-side contact has ~no closing speed, so the
+        // lateral part and the grind drag above are the whole story
+        const closing = state.speed - v.speed;
+        if (dSeg > 0 && closing > 0) {
+          state.speed = Math.max(0, state.speed - closing * BUMP_HIT_LOSS);
+        } else if (dSeg < 0 && closing < 0) {
+          state.speed = Math.min(
+            MAX_SPEED * boostTop * damageMul,
+            state.speed - closing * BUMP_SHOVE_GAIN,
+          );
+        }
+        // the bump sound fires on entry with an intensity: ~1 for a
+        // 60 km/h closing-speed punt, ~0.15 for a grazing touch
+        const intensity = Math.min(
+          1,
+          Math.max(
+            0.15,
+            ((Math.abs(closing) / MAX_SPEED) * 180) / 60 + Math.abs(relLat) / 6,
+          ),
+        );
         if (state.time - lastBumpAt > BUMP_AUDIO_T) {
           lastBumpAt = state.time;
-          opts.onBump?.();
+          opts.onBump?.(intensity);
         }
+      }
+      // the exchanged lateral kick integrates over a fraction of a second
+      // and bleeds off — the steering retakes control on its own and no
+      // energy is added to the system
+      if (bumpLatVel !== 0) {
+        state.playerX = Math.max(
+          -FAR_OFFROAD + 0.01,
+          Math.min(FAR_OFFROAD - 0.01, state.playerX + bumpLatVel * dt),
+        );
+        bumpLatVel *= Math.exp(-BUMP_LAT_DECAY * dt);
+        if (Math.abs(bumpLatVel) < 0.02) bumpLatVel = 0;
       }
     }
 
@@ -3018,6 +3148,31 @@ export function createEngine(opts: {
             segFloat: v.pos / SEGMENT_LENGTH,
           }))
         : null;
+    // spectate follow (P2P): the followed peer renders with the LOCAL
+    // player's own treatment — speed-scaled sprite, steering frame, brake
+    // lamps, no floating name tag (the spectate chip already names them).
+    // Matched by id when the UI passes one, else the live remote nearest
+    // to the target's pos (the UI samples the same buffer, so the poses
+    // agree to within a frame of travel)
+    let followedView: NonNullable<typeof remoteViews>[number] | null = null;
+    const followTarget = spectateTarget;
+    if (followTarget && remoteViews) {
+      if (followTarget.id) {
+        followedView =
+          remoteViews.find((v) => v.id === followTarget.id) ?? null;
+      }
+      if (!followedView) {
+        let best = 5; // segments — beyond this the match is a guess
+        for (const v of remoteViews) {
+          if (v.dead) continue;
+          const d = Math.abs(v.pos - followTarget.pos) / SEGMENT_LENGTH;
+          if (d < best) {
+            best = d;
+            followedView = v;
+          }
+        }
+      }
+    }
     lastCatRect = null; // dev probe: refreshed every render
     for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
       const segment = segments[ringSlot(baseSegment.index + n)];
@@ -3287,18 +3442,23 @@ export function createEngine(opts: {
       // car sits at segFloat along the segment, so the screen position and
       // projection scale are lerped between the segment's two endpoints —
       // a per-segment snap would teleport the car ~0.75 segments per frame
-      // at full speed. Straight frame at the segment's own scale (with the
-      // player sprite's mid-range carScale factor and portrait boost, so a
-      // peer alongside reads the same size), initials floating above. Dead
-      // peers park as the wreck: straight frame + the dense damage-smoke
-      // column. Stale peers (no packet for >1.5 s) fade to half alpha.
-      // Crest clip applies exactly like the cans; a fully crest-hidden
-      // remote gets NO mystery "?" (a moving car is neither fuel nor a
-      // fixed hazard — it reappears on its own past the crest)
+      // at full speed. The sprite frame follows the peer's reported
+      // steering with the player car's own thresholds (±0.35, gated on
+      // speed like the player's `steer` flag), and the stop lamps glow
+      // while the peer sheds speed faster than coasting. The spectate-
+      // followed peer gets the local player's own treatment: the speed-
+      // scaled carScale (not REMOTE_CAR_SCALE) and NO name tag — the
+      // spectate chip already names them. Dead peers park as the wreck:
+      // straight frame + the dense damage-smoke column. Stale peers (no
+      // packet for >1.5 s) fade to half alpha. Crest clip applies exactly
+      // like the cans; a fully crest-hidden remote gets NO mystery "?"
+      // (a moving car is neither fuel nor a fixed hazard — it reappears
+      // on its own past the crest)
       if (remoteHere && remoteViews) {
         for (const rv of remoteViews) {
           if (rv.segFloat < segment.index || rv.segFloat >= segment.index + 1)
             continue;
+          const isFollowed = followedView === rv;
           const frac = rv.segFloat - segment.index;
           const sx = interpolate(
             segment.p1.screen.x,
@@ -3315,12 +3475,24 @@ export function createEngine(opts: {
             segment.p2.screen.scale,
             frac,
           );
+          // the player car's exact frame pick: lean frames only past a
+          // real turn of the wheel, and only while moving (slope frames
+          // stay player-local — the remote has no slope sampling)
+          let rFrame = car.straight;
+          if (!rv.dead && rv.speed > MAX_SPEED * 0.02) {
+            if (rv.steer < -0.35) rFrame = car.left;
+            else if (rv.steer > 0.35) rFrame = car.right;
+          }
           const rPortrait =
             width < RACER_WIDTH ? Math.min(2, (RACER_WIDTH / width) * 1.15) : 1;
-          const destW =
-            car.straight.w * ss * (width / 2) * REMOTE_CAR_SCALE * rPortrait;
-          const destH =
-            car.straight.h * ss * (width / 2) * REMOTE_CAR_SCALE * rPortrait;
+          // the followed peer scales like the local car at ITS speed
+          // (CAR_SCALE_NEAR → CAR_SCALE_FAR); other remotes keep the
+          // fixed mid-range factor
+          const rScale = isFollowed
+            ? interpolate(CAR_SCALE_NEAR, CAR_SCALE_FAR, rv.speed / MAX_SPEED)
+            : REMOTE_CAR_SCALE;
+          const destW = rFrame.w * ss * (width / 2) * rScale * rPortrait;
+          const destH = rFrame.h * ss * (width / 2) * rScale * rPortrait;
           if (destW < 2) continue;
           const rwx = sx + ss * rv.x * ROAD_WIDTH * (width / 2);
           const destX = rwx - destW / 2;
@@ -3347,17 +3519,36 @@ export function createEngine(opts: {
           ctx.fill();
           ctx.globalAlpha = rAlpha;
           ctx.drawImage(
-            car.straight.image,
+            rFrame.image,
             0,
             0,
-            car.straight.w,
-            (visibleH / destH) * car.straight.h,
+            rFrame.w,
+            (visibleH / destH) * rFrame.h,
             Math.round(destX),
             Math.round(destY),
             Math.round(destW),
             Math.round((visibleH / destH) * destH),
           );
           ctx.globalAlpha = 1;
+          // stop lamps while the peer sheds speed faster than coasting —
+          // the player car's own halo + core pattern, anchored off the
+          // frame's lamp rects
+          if (!rv.dead && rv.braking && rFrame.lamps) {
+            const lamp = (fx: number, fy: number, fw: number, fh: number) => {
+              const lx = destX + destW * fx;
+              const ly = destY + destH * fy;
+              const lw = destW * fw;
+              const lh = destH * fh;
+              ctx.globalAlpha = rAlpha * 0.3;
+              ctx.fillStyle = "#ff2020";
+              ctx.fillRect(lx - lw * 0.15, ly - lh * 0.2, lw * 1.3, lh * 1.4);
+              ctx.globalAlpha = rAlpha;
+              ctx.fillStyle = "#ff5a4a";
+              ctx.fillRect(lx, ly, lw, lh);
+            };
+            for (const [fx, fy, fw, fh] of rFrame.lamps) lamp(fx, fy, fw, fh);
+            ctx.globalAlpha = 1;
+          }
           // dead peer: the parked wreck's dense smoke column (the same
           // rising-puff pattern the player's own dead engine gets)
           if (rv.dead && car.smoke.length > 0) {
@@ -3385,10 +3576,12 @@ export function createEngine(opts: {
             ctx.globalAlpha = 1;
           }
           // name tag above the car — skipped at a distance where the
-          // text would be a smudge. Display names run up to 10 chars, so
-          // the font shrinks to keep the tag within ~1.15× the car's
-          // width instead of letting a long name spill past the body
-          if (rv.name && destW >= 16) {
+          // text would be a smudge, and NEVER on the spectate-followed
+          // car (the spectate chip already says who you're watching).
+          // Display names run up to 10 chars, so the font shrinks to keep
+          // the tag within ~1.15× the car's width instead of letting a
+          // long name spill past the body
+          if (rv.name && destW >= 16 && !isFollowed) {
             let fs = Math.max(6, Math.min(11, Math.round(destW * 0.22)));
             ctx.font = `bold ${fs}px monospace`;
             let tw = ctx.measureText(rv.name).width;
@@ -3409,8 +3602,10 @@ export function createEngine(opts: {
           }
           // blind-zone: a live peer sliding under the player car / dash
           // gets the same occluded-marker treatment as cans (amber "!":
-          // not fuel, not a fixed hazard — but very much something there)
-          if (!rv.dead && destY + visibleH > height * 0.45) {
+          // not fuel, not a fixed hazard — but very much something there).
+          // The followed car IS the camera car — it would carry the
+          // marker permanently
+          if (!rv.dead && !isFollowed && destY + visibleH > height * 0.45) {
             blindObjs.push({
               cx: destX + destW / 2,
               top: destY,
@@ -3603,11 +3798,9 @@ export function createEngine(opts: {
       }
 
       const scale = CAMERA_DEPTH / PLAYER_Z;
-      // the car "pulls away" as speed builds: near scale at standstill,
-      // far scale at top speed — a smooth zoom-out instead of switching
-      // between discrete sprite sizes (the sheet's smaller sizes stay unused)
-      const CAR_SCALE_NEAR = 1.45; // ~29% of buffer width at standstill
-      const CAR_SCALE_FAR = 1.1; // ~22% at top speed
+      // the car "pulls away" as speed builds: CAR_SCALE_NEAR at a
+      // standstill, CAR_SCALE_FAR at top speed (module constants — the
+      // spectate-followed remote scales by the same rule)
       // portrait buffers (300px phones) shrink the car with the width while
       // the road's vertical stretch makes the lanes read huge — boost the
       // sprite so it keeps roughly a lane of visual width
@@ -4548,8 +4741,15 @@ export function createEngine(opts: {
       if (seg.index === absSegIdx) seg.hole = undefined;
     },
     setRemoteState: (id, s) => remotes.upsert(id, s, nowMs()),
-    removeRemote: (id) => remotes.remove(id),
-    clearRemotes: () => remotes.clear(),
+    removeRemote: (id) => {
+      remotes.remove(id);
+      bumpContact.delete(id);
+    },
+    clearRemotes: () => {
+      remotes.clear();
+      bumpContact.clear();
+      bumpLatVel = 0;
+    },
     setRemoteName: (id, name) => remotes.setName(id, name),
     markRemoteDead: (id, score) => remotes.markDead(id, score),
     setSpectate: (t) => {

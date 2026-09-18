@@ -37,6 +37,15 @@ export interface RemoteCarView {
   dead: boolean;
   /** no packet for >1.5 s — render faded, on the way to removal */
   stale: boolean;
+  /** current steering, -1 (full left) .. 1 (full right) — lerped between
+      the bracketing packets like x, held while extrapolating, 0 when the
+      sender predates the field. The renderer picks the lean frame from it */
+  steer: number;
+  /** estimated lateral velocity (half-widths/s) from the last two packets,
+      clamped — the engine's car-car collision exchanges it like momentum */
+  latVel: number;
+  /** the peer is slowing faster than coasting drag — light its stop lamps */
+  braking: boolean;
 }
 
 /** render the field this far in the past so two packets bracket the sample */
@@ -65,6 +74,13 @@ const MIN_LERP_SPAN_MS = 30;
     slightly into the future during a burst; a normal 50 ms gap lets the
     clock catch up, so the drift never accumulates */
 const MIN_PACKET_GAP_MS = 40;
+/** mirrors engine.ts ROLL_DRAG (the proportional coasting decel, 1/s) —
+    kept local to avoid an import cycle (engine imports this store). A
+    peer slowing faster than 1.5× this drag is braking (or off-road),
+    never just coasting or climbing: gravity tops out at ~0.027·MAX_SPEED/s
+    while the drag floor this clears is 0.09·MAX_SPEED/s even at 54 km/h,
+    and a mid-shift coast is gentler than the drag, not harder */
+const COAST_DRAG = 0.3;
 
 interface Packet {
   /** jitter-buffered arrival time, ms (≥ actual arrival — bursts are
@@ -117,18 +133,35 @@ export function createRemoteCars(): RemoteCars {
     );
   };
 
+  /* stop-lamp detection: speed dropping between the last two packets by
+     more than 1.5× the coasting drag — a margin that keeps hills, gear
+     shifts and packet jitter from ever lighting the lamps */
+  const brakingNow = (p: Peer): boolean => {
+    const pk = p.packets;
+    if (pk.length < 2) return false;
+    const a = pk[pk.length - 2];
+    const b = pk[pk.length - 1];
+    const dt = (b.t - a.t) / 1000;
+    if (dt <= 0) return false;
+    const decel = (a.s.speed - b.s.speed) / dt;
+    return decel > b.s.speed * COAST_DRAG * 1.5;
+  };
+
   const sampleOne = (id: string, p: Peer, now: number): RemoteCarView => {
     let pos: number;
     let x: number;
     let speed: number;
     let score: number;
+    let steer: number;
     if (p.dead) {
       // parked wreck: hold the last known pose exactly — a spectating
       // peer's camera keeps moving, but its wreck must not
-      pos = p.packets[p.packets.length - 1].s.pos;
-      x = p.packets[p.packets.length - 1].s.x;
+      const last = p.packets[p.packets.length - 1].s;
+      pos = last.pos;
+      x = last.x;
       speed = 0;
       score = p.deadScore;
+      steer = last.steer ?? 0;
     } else {
       const rt = now - INTERP_DELAY_MS;
       const pk = p.packets;
@@ -137,7 +170,8 @@ export function createRemoteCars(): RemoteCars {
         // past the window: extrapolate along the track at the last known
         // speed and laterally at the estimated velocity, capped — a lost
         // stream drifts a quarter second, then holds (the stale fade takes
-        // over from there)
+        // over from there). Steering holds the last reported value — the
+        // wheel isn't dead-reckoned
         const over = Math.min(EXTRAP_CAP_MS, Math.max(0, rt - newest.t));
         pos = newest.s.pos + newest.s.speed * (over / 1000);
         x = clamp(
@@ -147,6 +181,7 @@ export function createRemoteCars(): RemoteCars {
         );
         speed = newest.s.speed;
         score = newest.s.score;
+        steer = newest.s.steer ?? 0;
       } else {
         // bracketed: lerp the surrounding pair at the render time — hi is
         // the last packet at or before rt, and rt < newest.t guarantees
@@ -161,6 +196,7 @@ export function createRemoteCars(): RemoteCars {
           x = a.s.x;
           speed = a.s.speed;
           score = a.s.score;
+          steer = a.s.steer ?? 0;
         } else {
           const span = Math.max(MIN_LERP_SPAN_MS, b.t - a.t);
           const t = clamp((rt - a.t) / span, 0, 1);
@@ -168,6 +204,7 @@ export function createRemoteCars(): RemoteCars {
           x = a.s.x + (b.s.x - a.s.x) * t;
           speed = a.s.speed + (b.s.speed - a.s.speed) * t;
           score = a.s.score + (b.s.score - a.s.score) * t;
+          steer = (a.s.steer ?? 0) + ((b.s.steer ?? 0) - (a.s.steer ?? 0)) * t;
         }
       }
       // monotonic along-track guard: a lerp against a stale packet or an
@@ -192,6 +229,9 @@ export function createRemoteCars(): RemoteCars {
       name: p.name,
       dead: p.dead,
       stale: !p.dead && now - p.packets[p.packets.length - 1].t > STALE_MS,
+      steer,
+      latVel: p.dead ? 0 : lateralVel(p),
+      braking: !p.dead && brakingNow(p),
     };
   };
 

@@ -77,8 +77,9 @@ export interface RacerAudio {
   crash(): void;
   /** car-car contact in a P2P race: a short soft thud — crash()'s building
       blocks at a fraction of the gain and decay, no rattle (throttled by
-      the caller; a nudge, not a crash) */
-  bump(): void;
+      the caller; a nudge, not a crash). intensity 0..1 scales the gain
+      and decay from a light tap to a solid hit; 0.5 is the classic nudge */
+  bump(intensity?: number): void;
   /** third crash = fatal: a classic arcade explosion — noise burst with
       a collapsing lowpass over a pitch-diving square boom */
   breakdown(): void;
@@ -828,33 +829,40 @@ export function createRacerAudio(): RacerAudio {
       rattle.stop(t + 0.24);
     },
 
-    bump() {
+    bump(intensity = 0.5) {
       if (!ctx || !engineBus) return;
       const t = ctx.currentTime;
       // soft contact thud: crash()'s lowpassed body hit at a third of the
       // gain and well under 120 ms, with a faint panel knock on top — a
-      // nudge against another racer, not a crash (no rattle tail)
+      // nudge against another racer, not a crash (no rattle tail). Gain
+      // and decay scale with the hit's intensity: at the 0.5 default the
+      // numbers are exactly the classic nudge, a grazing tap is quieter
+      // and shorter, a closing-speed punt is louder and lingers
+      const k = Math.max(0, Math.min(1, intensity));
+      const gainMul = 0.4 + 1.2 * k; // 1.0 at k=0.5
+      const thudDecay = 0.06 + 0.08 * k; // 0.1 at k=0.5
       const thud = makeNoise(ctx);
       const f1 = ctx.createBiquadFilter();
       f1.type = "lowpass";
       f1.frequency.value = 150;
       const g1 = ctx.createGain();
-      g1.gain.setValueAtTime(0.16, t);
-      g1.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      g1.gain.setValueAtTime(0.16 * gainMul, t);
+      g1.gain.exponentialRampToValueAtTime(0.0001, t + thudDecay);
       thud.connect(f1).connect(g1).connect(engineBus);
       thud.start(t);
-      thud.stop(t + 0.12);
+      thud.stop(t + thudDecay + 0.02);
+      const knockDecay = 0.04 + 0.04 * k; // 0.06 at k=0.5
       const knock = makeNoise(ctx);
       const f2 = ctx.createBiquadFilter();
       f2.type = "bandpass";
       f2.frequency.value = 900;
       f2.Q.value = 3;
       const g2 = ctx.createGain();
-      g2.gain.setValueAtTime(0.05, t);
-      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+      g2.gain.setValueAtTime(0.05 * gainMul, t);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + knockDecay);
       knock.connect(f2).connect(g2).connect(engineBus);
       knock.start(t);
-      knock.stop(t + 0.08);
+      knock.stop(t + knockDecay + 0.02);
     },
 
     breakdown() {
