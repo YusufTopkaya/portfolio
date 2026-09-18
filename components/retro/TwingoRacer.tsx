@@ -127,6 +127,9 @@ export function TwingoRacer() {
   >("resume");
   /* STATS option expands the current run's numbers inside the menu */
   const [pauseStats, setPauseStats] = useState(false);
+  /* game over: which action button is armed for Enter / pad A. ←/→ moves
+     it; while the initials form is pending it owns the keys instead */
+  const [goSel, setGoSel] = useState<"again" | "quit">("again");
   const [coarse, setCoarse] = useState(false);
   /* FPS counter — F toggles it (in the desktop key legend); sampled 2×/s
      so the overlay doesn't re-render every frame */
@@ -255,6 +258,11 @@ export function TwingoRacer() {
   const pauseSelRef = useRef<
     "resume" | "stats" | "settings" | "restart" | "quit"
   >("resume");
+  /* game-over button selection mirrors (same stale-closure reason) */
+  const goSelRef = useRef<"again" | "quit">("again");
+  /* true while the initials form owns Enter/arrows on the game-over
+     screen (score qualifies and hasn't been submitted yet) */
+  const goFormPendingRef = useRef(false);
   /* settings panel mirrors for the engine-loop key handler (same stale-
      closure reason as pauseMenuRef above) */
   const pauseSettingsOpenRef = useRef(false);
@@ -293,6 +301,7 @@ export function TwingoRacer() {
   pausedRef.current = paused;
   pauseMenuRef.current = pauseMenu;
   pauseSelRef.current = pauseSel;
+  goSelRef.current = goSel;
   showFpsRef.current = showFps;
   screenRef.current = screen;
   titleBoardRef.current = titleBoard;
@@ -1072,6 +1081,8 @@ export function TwingoRacer() {
           setFinalScore(Math.floor(e.state.score));
           setFinalTime(e.state.time);
           setGameOver(true);
+          setGoSel("again");
+          goSelRef.current = "again";
           // fetch the current period's top-10 alongside the overlay
           fetchBoard(boardPeriodRef.current);
         }
@@ -1172,6 +1183,37 @@ export function TwingoRacer() {
         else if (gameOverRef.current) quitToTitle();
         else openPauseMenu();
         return;
+      }
+      // game over: ←/→ (or ↑/↓) arms PLAY AGAIN / QUIT, Enter/Space runs
+      // the armed one — this is also the gamepad path, whose d-pad + A
+      // land here as synthetic keys once the initials spinner has
+      // released them. While the initials form is pending it owns Enter
+      // and the arrows (input focus / spinner routing)
+      if (gameOverRef.current && !goFormPendingRef.current) {
+        if (!down) return;
+        if (
+          k === "arrowleft" ||
+          k === "arrowright" ||
+          k === "arrowup" ||
+          k === "arrowdown"
+        ) {
+          ev.preventDefault();
+          audioRef.current?.menuMove();
+          setGoSel((s) => (s === "again" ? "quit" : "again"));
+          return;
+        }
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          audioRef.current?.menuSelect();
+          if (goSelRef.current === "again") playAgain();
+          else quitToTitle();
+          return;
+        }
+        // R / pad Select stays a PLAY AGAIN shortcut on game over
+        if (k === "r" || ev.code === "KeyR") {
+          playAgain();
+          return;
+        }
       }
       // pause menu keyboard control: ↑/↓ arm an option, Enter/Space runs it
       if (pauseMenuRef.current) {
@@ -1346,6 +1388,7 @@ export function TwingoRacer() {
     (board == null ||
       board.length < 10 ||
       finalScore > (board[board.length - 1]?.score ?? 0));
+  goFormPendingRef.current = qualifies && submitState !== "done";
 
   /* arcade initials spinner (gamepad only — the classic joystick entry):
      up/down cycles A-Z0-9 on the armed slot, left/right moves slots,
@@ -2057,7 +2100,9 @@ export function TwingoRacer() {
           <div className="racer-gameover-actions">
             <button
               type="button"
-              className="racer-playagain font-pixel"
+              className={`racer-playagain font-pixel${
+                goSel === "again" ? " racer-go-armed" : ""
+              }`}
               onClick={playAgain}
               ref={(el) => {
                 if (!qualifies || submitState === "done") el?.focus();
@@ -2067,7 +2112,9 @@ export function TwingoRacer() {
             </button>
             <button
               type="button"
-              className="racer-quit font-pixel"
+              className={`racer-quit font-pixel${
+                goSel === "quit" ? " racer-go-armed" : ""
+              }`}
               onClick={quitToTitle}
             >
               QUIT
@@ -2076,8 +2123,8 @@ export function TwingoRacer() {
           {!coarse && (
             <div className="racer-pausemenu-hint">
               {padConnected
-                ? "SEL — PLAY AGAIN · B — QUIT"
-                : "R — PLAY AGAIN · ESC — QUIT"}
+                ? "◀ ▶ SELECT · A OK · B QUIT"
+                : "← → SELECT · ENTER OK · ESC QUIT"}
             </div>
           )}
         </div>

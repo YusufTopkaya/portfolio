@@ -2854,11 +2854,16 @@ export function createEngine(opts: {
         // cobra-head lamps only work after dark: a warm glow at the head
         // plus the soft pool the arm throws onto the tarmac below — by
         // day the lens stays dark glass (an always-lit lamp at noon read
-        // as broken). Skipped when the crest clip hides most of the pole
+        // as broken). The crest clip gates each piece by what it hangs
+        // off: the head glow survives while the head peeks over the
+        // crest, but the cone/pool need the lamp's BASE road visible —
+        // otherwise the pool paints onto nearer tarmac while the lamp
+        // itself is still behind the hill (light with no source)
+        const clipLine = segment.clip || Number.POSITIVE_INFINITY;
         if (
           (s.sprite === 3 || s.sprite === 6) &&
           skySt.night > 0.05 &&
-          visibleH > destH * 0.5
+          visibleH > destH * 0.15
         ) {
           const armDir = s.sprite === 3 ? 1 : -1;
           // head centre in the 52px art: 45.5/52 (arm-right) / 5.5/52
@@ -2885,40 +2890,42 @@ export function createEngine(opts: {
             Math.round(glowR * 2),
             Math.round(glowR * 2),
           );
-          // the light cone itself (the "huni"): a soft trapezoid widening
-          // from the head down to the road, fading as it falls — a real
-          // cobra head throws a broad pool, not a pencil beam
-          const poolY = segment.p1.screen.y;
-          const prx = destW * 1.0;
-          const cone = ctx.createLinearGradient(0, headY, 0, poolY);
-          cone.addColorStop(
-            0,
-            `rgba(255,236,170,${(0.28 * skySt.night).toFixed(3)})`,
-          );
-          cone.addColorStop(
-            1,
-            `rgba(255,240,190,${(0.05 * skySt.night).toFixed(3)})`,
-          );
-          ctx.fillStyle = cone;
-          ctx.beginPath();
-          ctx.moveTo(headX - destW * 0.2, headY);
-          ctx.lineTo(headX + destW * 0.2, headY);
-          ctx.lineTo(headX + prx, poolY);
-          ctx.lineTo(headX - prx, poolY);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = `rgba(255,240,190,${(0.14 * skySt.night).toFixed(3)})`;
-          ctx.beginPath();
-          ctx.ellipse(
-            Math.round(headX),
-            Math.round(segment.p1.screen.y),
-            Math.round(prx),
-            Math.max(1, Math.round(prx * 0.3)),
-            0,
-            0,
-            Math.PI * 2,
-          );
-          ctx.fill();
+          if (segment.p1.screen.y <= clipLine) {
+            // the light cone itself (the "huni"): a soft trapezoid widening
+            // from the head down to the road, fading as it falls — a real
+            // cobra head throws a broad pool, not a pencil beam
+            const poolY = segment.p1.screen.y;
+            const prx = destW * 1.0;
+            const cone = ctx.createLinearGradient(0, headY, 0, poolY);
+            cone.addColorStop(
+              0,
+              `rgba(255,236,170,${(0.28 * skySt.night).toFixed(3)})`,
+            );
+            cone.addColorStop(
+              1,
+              `rgba(255,240,190,${(0.05 * skySt.night).toFixed(3)})`,
+            );
+            ctx.fillStyle = cone;
+            ctx.beginPath();
+            ctx.moveTo(headX - destW * 0.2, headY);
+            ctx.lineTo(headX + destW * 0.2, headY);
+            ctx.lineTo(headX + prx, poolY);
+            ctx.lineTo(headX - prx, poolY);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = `rgba(255,240,190,${(0.14 * skySt.night).toFixed(3)})`;
+            ctx.beginPath();
+            ctx.ellipse(
+              Math.round(headX),
+              Math.round(segment.p1.screen.y),
+              Math.round(prx),
+              Math.max(1, Math.round(prx * 0.3)),
+              0,
+              0,
+              Math.PI * 2,
+            );
+            ctx.fill();
+          }
         }
       }
     }

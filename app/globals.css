@@ -1339,6 +1339,18 @@ html.crt-boot::after {
   box-shadow: 0 0 10px rgba(146, 204, 65, 0.4);
 }
 
+/* game-over button armed by ←/→ (keyboard) or the pad d-pad: the same
+   glow as hover, so the Enter/A target is visible without a mouse */
+.racer-go-armed {
+  border-color: #d7ff9e;
+  box-shadow: 0 0 10px rgba(146, 204, 65, 0.7);
+  outline: none;
+}
+
+.racer-playagain.racer-go-armed {
+  background: #d7ff9e;
+}
+
 /* period tabs above the leaderboard: ALL / 30D / 7D / 24H */
 .racer-lb-tabs {
   display: flex;
