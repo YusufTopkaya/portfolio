@@ -213,6 +213,13 @@ export function TwingoRacer() {
   const [finalTime, setFinalTime] = useState(0);
   /* leaderboard: top-10 list, initials form state, rank after submit */
   const [board, setBoard] = useState<ScoreEntry[] | null>(null);
+  /* ALL four period boards, fetched at game-over time: the initials form
+     must qualify against every window, not just the open tab — a 24H #1
+     deserves its initials even while the ALL tab is showing */
+  const [qualifyBoards, setQualifyBoards] = useState<Record<
+    ScorePeriod,
+    ScoreEntry[]
+  > | null>(null);
   /* period tabs on the leaderboard: all-time vs rolling 30d/7d/24h
      windows — persisted so the panel reopens on the last-used tab */
   const [boardPeriod, setBoardPeriod] = useState<ScorePeriod>(() => {
@@ -434,6 +441,7 @@ export function TwingoRacer() {
     gameOverRef.current = false;
     keysRef.current = { left: false, right: false, gas: false, brake: false };
     setGameOver(false);
+    setQualifyBoards(null);
     setPauseMenu(false);
     setPaused(false);
     setView("chase"); // every run starts on the chase cam
@@ -485,6 +493,7 @@ export function TwingoRacer() {
     audioRef.current?.setInterior(false);
     audioRef.current?.drive(0, false, false, 0, 0, false, 0, false);
     setGameOver(false);
+    setQualifyBoards(null);
     setPauseMenu(false);
     setPauseSettingsOpen(false);
     setPaused(false);
@@ -1113,6 +1122,23 @@ export function TwingoRacer() {
           goSelRef.current = "again";
           // fetch the current period's top-10 alongside the overlay
           fetchBoard(boardPeriodRef.current);
+          // ...and ALL four periods for the qualify check — the initials
+          // form must not depend on which tab happens to be open
+          setQualifyBoards(null);
+          const PERIODS: ScorePeriod[] = ["all", "monthly", "weekly", "daily"];
+          void Promise.all(
+            PERIODS.map((p) =>
+              fetch(`/api/highscore?period=${p}`, { cache: "no-store" })
+                .then((r) => (r.ok ? r.json() : null))
+                .catch(() => null),
+            ),
+          ).then((boards) => {
+            const out = {} as Record<ScorePeriod, ScoreEntry[]>;
+            boards.forEach((d: { scores?: ScoreEntry[] } | null, i) => {
+              out[PERIODS[i]] = d?.scores ?? [];
+            });
+            setQualifyBoards(out);
+          });
         }
       } else if (pausedRef.current) {
         // frozen run: silence the car, leave the music playing
@@ -1426,9 +1452,14 @@ export function TwingoRacer() {
     // through the game-over nav while the submit is in flight
     (tokenRef.current !== null || submitState === "sending") &&
     finalScore > 0 &&
-    (board == null ||
-      board.length < 10 ||
-      finalScore > (board[board.length - 1]?.score ?? 0));
+    // qualification runs against ALL four period windows (fetched at
+    // game over), not the visible tab — cracking ANY top-10 earns the
+    // initials form; a failed/absent fetch stays optimistic, the server
+    // plausibility checks are the real gate anyway
+    (qualifyBoards == null ||
+      Object.values(qualifyBoards).some(
+        (b) => b.length < 10 || finalScore > (b[b.length - 1]?.score ?? 0),
+      ));
   goFormPendingRef.current = qualifies && submitState !== "done";
 
   /* arcade initials spinner (gamepad only — the classic joystick entry):

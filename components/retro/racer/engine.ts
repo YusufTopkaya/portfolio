@@ -269,7 +269,9 @@ const CAT_MIN_SEGS = 240; // 200 m — never earlier, in anyone's run
 const CAT_WALK_SPEED = 0.55; // road half-widths per second — a stroll
 const CAT_TRIGGER_SEGS = 320; // starts crossing when the car is this near
 const CAT_HIT_X = 0.26; // lateral hit window (a touch under the can's 0.28)
-const CAT_SCALE = 1.8; // roadside-sprite scale factor (bush = 2.2)
+const CAT_SCALE = 2.25; // roadside-sprite scale factor (bush = 2.2) — a
+// hair UNDER the bush in art size but reading bigger: the cat fills less
+// of its 32px cell, so this lands it ~25% above a gas can on screen
 
 const COLORS = {
   light: {
@@ -1400,6 +1402,8 @@ export interface RacerEngine {
     crossing: boolean;
     gone: boolean;
     hit: boolean;
+    /** last render's projected screen rect (null = not drawn that frame) */
+    rect: { x: number; y: number; w: number; h: number } | null;
   };
   /** dev-only (e2e probes): force-spawn the cat at an absolute segment */
   debugForceCat?: (segIdx: number) => void;
@@ -1631,6 +1635,9 @@ export function createEngine(opts: {
       CAT_MIN_SEGS + Math.random() * (CAT_MAX_SEGS - CAT_MIN_SEGS),
     );
   }
+  // dev probe: the cat's last projected screen rect (null = not drawn) —
+  // lets e2e tests verify the crossing is actually VISIBLE
+  let lastCatRect: { x: number; y: number; w: number; h: number } | null = null;
   // record chase: the leaderboard tops to beat this run (ascending) —
   // crossing one fires the centre "NEW <label> RECORD!" banner once
   let recordTargets: { score: number; label: string }[] = [];
@@ -2430,6 +2437,10 @@ export function createEngine(opts: {
         if (cat.pauseT === 0) cat.pauseCd = 1.5; // no stutter stop-and-go
       } else {
         cat.pauseCd = Math.max(0, cat.pauseCd - dt);
+        // as the car closes in the stroll tightens onto the tarmac — the
+        // encounter always plays out ON the road, in plain sight, never
+        // with the cat wandered off onto the grass
+        const bound = carSegNow > cat.segIdx - 60 ? 1.0 : 1.9;
         cat.x += cat.dir * CAT_WALK_SPEED * dt;
         // the random stop-and-stare: only while actually ON the tarmac
         // (a freeze out on the grass would read as a statue, not a cat)
@@ -2440,11 +2451,11 @@ export function createEngine(opts: {
         ) {
           cat.pauseT = 0.8 + Math.random() * 0.8;
         }
-        if (cat.x > 1.9) {
-          cat.x = 1.9;
+        if (cat.x > bound) {
+          cat.x = bound;
           cat.dir = -1;
-        } else if (cat.x < -1.9) {
-          cat.x = -1.9;
+        } else if (cat.x < -bound) {
+          cat.x = -bound;
           cat.dir = 1;
         }
       }
@@ -2868,11 +2879,18 @@ export function createEngine(opts: {
       w: number;
       kind: "can" | "hole";
     }[] = [];
+    lastCatRect = null; // dev probe: refreshed every render
     for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
       const segment = segments[ringSlot(baseSegment.index + n)];
       if (segment.index !== baseSegment.index + n) continue; // stale ring slot
       const pk = segment.pickup;
-      if (!pk && !segment.hole && segment.sprites.length === 0) continue;
+      // the cat lives in engine state, not on the segment — a segment with
+      // no can/hole/sprite must still be visited when the cat walks it,
+      // or the crossing renders INVISIBLE (the "görünmez kedi" bug)
+      const catHere =
+        catFrames && cat.crossing && !cat.gone && segment.index === cat.segIdx;
+      if (!pk && !segment.hole && segment.sprites.length === 0 && !catHere)
+        continue;
 
       // gas cans hover above the tarmac of their segment, bobbing gently
       // so they catch the eye; big cans (every 10th, worth 3 dots) are
@@ -3050,12 +3068,7 @@ export function createEngine(opts: {
       // (it walks), walk-cycling with the sheet's row. Crest-hidden cats
       // get the same mystery "?" cans and holes share — an instant-death
       // hazard must never be invisible
-      if (
-        catFrames &&
-        cat.crossing &&
-        !cat.gone &&
-        segment.index === cat.segIdx
-      ) {
+      if (catHere) {
         const scale = segment.p1.screen.scale;
         // frozen = sitting front, staring at the oncoming car
         const fr =
@@ -3077,6 +3090,12 @@ export function createEngine(opts: {
             visibleH = segment.clip - destY;
           }
           if (visibleH > 0) {
+            lastCatRect = {
+              x: Math.round(destX),
+              y: Math.round(destY),
+              w: Math.round(destW),
+              h: Math.round(visibleH),
+            };
             ctx.drawImage(
               fr,
               0,
@@ -3088,6 +3107,18 @@ export function createEngine(opts: {
               Math.round(destW),
               Math.round((visibleH / destH) * destH),
             );
+            // sliding under the car sprite / dash — an instant-death
+            // hazard gets the red blind-zone "!" like a pothole, never
+            // a silent kill
+            if (destY + visibleH > height * 0.45) {
+              blindObjs.push({
+                cx: destX + destW / 2,
+                top: destY,
+                bottom: destY + visibleH,
+                w: destW,
+                kind: "hole",
+              });
+            }
           } else {
             drawCrestMystery(
               destX + destW / 2,
@@ -4164,6 +4195,7 @@ export function createEngine(opts: {
           crossing: cat.crossing,
           gone: cat.gone,
           hit: cat.hitAt >= 0,
+          rect: lastCatRect,
         });
   const debugForceCat =
     process.env.NODE_ENV === "production"
