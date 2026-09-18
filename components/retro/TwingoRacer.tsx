@@ -231,6 +231,12 @@ export function TwingoRacer() {
   const [myRank, setMyRank] = useState<number | null>(null);
   /* bumped by PLAY AGAIN — re-runs the boot effect with a fresh engine */
   const [runId, setRunId] = useState(0);
+  /* submit guards: a synchronous re-entry lock (the submitState closure
+     lets two same-frame dispatches both pass) and the run the in-flight
+     submit belongs to, so a late resolution can't poison a new run */
+  const sendingRef = useRef(false);
+  const runIdRef = useRef(0);
+  runIdRef.current = runId;
   /* render buffer size — portrait phones get a taller buffer so the game
      fills the screen instead of letterboxing into a thin strip */
   const [buf, setBuf] = useState({ w: RACER_WIDTH, h: RACER_HEIGHT });
@@ -318,6 +324,11 @@ export function TwingoRacer() {
     setInitials("");
     setSubmitState("idle");
     setMyRank(null);
+    // stale-score poison: finalScore survives across runs (it's only
+    // written at game over) — zero it so nothing upstream can ever
+    // submit or qualify the PREVIOUS run's number again
+    setFinalScore(0);
+    setFinalTime(0);
     let cancelled = false;
     fetch("/api/highscore", {
       method: "POST",
@@ -341,7 +352,14 @@ export function TwingoRacer() {
   /* submit the run to the leaderboard with this run's single-use token */
   const submitScore = useCallback(async () => {
     const token = tokenRef.current;
-    if (!token || initials.length !== 3 || submitState === "sending") return;
+    // synchronous re-entry lock: the old submitState-closure guard let
+    // two same-frame dispatches (spinner confirm + Start) both pass
+    if (!token || initials.length !== 3 || sendingRef.current) return;
+    sendingRef.current = true;
+    // consume the token client-side up front — no path can fire the same
+    // token twice even before the server gets a say
+    tokenRef.current = null;
+    const runAtSubmit = runIdRef.current;
     setSubmitState("sending");
     try {
       const r = await fetch("/api/highscore", {
@@ -357,7 +375,9 @@ export function TwingoRacer() {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d?.error ?? String(r.status));
-      tokenRef.current = null; // consumed — no resubmits
+      // a late resolution landing in a NEW run must not poison its form
+      // state (that once hid the initials form + showed a stale RANK)
+      if (runIdRef.current !== runAtSubmit) return;
       setMyRank(d.rank);
       // the submit response carries the all-time top-10 and the rank is
       // an all-time rank — pin the visible tab to ALL so they line up.
@@ -368,9 +388,16 @@ export function TwingoRacer() {
       setBoard(d.scores);
       setSubmitState("done");
     } catch {
-      setSubmitState("error");
+      // failed before/without consuming server-side (network, invalid
+      // input): hand the token back so the retry button works
+      if (runIdRef.current === runAtSubmit) {
+        tokenRef.current = token;
+        setSubmitState("error");
+      }
+    } finally {
+      sendingRef.current = false;
     }
-  }, [initials, submitState, finalScore, finalTime]);
+  }, [initials, finalScore, finalTime]);
 
   /* M key / speaker button: master mute, remembered across sessions */
   const toggleMute = useCallback(() => {
@@ -1381,9 +1408,19 @@ export function TwingoRacer() {
   });
 
   /* a fresh run token exists and the score would crack the top-10
-     (or the board isn't full / hasn't loaded yet) → offer the form */
+     (or the board isn't full / hasn't loaded yet) → offer the form.
+     Gated on gameOver: without that, a valid token + a STALE finalScore
+     from the previous run + a small board made this true MID-RUN — the
+     spinner then owned every pad edge while driving (mystery menu beeps)
+     and a Start/A press submitted the stale score as AAA (the duplicate-
+     score bug) */
   const qualifies =
-    tokenRef.current !== null &&
+    gameOver &&
+    // the token is consumed client-side the moment a submit starts —
+    // "sending" keeps the form (and the pad's spinner routing) alive
+    // until the server answers, so an impatient A can't fire PLAY AGAIN
+    // through the game-over nav while the submit is in flight
+    (tokenRef.current !== null || submitState === "sending") &&
     finalScore > 0 &&
     (board == null ||
       board.length < 10 ||
