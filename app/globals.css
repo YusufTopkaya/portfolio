@@ -1194,7 +1194,8 @@ html.crt-boot::after {
 }
 
 /* spectate status line: centred chip at the top, same chrome as the
-   countdown's panel language */
+   countdown's panel language. Tappable — with 2+ alive peers a click/tap
+   cycles the camera between them */
 .racer-spectate {
   position: absolute;
   top: 10px;
@@ -1206,7 +1207,8 @@ html.crt-boot::after {
   border: 2px solid #6e6650;
   padding: 4px 10px;
   white-space: nowrap;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
   z-index: 5;
 }
 

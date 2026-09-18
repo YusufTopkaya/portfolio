@@ -520,6 +520,36 @@ export function TwingoRacer() {
     }
   }, [bestSpectateTarget, setSpectateMode]);
 
+  /* switch the camera to the previous/next ALIVE peer (standings order,
+     wrap around) — ←/→ keys, pad LB/RB (twingo:board-step), or a tap on
+     the spectate chip. A no-op with only one peer left alive */
+  const cycleSpectate = useCallback(
+    (dir: 1 | -1) => {
+      const cur = spectatingRef.current;
+      const e = engineRef.current;
+      if (!cur || !e) return;
+      const rosterIds = new Set(rosterRef.current.map((p) => p.id));
+      const alive = [...standingsRef.current.entries()]
+        .filter(([id, p]) => !p.dead && rosterIds.has(id))
+        .sort((a, b) => b[1].state.score - a[1].state.score);
+      if (alive.length < 2) return;
+      const i = alive.findIndex(([id]) => id === cur.id);
+      const next =
+        alive[
+          ((((i < 0 ? 0 : i) + dir) % alive.length) + alive.length) %
+            alive.length
+        ];
+      audioRef.current?.menuMove();
+      e.setSpectate({
+        pos: next[1].state.pos,
+        x: next[1].state.x,
+        speed: next[1].state.speed,
+      });
+      setSpectateMode({ id: next[0], name: next[1].name });
+    },
+    [setSpectateMode],
+  );
+
   /* race over = we are dead AND every participant (a peer that sent at
      least one packet — a mid-race lobby idler never blocks this) is dead.
      Builds the results panel; spectate becomes moot */
@@ -1076,12 +1106,17 @@ export function TwingoRacer() {
 
   /* LB/RB on a gamepad steps the leaderboard period tabs — but only
      while a board is actually on screen (title panel or the game-over
-     overlay), never mid-run */
+     overlay), never mid-run. While spectating they switch the camera
+     between alive peers instead (the board is hidden behind the ride) */
   useEffect(() => {
     if (!open) return;
     const order: ScorePeriod[] = ["all", "monthly", "weekly", "daily"];
     const onStep = (ev: Event) => {
       const dir = (ev as CustomEvent<number>).detail;
+      if (spectatingRef.current) {
+        cycleSpectate(dir > 0 ? 1 : -1);
+        return;
+      }
       const visible =
         screenRef.current === "title"
           ? titleBoardRef.current
@@ -1094,7 +1129,7 @@ export function TwingoRacer() {
     };
     window.addEventListener("twingo:board-step", onStep);
     return () => window.removeEventListener("twingo:board-step", onStep);
-  }, [open, selectPeriod]);
+  }, [open, selectPeriod, cycleSpectate]);
 
   /* LEADERBOARD on the title screen: read-only top-10 panel — no token
      needed to look, only to submit after a run */
@@ -1991,10 +2026,17 @@ export function TwingoRacer() {
         else openPauseMenu();
         return;
       }
-      // spectate mode swallows every other key: the run is over (the
-      // engine ignores input), and the game-over nav must not fire PLAY
-      // AGAIN/QUIT from under the camera
-      if (spectatingRef.current) return;
+      // spectate mode: ←/→ (keyboard or pad d-pad synthetic keys) cycle
+      // the camera between alive peers; every other key is swallowed —
+      // the run is over (the engine ignores input), and the game-over
+      // nav must not fire PLAY AGAIN/QUIT from under the camera
+      if (spectatingRef.current) {
+        if (down && (k === "arrowleft" || k === "arrowright")) {
+          ev.preventDefault();
+          cycleSpectate(k === "arrowright" ? 1 : -1);
+        }
+        return;
+      }
       // game over: ←/→ (or ↑/↓) arms the action buttons, Enter/Space runs
       // the armed one — this is also the gamepad path, whose d-pad + A
       // land here as synthetic keys once the initials spinner has
@@ -3401,12 +3443,26 @@ export function TwingoRacer() {
       )}
 
       {/* spectate mode: the game-over panel hides behind the camera ride;
-          ESC / pad B drops back to it */}
-      {spectating && (
-        <div className="racer-spectate font-pixel" role="status">
-          SPECTATING {spectating.name} — {padConnected ? "B" : "ESC"} TO EXIT
-        </div>
-      )}
+          ESC / pad B drops back to it. With 2+ peers alive ←/→, pad LB/RB
+          or a tap on the chip cycles the camera between them */}
+      {spectating &&
+        (() => {
+          const canSwitch =
+            standings.filter((r) => !r.self && !r.dead).length >= 2;
+          return (
+            // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard control lives on the window-level handler — ←/→ cycle the camera while spectating
+            <div
+              className="racer-spectate font-pixel"
+              role="status"
+              onClick={canSwitch ? () => cycleSpectate(1) : undefined}
+            >
+              SPECTATING {spectating.name}
+              {canSwitch &&
+                (padConnected ? " — LB/RB SWITCH" : " — ←/→ SWITCH")}{" "}
+              — {padConnected ? "B" : "ESC"} EXIT
+            </div>
+          );
+        })()}
 
       {/* FPS counter — toggled with F */}
       {screen === "playing" && showFps && (
