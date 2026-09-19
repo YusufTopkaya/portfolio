@@ -340,6 +340,8 @@ export function botStates(
         steer: clamp(b.steer, -1, 1),
         fuel: st.fuel,
         crashes: st.crashes,
+        streak: st.streak,
+        t: performance.now(),
       },
     };
   });

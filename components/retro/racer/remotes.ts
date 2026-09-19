@@ -1,14 +1,19 @@
 /**
- * Remote car buffer for P2P races (see net.ts): keeps the last four state
- * packets per peer and samples them ~120 ms in the past (the interpolation
- * buffer). States stream at 20 Hz (50 ms spacing), so the window always
- * holds 2-3 packets and the sample stays bracketed despite ±60 ms of
- * DataChannel arrival jitter. On loss the newest packet is dead-reckoned
- * up to 250 ms — along the track at the last known speed AND laterally at
- * the estimated dx/dt (clamped), so steering motion doesn't freeze while
- * the car drifts — then holds. A peer silent for >1.5 s is `stale` (the
- * UI fades it out, a disconnect removes it); a dead peer is parked as a
- * wreck at its final position and never extrapolates.
+ * Remote car buffer for P2P races (see net.ts): keeps the last eight state
+ * packets per peer and samples them ~100 ms in the past (the interpolation
+ * window). States stream at ~60 Hz (one per sender frame). Brackets are
+ * measured on the SENDER's clock (NetCarState.t): arrival jitter then only
+ * shifts WHEN packets land, never the lerp spans — interpolating between
+ * arrival stamps made the sampled speed oscillate with the jitter (the
+ * spectate-camera judder bug). The receiver↔sender clock offset is tracked
+ * as a smoothed per-peer value, so clock skew and drift are absorbed.
+ * Peers predating the `t` field fall back to arrival stamping (the old
+ * behaviour). On loss the newest packet is dead-reckoned up to 100 ms —
+ * along the track at the last known speed AND laterally at the estimated
+ * dx/dt (clamped), so steering motion doesn't freeze while the car drifts —
+ * then holds. A peer silent for >1.5 s is `stale` (the UI fades it out, a
+ * disconnect removes it); a dead peer is parked as a wreck at its final
+ * position and never extrapolates.
  *
  * Two guards keep the sampled pose honest:
  * - reorder-drop: the car never moves backwards along the track, so a
@@ -18,8 +23,10 @@
  * - monotonic pos: the sampled pos never steps backwards within a run, so
  *   an extrapolation overshoot can't snap back when fresh packets land.
  *
- * All times are milliseconds on the caller's clock (performance.now()) —
- * the store never reads a clock itself, so tests can drive it manually.
+ * All times are milliseconds — arrival times on the caller's clock
+ * (performance.now()), sender stamps on the peer's clock, bridged by the
+ * per-peer offset. The store never reads a clock itself, so tests can
+ * drive it manually.
  */
 
 import type { NetCarState } from "./net";
@@ -46,6 +53,14 @@ export interface RemoteCarView {
   latVel: number;
   /** the peer is slowing faster than coasting drag — light its stop lamps */
   braking: boolean;
+  /** fuel-chain streak (jerrycan counter) — discrete, newest packet's
+      value; the spectate HUD mirrors it. 0 from pre-streak peers */
+  streak: number;
+  /** fuel dots / crashes used, newest packet's values — the spectate HUD
+      restamps the engine's own cluster + hearts with them. undefined
+      from peers predating the fields (the HUD then keeps ours) */
+  fuel?: number;
+  crashes?: number;
 }
 
 /** render the field this far in the past so two packets bracket the sample
@@ -75,9 +90,9 @@ const MIN_LERP_SPAN_MS = 8;
 /** packets are stamped at least this far apart (~60% of the ~16.7 ms send
     spacing): a burst of jitter-compressed arrivals is spread over the
     following frames instead of collapsing into a zero-span bracket that
-    would jump the car a full packet-step in one frame. Stamps may drift
-    slightly into the future during a burst; a normal 16.7 ms gap lets the
-    clock catch up, so the drift never accumulates */
+    would jump the car a full packet-step in one frame. Stamped peers
+    (NetCarState.t) interpolate on the sender's clock instead — this stamp
+    now only drives staleness and the pre-`t` fallback brackets */
 const MIN_PACKET_GAP_MS = 10;
 /** mirrors engine.ts ROLL_DRAG (the proportional coasting decel, 1/s) —
     kept local to avoid an import cycle (engine imports this store). A
@@ -88,9 +103,14 @@ const MIN_PACKET_GAP_MS = 10;
 const COAST_DRAG = 0.3;
 
 interface Packet {
-  /** jitter-buffered arrival time, ms (≥ actual arrival — bursts are
-      spread MIN_PACKET_GAP_MS apart at upsert time) */
+  /** jitter-buffered arrival time, ms on OUR clock (≥ actual arrival —
+      bursts are spread MIN_PACKET_GAP_MS apart at upsert time). Used for
+      staleness and as the interpolation stamp for pre-`t` peers */
   t: number;
+  /** send time on the PEER's clock (NetCarState.t), or `t` when the peer
+      predates the field — the lerp brackets are measured between these,
+      so arrival jitter never compresses a span */
+  st: number;
   s: NetCarState;
 }
 
@@ -102,6 +122,10 @@ interface Peer {
   deadScore: number;
   /** last sampled pos — the monotonic along-track guard's baseline */
   lastOutPos: number | null;
+  /** ourClock − senderClock, smoothed per packet (arrival jitter averages
+      out across the ~6 packets in the window); null until a stamped
+      packet lands — pre-`t` peers interpolate on arrival stamps */
+  clockOffset: number | null;
 }
 
 export interface RemoteCars {
@@ -168,16 +192,19 @@ export function createRemoteCars(): RemoteCars {
       score = p.deadScore;
       steer = last.steer ?? 0;
     } else {
-      const rt = now - INTERP_DELAY_MS;
+      // render time on the SENDER's clock: the smoothed offset bridges
+      // the two clocks, so the lerp fractions below ride the peer's true
+      // ~16.7 ms send spacing, not our jittered arrival times
+      const rt = now - (p.clockOffset ?? 0) - INTERP_DELAY_MS;
       const pk = p.packets;
       const newest = pk[pk.length - 1];
-      if (rt >= newest.t) {
+      if (rt >= newest.st) {
         // past the window: extrapolate along the track at the last known
         // speed and laterally at the estimated velocity, capped — a lost
-        // stream drifts a quarter second, then holds (the stale fade takes
-        // over from there). Steering holds the last reported value — the
-        // wheel isn't dead-reckoned
-        const over = Math.min(EXTRAP_CAP_MS, Math.max(0, rt - newest.t));
+        // stream drifts briefly, then holds (the stale fade takes over
+        // from there). Steering holds the last reported value — the wheel
+        // isn't dead-reckoned
+        const over = Math.min(EXTRAP_CAP_MS, Math.max(0, rt - newest.st));
         pos = newest.s.pos + newest.s.speed * (over / 1000);
         x = clamp(
           newest.s.x + lateralVel(p) * (over / 1000),
@@ -189,10 +216,10 @@ export function createRemoteCars(): RemoteCars {
         steer = newest.s.steer ?? 0;
       } else {
         // bracketed: lerp the surrounding pair at the render time — hi is
-        // the last packet at or before rt, and rt < newest.t guarantees
-        // pk[hi + 1] exists past it
+        // the last packet stamped at or before rt, and rt < newest.st
+        // guarantees pk[hi + 1] exists past it
         let hi = pk.length - 1;
-        while (hi > 0 && pk[hi].t > rt) hi--;
+        while (hi > 0 && pk[hi].st > rt) hi--;
         const a = pk[hi];
         const b = pk[hi + 1];
         if (!b) {
@@ -203,8 +230,8 @@ export function createRemoteCars(): RemoteCars {
           score = a.s.score;
           steer = a.s.steer ?? 0;
         } else {
-          const span = Math.max(MIN_LERP_SPAN_MS, b.t - a.t);
-          const t = clamp((rt - a.t) / span, 0, 1);
+          const span = Math.max(MIN_LERP_SPAN_MS, b.st - a.st);
+          const t = clamp((rt - a.st) / span, 0, 1);
           pos = a.s.pos + (b.s.pos - a.s.pos) * t;
           x = a.s.x + (b.s.x - a.s.x) * t;
           speed = a.s.speed + (b.s.speed - a.s.speed) * t;
@@ -225,6 +252,9 @@ export function createRemoteCars(): RemoteCars {
       }
     }
     p.lastOutPos = pos;
+    // discrete HUD fields ride the newest packet, not the lerp — a fuel
+    // dot or streak count is an event, not a continuum
+    const latest = p.packets[p.packets.length - 1].s;
     return {
       id,
       pos,
@@ -237,11 +267,26 @@ export function createRemoteCars(): RemoteCars {
       steer,
       latVel: p.dead ? 0 : lateralVel(p),
       braking: !p.dead && brakingNow(p),
+      streak: latest.streak ?? 0,
+      fuel: latest.fuel,
+      crashes: latest.crashes,
     };
   };
 
   return {
     upsert(id, s, now) {
+      // bridge the two clocks off this packet's RAW arrival (the spread
+      // stamp would inject our own jitter-buffering into the estimate);
+      // alpha 0.15 converges in ~15 packets (~¼ s) and then just tracks
+      // clock drift
+      const trackClock = (p: Peer) => {
+        if (s.t === undefined) return;
+        const off = now - s.t;
+        p.clockOffset =
+          p.clockOffset === null
+            ? off
+            : p.clockOffset + (off - p.clockOffset) * 0.15;
+      };
       const p = peers.get(id);
       if (p) {
         if (p.dead) return; // the wreck is parked — late packets can't move it
@@ -250,7 +295,8 @@ export function createRemoteCars(): RemoteCars {
         if (back > RESET_JUMP) {
           // rematch/reset: the car jumped back to the start — drop the old
           // run's packets so no lerp ever spans across the two runs
-          p.packets = [{ t: now, s }];
+          trackClock(p);
+          p.packets = [{ t: now, st: s.t ?? now, s }];
           p.lastOutPos = null;
         } else if (back > 0) {
           // out-of-order (DataChannel reordering): the car never moves
@@ -264,7 +310,8 @@ export function createRemoteCars(): RemoteCars {
         } else {
           // stamp jitter-compressed arrivals apart (see MIN_PACKET_GAP_MS)
           const t = Math.max(now, newest.t + MIN_PACKET_GAP_MS);
-          p.packets.push({ t, s });
+          trackClock(p);
+          p.packets.push({ t, st: s.t ?? t, s });
           if (p.packets.length > KEEP_PACKETS) p.packets.shift();
         }
         if (s.dead) {
@@ -273,11 +320,12 @@ export function createRemoteCars(): RemoteCars {
         }
       } else {
         peers.set(id, {
-          packets: [{ t: now, s }],
+          packets: [{ t: now, st: s.t ?? now, s }],
           name: "",
           dead: s.dead,
           deadScore: s.dead ? s.score : 0,
           lastOutPos: null,
+          clockOffset: s.t === undefined ? null : now - s.t,
         });
       }
     },

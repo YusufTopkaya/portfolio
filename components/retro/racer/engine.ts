@@ -1685,6 +1685,17 @@ export function createEngine(opts: {
     speed: number;
     id?: string;
   } | null = null;
+  // spectate HUD parity: the followed player's streak as of the last frame
+  // (an increment flashes the docked-can halo, a drop burns the chain out)
+  // and our own frozen instruments, restored when spectate ends so the
+  // game-over screen still shows OUR run behind the overlay
+  let specStreak: number | null = null;
+  let savedHud: {
+    score: number;
+    fuel: number;
+    crashes: number;
+    streak: number;
+  } | null = null;
   let lastBumpAt = -10; // engine time of the last bump sound
   // car-car contact bookkeeping: which peers we are CURRENTLY touching
   // (entry impulses fire once per touch, separation runs every frame) and
@@ -2111,6 +2122,22 @@ export function createEngine(opts: {
           spectateTarget.pos = view.pos;
           spectateTarget.x = view.x;
           spectateTarget.speed = view.speed;
+          // HUD parity: the instruments (LCD cluster, hearts, streak can)
+          // all read engine state — restamp it with the followed player's
+          // streamed values so spectate renders THEIR cockpit, not our
+          // frozen finished run. A streak increment is a bagged can (dock
+          // halo), a drop is a broken chain (burn-out) — the same pickup
+          // animations the driver's own screen shows
+          state.score = view.score;
+          if (view.fuel !== undefined) state.fuel = view.fuel;
+          if (view.crashes !== undefined) state.crashes = view.crashes;
+          if (specStreak !== null && view.streak > specStreak) {
+            streakGlowAt = state.time;
+          } else if (specStreak !== null && view.streak < specStreak) {
+            lastStreakLostAt = state.time;
+          }
+          specStreak = view.streak;
+          state.streak = view.streak;
         }
       }
       state.position = Math.max(0, spectateTarget.pos - PLAYER_Z);
@@ -4281,7 +4308,7 @@ export function createEngine(opts: {
         stAge < 1.2 ||
         lostAge < STREAK_BURN_T ||
         shieldCharges > 0) &&
-      !state.gameOver
+      (!state.gameOver || spectateTarget)
     ) {
       const uiBase = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
       // phone buffers keep their desktop design size, so the physical
@@ -4480,8 +4507,9 @@ export function createEngine(opts: {
     // heart meter: 3 pixel hearts, one per crash the car can still take —
     // full red while intact, a hollow outline once lost. Always on screen
     // (arcade convention): same left column as the streak can, parked
-    // under its popup zone
-    if (!state.gameOver) {
+    // under its popup zone. Reads state.crashes (not the local) so the
+    // spectate restamp shows the FOLLOWED player's hearts
+    if (!state.gameOver || spectateTarget) {
       const uiBase = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
       const ui =
         uiBase * (height > width ? 2.5 : opts.clusterTopLeft ? 1.4 : 1);
@@ -4517,7 +4545,7 @@ export function createEngine(opts: {
       };
       for (let i = 0; i < CRASH_MAX; i++) {
         const hx = margin + i * Math.round(9 * ps);
-        if (i < CRASH_MAX - crashes) {
+        if (i < CRASH_MAX - state.crashes) {
           stamp(HEART_FULL, hx, "#e5484d");
           stamp(HEART_RING, hx, "#141611");
         } else {
@@ -4589,7 +4617,7 @@ export function createEngine(opts: {
 
     // fuel warnings — an empty tank kills the engine and the car coasts
     // to a stop, so make the cause unmistakable before it happens
-    if (!state.gameOver && state.fuel <= 2) {
+    if ((!state.gameOver || spectateTarget) && state.fuel <= 2) {
       const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
       const blinkOn = Math.floor(state.time * 2.5) % 2 === 0;
       if (state.fuel <= 0) {
@@ -4838,6 +4866,26 @@ export function createEngine(opts: {
       return out;
     },
     setSpectate: (t) => {
+      if (t && !spectateTarget) {
+        // park OUR finished run's instruments — restored on exit so the
+        // game-over screen behind the overlay is ours again
+        savedHud = {
+          score: state.score,
+          fuel: state.fuel,
+          crashes: state.crashes,
+          streak: state.streak,
+        };
+        specStreak = null;
+      } else if (!t && spectateTarget) {
+        if (savedHud) {
+          state.score = savedHud.score;
+          state.fuel = savedHud.fuel;
+          state.crashes = savedHud.crashes;
+          state.streak = savedHud.streak;
+          savedHud = null;
+        }
+        specStreak = null;
+      }
       spectateTarget = t;
     },
     debugNextPickup,

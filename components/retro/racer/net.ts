@@ -44,6 +44,14 @@ export interface NetCarState {
       mirror the followed player's cluster (fuel bars + hearts) */
   fuel?: number;
   crashes?: number;
+  /** fuel-chain streak (the jerrycan counter) — the spectate HUD mirrors
+      it and flashes on each can the followed player bags */
+  streak?: number;
+  /** sender's performance.now() at send time. Receivers interpolate
+      BETWEEN THESE stamps: arrival jitter then never modulates the lerp
+      bracket spans (the spectate-camera judder bug). Absent from
+      pre-stamp peers — they fall back to arrival stamping */
+  t?: number;
 }
 
 /** race-start message from the lobby leader. `ms` is a countdown FROM

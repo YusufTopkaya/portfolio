@@ -270,227 +270,6 @@ function BracketGem({ score }: { score: number }) {
   );
 }
 
-/* spectate instruments: blocky 7-segment digits in the engine cluster's
-   palette (a=top … g=middle, same segment order as the engine's own
-   SEG_MAP) */
-const SPEC_SEG: Record<string, readonly boolean[]> = {
-  "0": [true, true, true, true, true, true, false],
-  "1": [false, true, true, false, false, false, false],
-  "2": [true, true, false, true, true, false, true],
-  "3": [true, true, true, true, false, false, true],
-  "4": [false, true, true, false, false, true, true],
-  "5": [true, false, true, true, false, true, true],
-  "6": [true, false, true, true, true, true, true],
-  "7": [true, true, true, false, false, false, false],
-  "8": [true, true, true, true, true, true, true],
-  "9": [true, true, true, true, false, true, true],
-};
-
-function specDigit(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  ch: string,
-  color: string,
-) {
-  const on = SPEC_SEG[ch];
-  if (!on) return;
-  const t = Math.max(1, Math.round(size * 0.2));
-  const w = Math.round(size);
-  const h = Math.round(size * 2);
-  x = Math.round(x);
-  y = Math.round(y);
-  ctx.fillStyle = color;
-  if (on[0]) ctx.fillRect(x, y, w, t);
-  if (on[1]) ctx.fillRect(x + w - t, y, t, Math.round(h / 2));
-  if (on[2])
-    ctx.fillRect(x + w - t, y + Math.round(h / 2), t, Math.round(h / 2));
-  if (on[3]) ctx.fillRect(x, y + h - t, w, t);
-  if (on[4]) ctx.fillRect(x, y + Math.round(h / 2), t, Math.round(h / 2));
-  if (on[5]) ctx.fillRect(x, y, t, Math.round(h / 2));
-  if (on[6]) ctx.fillRect(x, y + Math.round(h / 2 - t / 2), w, t);
-}
-
-/* spectate instruments restamp: covers the engine's LCD cluster rect
-   wholesale (bottom-right desktop / top-left touch, 150×52 ui — the same
-   geometry renderCluster uses) and redraws it with the FOLLOWED player's
-   live speed + score + fuel gauge, plus their heart meter parked where the
-   engine draws ours (left column desktop / under the cluster on touch) —
-   the ride reads like driving that car */
-const SPEC_FUEL_MAX = 8;
-const SPEC_CRASH_MAX = 3;
-
-function drawSpectateCluster(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  kmh: number,
-  score: number,
-  topLeft: boolean,
-  fuel?: number,
-  crashes?: number,
-  time = 0,
-) {
-  const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
-  const pw = Math.round(150 * ui);
-  const ph = Math.round(52 * ui);
-  const x0 = topLeft ? Math.round(8 * ui) : width - pw - Math.round(8 * ui);
-  const y0 = topLeft ? Math.round(16 * ui) : height - ph - Math.round(8 * ui);
-  const pad = Math.round(3 * ui);
-  const segColor = "#243320";
-  const ghostColor = "rgba(36,51,32,0.10)";
-
-  // bezel + LCD inset, covering the stale local cluster
-  ctx.fillStyle = "#141611";
-  ctx.beginPath();
-  ctx.roundRect(x0, y0, pw, ph, Math.round(6 * ui));
-  ctx.fill();
-  ctx.fillStyle = "#a7c57d";
-  ctx.beginPath();
-  ctx.roundRect(
-    x0 + pad,
-    y0 + pad,
-    pw - pad * 2,
-    ph - pad * 2,
-    Math.round(4 * ui),
-  );
-  ctx.fill();
-
-  // big speed readout (the followed car's), ghost 8s behind live digits
-  const size = 13 * ui;
-  const gap = 3 * ui;
-  const digitW = size + gap;
-  const digitsX = x0 + pad + Math.round(7 * ui);
-  const digitsY = y0 + pad + Math.round(12 * ui);
-  const text = String(Math.min(999, Math.round(kmh))).padStart(3, " ");
-  for (let i = 0; i < 3; i++) {
-    specDigit(ctx, digitsX + i * digitW, digitsY, size, "8", ghostColor);
-    if (text[i] !== " ") {
-      specDigit(ctx, digitsX + i * digitW, digitsY, size, text[i], segColor);
-    }
-  }
-  ctx.fillStyle = segColor;
-  ctx.font = `${Math.round(6 * ui)}px monospace`;
-  ctx.fillText(
-    "km/h",
-    digitsX + 3 * digitW + Math.round(2 * ui),
-    digitsY + size * 2,
-  );
-
-  // followed score, top-right (where the real cluster shows the trip)
-  const tSize = 5 * ui;
-  const tW = tSize + 1.5 * ui;
-  const scoreText = String(Math.floor(score)).padStart(5, " ");
-  const scoreX = x0 + pw - pad - Math.round(7 * ui) - scoreText.length * tW;
-  const scoreY = y0 + pad + Math.round(4 * ui);
-  for (let i = 0; i < scoreText.length; i++) {
-    specDigit(ctx, scoreX + i * tW, scoreY, tSize, "8", ghostColor);
-    if (scoreText[i] !== " ") {
-      specDigit(ctx, scoreX + i * tW, scoreY, tSize, scoreText[i], segColor);
-    }
-  }
-
-  // followed fuel gauge, bottom row (same geometry drawFuelGauge uses)
-  if (fuel !== undefined) {
-    const digitsX2 = x0 + pad + Math.round(7 * ui);
-    const gx = digitsX2 + 3 * (13 * ui + 3 * ui) + 2 * ui;
-    const gy = y0 + ph - pad - 3 * ui;
-    const bw = 6 * ui;
-    const bh = 8 * ui;
-    ctx.fillStyle = segColor;
-    ctx.fillRect(
-      Math.round(gx),
-      Math.round(gy - bh),
-      Math.round(bw),
-      Math.round(bh),
-    );
-    ctx.fillStyle = "#a7c57d";
-    ctx.fillRect(
-      Math.round(gx + 1.2 * ui),
-      Math.round(gy - bh + 1.2 * ui),
-      Math.max(1, Math.round(bw - 2.4 * ui)),
-      Math.max(1, Math.round(2.2 * ui)),
-    );
-    ctx.fillStyle = segColor;
-    ctx.fillRect(
-      Math.round(gx + bw),
-      Math.round(gy - bh + 1 * ui),
-      Math.max(1, Math.round(1.4 * ui)),
-      Math.max(1, Math.round(4 * ui)),
-    );
-    const lit = Math.ceil(fuel);
-    const low = fuel <= 1.5;
-    const blinkOn = Math.floor(time * 2.5) % 2 === 0;
-    const r = Math.max(1, 1.5 * ui);
-    const step = 3.6 * ui;
-    const dotsX = gx + bw + 6 * ui;
-    const dotsY = gy - r;
-    for (let i = 0; i < SPEC_FUEL_MAX; i++) {
-      const cx = dotsX + i * step;
-      ctx.beginPath();
-      ctx.arc(cx, dotsY, r, 0, Math.PI * 2);
-      if (i < lit) {
-        ctx.fillStyle =
-          low && i === lit - 1
-            ? blinkOn
-              ? "#e2703a"
-              : "rgba(226,112,58,0.3)"
-            : segColor;
-        ctx.fill();
-      } else {
-        ctx.strokeStyle = segColor;
-        ctx.lineWidth = Math.max(1, 0.7 * ui);
-        ctx.stroke();
-      }
-    }
-  }
-
-  // followed heart meter where the engine parks ours: left column on
-  // desktop, under the cluster on touch
-  if (crashes !== undefined) {
-    const ps = Math.max(1, Math.round(1.6 * ui));
-    const hx0 = topLeft ? x0 + pad : Math.round(8 * ui);
-    const hy0 = topLeft
-      ? y0 + ph + Math.round(10 * ui)
-      : Math.round(8 * ui) + Math.round(34 * ui);
-    const HEART_FULL = [
-      ".XX.XX.",
-      "XXXXXXX",
-      "XXXXXXX",
-      ".XXXXX.",
-      "..XXX..",
-      "...X...",
-    ];
-    const HEART_RING = [
-      ".XX.XX.",
-      "X..X..X",
-      "X.....X",
-      ".X...X.",
-      "..X.X..",
-      "...X...",
-    ];
-    const stamp = (map: string[], hx: number, style: string) => {
-      ctx.fillStyle = style;
-      for (let rr = 0; rr < map.length; rr++)
-        for (let cc = 0; cc < map[rr].length; cc++)
-          if (map[rr][cc] === "X")
-            ctx.fillRect(hx + cc * ps, hy0 + rr * ps, ps, ps);
-    };
-    for (let i = 0; i < SPEC_CRASH_MAX; i++) {
-      const hx = hx0 + i * Math.round(9 * ps);
-      if (i < SPEC_CRASH_MAX - crashes) {
-        stamp(HEART_FULL, hx, "#e5484d");
-        stamp(HEART_RING, hx, "#141611");
-      } else {
-        ctx.globalAlpha = 0.75;
-        stamp(HEART_RING, hx, "#141611");
-        ctx.globalAlpha = 1;
-      }
-    }
-  }
-}
-
 export function TwingoRacer() {
   const [open, setOpen] = useState(false);
   /* the overlay opens on the title screen; the engine only boots once
@@ -523,6 +302,10 @@ export function TwingoRacer() {
   /* netConnected flips on the first onPeersChanged; if it stays off for
      15 s the relay path is presumed slow/blocked and a Retry is offered */
   const [netConnected, setNetConnected] = useState(false);
+  /* netAttached flips when a transport instance exists (WsNet opened or the
+     Trystero fallback took over) — drives the CONNECTING… indicator, which
+     must cover the ~5 s WS open attempt, not wait for peer traffic */
+  const [netAttached, setNetAttached] = useState(false);
   const [connectStuck, setConnectStuck] = useState(false);
   const [copied, setCopied] = useState(false);
   /* a VS race start/rematch the room announced: the engine boots
@@ -996,6 +779,7 @@ export function TwingoRacer() {
     rosterRef.current = [];
     selfPeerIdRef.current = "";
     standingsRef.current.clear();
+    setStandings([]);
     botsRef.current = [];
     setBots([]);
     botsSimRef.current = null;
@@ -1010,6 +794,7 @@ export function TwingoRacer() {
     pendingRaceRef.current = null;
     raceSeedRef.current = null;
     setNetConnected(false);
+    setNetAttached(false);
     setConnectStuck(false);
   }, [setSpectateMode]);
 
@@ -1146,6 +931,15 @@ export function TwingoRacer() {
     (code: string) => {
       netRef.current?.leave();
       const gen = ++netGenRef.current;
+      // jump to the room view NOW with a CONNECTING… indicator — attach()
+      // only fires after the WS open attempt resolves (~5 s when the relay
+      // is down), and staring at an unchanged home view feels broken
+      setRoomCode(code.toUpperCase());
+      setNetAttached(false);
+      setNetConnected(false);
+      setConnectStuck(false);
+      setPeers([]);
+      setLobbyView("room");
       const hello: RaceHello = {
         name: savedName(),
         seed: turkeyDay(),
@@ -1330,6 +1124,7 @@ export function TwingoRacer() {
         selfPeerIdRef.current = net.selfId;
         setRoomCode(net.code);
         setNetConnected(false);
+        setNetAttached(true);
         setConnectStuck(false);
         setCopied(false);
         setJoinCode("");
@@ -2471,29 +2266,10 @@ export function TwingoRacer() {
         // stay fresh for late joiners
         streamNet();
         e.render(ctx);
-        // spectate instruments: the canvas LCD cluster still shows OUR
-        // finished run's frozen score/fuel — restamp it with the followed
-        // player's live numbers (their latest state packet), so the ride
-        // reads like driving that car. The engine's own hearts/streak HUDs
-        // are gated on !gameOver and already gone; the restamp redraws the
-        // followed player's fuel gauge + hearts in their place
-        const spec = spectatingRef.current;
-        if (spec) {
-          const pk = standingsRef.current.get(spec.id)?.state;
-          if (pk) {
-            drawSpectateCluster(
-              ctx,
-              buf.w,
-              buf.h,
-              (pk.speed / ENGINE_CONSTANTS.MAX_SPEED) * 180,
-              pk.score,
-              coarseRef.current,
-              pk.fuel,
-              pk.crashes,
-              e.state.time,
-            );
-          }
-        }
+        // spectate instruments: the engine restamps its own cluster /
+        // hearts / streak HUD with the followed player's streamed values
+        // (see the spectate branch in engine.update) — nothing to cover
+        // or redraw here anymore
         // after the tank ran dry the engine stays silent — gameOver()
         // already faded it out; drive() would revive an idle drone
         if (!gameOverRef.current) {
@@ -2708,6 +2484,7 @@ export function TwingoRacer() {
                 pos?: number;
                 fuel?: number;
                 crashes?: number;
+                streak?: number;
               } | null;
             }
           ).__twingoSpec = () => {
@@ -2720,6 +2497,7 @@ export function TwingoRacer() {
               pos: st?.pos,
               fuel: st?.fuel,
               crashes: st?.crashes,
+              streak: st?.streak,
             };
           };
         }
@@ -2756,6 +2534,8 @@ export function TwingoRacer() {
           steer: steerOutRef.current,
           fuel: e.state.fuel,
           crashes: e.state.crashes,
+          streak: e.state.streak,
+          t: performance.now(),
         });
       }
       const sim = botsSimRef.current;
@@ -3659,16 +3439,18 @@ export function TwingoRacer() {
                     LEADER STARTS THE RACE
                   </div>
                 )}
-                {connectStuck && !netConnected && (
+                {(!netAttached || (connectStuck && !netConnected)) && (
                   <div className="racer-lobby-retry">
                     CONNECTING…
-                    <button
-                      type="button"
-                      className="racer-quit font-pixel"
-                      onClick={() => joinNet(roomCode)}
-                    >
-                      RETRY
-                    </button>
+                    {connectStuck && !netConnected && (
+                      <button
+                        type="button"
+                        className="racer-quit font-pixel"
+                        onClick={() => joinNet(roomCode)}
+                      >
+                        RETRY
+                      </button>
+                    )}
                   </div>
                 )}
               </>
