@@ -1902,6 +1902,34 @@ export function TwingoRacer() {
     return () => window.removeEventListener("twingo:start", openOverlay);
   }, [openOverlay]);
 
+  /* dev-only probe (e2e): which transport the current room runs on —
+     unlike the engine probes below this must exist in the LOBBY too */
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    (window as unknown as { __twingoNet?: () => string | null }).__twingoNet =
+      () => netRef.current?.constructor.name ?? null;
+    (
+      window as unknown as {
+        __twingoStandings?: () => {
+          id: string;
+          name: string;
+          score: number;
+          dead: boolean;
+          inRoster: boolean;
+        }[];
+      }
+    ).__twingoStandings = () => {
+      const rosterIds = new Set(rosterRef.current.map((p) => p.id));
+      return [...standingsRef.current.entries()].map(([id, p]) => ({
+        id,
+        name: p.name,
+        score: Math.floor(p.state.score),
+        dead: p.dead,
+        inRoster: rosterIds.has(id),
+      }));
+    };
+  }, []);
+
   /* ?race=CODE share link: auto-open the overlay straight into that
      room's lobby (joins immediately — the room code is validated against
      the same alphabet the JOIN input enforces) */
