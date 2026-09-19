@@ -48,14 +48,17 @@ export interface RemoteCarView {
   braking: boolean;
 }
 
-/** render the field this far in the past so two packets bracket the sample */
-const INTERP_DELAY_MS = 120;
-/** dead-reckoning past the newest packet is capped: drift, then hold */
-const EXTRAP_CAP_MS = 250;
+/** render the field this far in the past so two packets bracket the sample
+    — at the 60 Hz frame-cadence stream (~16.7 ms packets) 100 ms spans ~6 */
+const INTERP_DELAY_MS = 100;
+/** dead-reckoning past the newest packet is capped: drift, then hold. Kept
+    at ~6 send intervals — with dense 60 Hz packets a stall this long is
+    already a network gap, extrapolate briefly then hold the pose */
+const EXTRAP_CAP_MS = 100;
 /** silence longer than this = faded out (disconnect cleanup is the net's job) */
 const STALE_MS = 1500;
-/** packets kept per peer — at 20 Hz the 120 ms window spans ~3 of them */
-const KEEP_PACKETS = 4;
+/** packets kept per peer — 8 covers the 100 ms window with headroom */
+const KEEP_PACKETS = 8;
 /** estimated lateral velocity cap (half-widths/s) for extrapolated x */
 const MAX_LATERAL_VEL = 2.5;
 /** never extrapolate x past here — the verge line is ±1.35 */
@@ -65,15 +68,17 @@ const MAX_EXTRAP_X = 1.5;
 const RESET_JUMP = 50 * 200;
 /** lerp brackets shorter than this are arrival-jitter artefacts (two
     packets landing together): clamping the span caps the lerp slope at
-    ~1.7× instead of teleporting through the bracket in one frame */
-const MIN_LERP_SPAN_MS = 30;
-/** packets are stamped at least this far apart (80% of the 50 ms send
+    ~2× instead of teleporting through the bracket in one frame. At the
+    60 Hz stream the packet spacing is ~16.7 ms, so this still leaves
+    normal pairs unclamped */
+const MIN_LERP_SPAN_MS = 8;
+/** packets are stamped at least this far apart (~60% of the ~16.7 ms send
     spacing): a burst of jitter-compressed arrivals is spread over the
     following frames instead of collapsing into a zero-span bracket that
     would jump the car a full packet-step in one frame. Stamps may drift
-    slightly into the future during a burst; a normal 50 ms gap lets the
+    slightly into the future during a burst; a normal 16.7 ms gap lets the
     clock catch up, so the drift never accumulates */
-const MIN_PACKET_GAP_MS = 40;
+const MIN_PACKET_GAP_MS = 10;
 /** mirrors engine.ts ROLL_DRAG (the proportional coasting decel, 1/s) —
     kept local to avoid an import cycle (engine imports this store). A
     peer slowing faster than 1.5× this drag is braking (or off-road),

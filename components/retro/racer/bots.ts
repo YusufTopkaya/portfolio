@@ -338,6 +338,8 @@ export function botStates(
         score: b.dead ? b.deadScore : Math.floor(st.score),
         dead: b.dead,
         steer: clamp(b.steer, -1, 1),
+        fuel: st.fuel,
+        crashes: st.crashes,
       },
     };
   });

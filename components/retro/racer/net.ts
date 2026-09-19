@@ -38,6 +38,10 @@ export interface NetCarState {
   /** current steering, -1 (full left) .. 1 (full right) — the remote
       renderer picks the matching sprite frame so friends see you turn */
   steer?: number;
+  /** fuel gauge in dots (float) + crashes used — lets the spectate HUD
+      mirror the followed player's cluster (fuel bars + hearts) */
+  fuel?: number;
+  crashes?: number;
 }
 
 /** race-start message from the lobby leader. `ms` is a countdown FROM
@@ -143,7 +147,9 @@ function validState(v: unknown): v is NetCarState {
     isNum(s.speed, 0, 1e6) &&
     isNum(s.score, 0, 1e9) &&
     typeof s.dead === "boolean" &&
-    (s.steer === undefined || isNum(s.steer, -1, 1))
+    (s.steer === undefined || isNum(s.steer, -1, 1)) &&
+    (s.fuel === undefined || isNum(s.fuel, 0, 12)) &&
+    (s.crashes === undefined || isNum(s.crashes, 0, 99))
   );
 }
 const validSeg = (v: unknown): v is number => isNum(v, 0, 1e9);

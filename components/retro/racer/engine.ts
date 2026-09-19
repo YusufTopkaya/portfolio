@@ -377,6 +377,9 @@ export interface EngineState {
   respawn: number;
   /** fuel left, in gauge dots (0..8). 0 = engine dead, coasting to a stop */
   fuel: number;
+  /** hearts already lost (0..CRASH_MAX-1) — mirrored onto the wire so the
+      spectate HUD can draw the followed player's heart meter */
+  crashes: number;
   /** seconds of BOOST left — overflow fuel burning as extra top speed */
   boostT: number;
   /** consecutive gas cans collected without missing one (drives the
@@ -1656,6 +1659,7 @@ export function createEngine(opts: {
     multiplier: 1,
     respawn: 0,
     fuel: FUEL_MAX,
+    crashes: 0,
     boostT: 0,
     streak: 0,
     gameOver: false,
@@ -1977,6 +1981,7 @@ export function createEngine(opts: {
   const crashRespawn = (cause: "pothole" | "tree" | "offroad" | "cat") => {
     if (dying) return; // already coasting to the end — no double jeopardy
     crashes++;
+    state.crashes = crashes;
     state.fuel = Math.max(0, state.fuel - CRASH_FUEL);
     damageMul *= 1 - CRASH_SPEED_STEPS[Math.min(crashes - 1, CRASH_MAX - 1)];
     lastCrashAt = state.time;
@@ -2094,6 +2099,20 @@ export function createEngine(opts: {
     // entered exactly when our own game ended
     if (spectateTarget) {
       state.time += dt;
+      // when the target carries an id, ride its INTERPOLATED remote view
+      // (the same sample() the other remote cars render from) instead of
+      // the raw packet pose — no teleports when a packet lands or when a
+      // burst spreads, the camera glides exactly like the visible car
+      if (spectateTarget.id) {
+        const view = remotes
+          .sample(nowMs())
+          .find((v) => v.id === spectateTarget?.id);
+        if (view) {
+          spectateTarget.pos = view.pos;
+          spectateTarget.x = view.x;
+          spectateTarget.speed = view.speed;
+        }
+      }
       state.position = Math.max(0, spectateTarget.pos - PLAYER_Z);
       state.playerX = spectateTarget.x;
       state.speed = spectateTarget.speed;
@@ -2446,6 +2465,7 @@ export function createEngine(opts: {
           // the heart ladder doesn't apply: sink it, then let the shared
           // fatal path (dying coast, smoke, banner) take over
           crashes = CRASH_MAX - 1;
+          state.crashes = crashes;
           crashRespawn("cat");
           break;
         }
@@ -2671,6 +2691,7 @@ export function createEngine(opts: {
       lastBracketColor = b.color;
       if (crashes > 0) {
         crashes--;
+        state.crashes = crashes;
         lastBracketGrant = "heart";
       } else {
         shieldCharges = SHIELD_MAX;

@@ -310,8 +310,12 @@ function specDigit(
 /* spectate instruments restamp: covers the engine's LCD cluster rect
    wholesale (bottom-right desktop / top-left touch, 150×52 ui — the same
    geometry renderCluster uses) and redraws it with the FOLLOWED player's
-   live speed + score. The local fuel gauge row is dropped — our tank is
-   nobody's business once our own run is over */
+   live speed + score + fuel gauge, plus their heart meter parked where the
+   engine draws ours (left column desktop / under the cluster on touch) —
+   the ride reads like driving that car */
+const SPEC_FUEL_MAX = 8;
+const SPEC_CRASH_MAX = 3;
+
 function drawSpectateCluster(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -319,6 +323,9 @@ function drawSpectateCluster(
   kmh: number,
   score: number,
   topLeft: boolean,
+  fuel?: number,
+  crashes?: number,
+  time = 0,
 ) {
   const ui = Math.min(width / RACER_WIDTH, height / RACER_HEIGHT);
   const pw = Math.round(150 * ui);
@@ -376,6 +383,105 @@ function drawSpectateCluster(
     specDigit(ctx, scoreX + i * tW, scoreY, tSize, "8", ghostColor);
     if (scoreText[i] !== " ") {
       specDigit(ctx, scoreX + i * tW, scoreY, tSize, scoreText[i], segColor);
+    }
+  }
+
+  // followed fuel gauge, bottom row (same geometry drawFuelGauge uses)
+  if (fuel !== undefined) {
+    const digitsX2 = x0 + pad + Math.round(7 * ui);
+    const gx = digitsX2 + 3 * (13 * ui + 3 * ui) + 2 * ui;
+    const gy = y0 + ph - pad - 3 * ui;
+    const bw = 6 * ui;
+    const bh = 8 * ui;
+    ctx.fillStyle = segColor;
+    ctx.fillRect(
+      Math.round(gx),
+      Math.round(gy - bh),
+      Math.round(bw),
+      Math.round(bh),
+    );
+    ctx.fillStyle = "#a7c57d";
+    ctx.fillRect(
+      Math.round(gx + 1.2 * ui),
+      Math.round(gy - bh + 1.2 * ui),
+      Math.max(1, Math.round(bw - 2.4 * ui)),
+      Math.max(1, Math.round(2.2 * ui)),
+    );
+    ctx.fillStyle = segColor;
+    ctx.fillRect(
+      Math.round(gx + bw),
+      Math.round(gy - bh + 1 * ui),
+      Math.max(1, Math.round(1.4 * ui)),
+      Math.max(1, Math.round(4 * ui)),
+    );
+    const lit = Math.ceil(fuel);
+    const low = fuel <= 1.5;
+    const blinkOn = Math.floor(time * 2.5) % 2 === 0;
+    const r = Math.max(1, 1.5 * ui);
+    const step = 3.6 * ui;
+    const dotsX = gx + bw + 6 * ui;
+    const dotsY = gy - r;
+    for (let i = 0; i < SPEC_FUEL_MAX; i++) {
+      const cx = dotsX + i * step;
+      ctx.beginPath();
+      ctx.arc(cx, dotsY, r, 0, Math.PI * 2);
+      if (i < lit) {
+        ctx.fillStyle =
+          low && i === lit - 1
+            ? blinkOn
+              ? "#e2703a"
+              : "rgba(226,112,58,0.3)"
+            : segColor;
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = segColor;
+        ctx.lineWidth = Math.max(1, 0.7 * ui);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // followed heart meter where the engine parks ours: left column on
+  // desktop, under the cluster on touch
+  if (crashes !== undefined) {
+    const ps = Math.max(1, Math.round(1.6 * ui));
+    const hx0 = topLeft ? x0 + pad : Math.round(8 * ui);
+    const hy0 = topLeft
+      ? y0 + ph + Math.round(10 * ui)
+      : Math.round(8 * ui) + Math.round(34 * ui);
+    const HEART_FULL = [
+      ".XX.XX.",
+      "XXXXXXX",
+      "XXXXXXX",
+      ".XXXXX.",
+      "..XXX..",
+      "...X...",
+    ];
+    const HEART_RING = [
+      ".XX.XX.",
+      "X..X..X",
+      "X.....X",
+      ".X...X.",
+      "..X.X..",
+      "...X...",
+    ];
+    const stamp = (map: string[], hx: number, style: string) => {
+      ctx.fillStyle = style;
+      for (let rr = 0; rr < map.length; rr++)
+        for (let cc = 0; cc < map[rr].length; cc++)
+          if (map[rr][cc] === "X")
+            ctx.fillRect(hx + cc * ps, hy0 + rr * ps, ps, ps);
+    };
+    for (let i = 0; i < SPEC_CRASH_MAX; i++) {
+      const hx = hx0 + i * Math.round(9 * ps);
+      if (i < SPEC_CRASH_MAX - crashes) {
+        stamp(HEART_FULL, hx, "#e5484d");
+        stamp(HEART_RING, hx, "#141611");
+      } else {
+        ctx.globalAlpha = 0.75;
+        stamp(HEART_RING, hx, "#141611");
+        ctx.globalAlpha = 1;
+      }
     }
   }
 }
@@ -2294,12 +2400,17 @@ export function TwingoRacer() {
           }
           updateBots(sim, dt, humans);
         }
+        // stream our + the bots' state to the room at frame cadence
+        // (~60 Hz); also covers the countdown hold so the grid positions
+        // stay fresh for late joiners
+        streamNet();
         e.render(ctx);
         // spectate instruments: the canvas LCD cluster still shows OUR
         // finished run's frozen score/fuel — restamp it with the followed
         // player's live numbers (their latest state packet), so the ride
-        // reads like driving that car. The hearts/streak HUDs are gone
-        // already (the engine gates them on !gameOver)
+        // reads like driving that car. The engine's own hearts/streak HUDs
+        // are gated on !gameOver and already gone; the restamp redraws the
+        // followed player's fuel gauge + hearts in their place
         const spec = spectatingRef.current;
         if (spec) {
           const pk = standingsRef.current.get(spec.id)?.state;
@@ -2311,6 +2422,9 @@ export function TwingoRacer() {
               (pk.speed / ENGINE_CONSTANTS.MAX_SPEED) * 180,
               pk.score,
               coarseRef.current,
+              pk.fuel,
+              pk.crashes,
+              e.state.time,
             );
           }
         }
@@ -2520,6 +2634,26 @@ export function TwingoRacer() {
           (
             window as unknown as { __twingoBots?: () => Bot[] | null }
           ).__twingoBots = () => botsSimRef.current;
+          (
+            window as unknown as {
+              __twingoSpec?: () => {
+                id: string;
+                name: string;
+                fuel?: number;
+                crashes?: number;
+              } | null;
+            }
+          ).__twingoSpec = () => {
+            const s = spectatingRef.current;
+            if (!s) return null;
+            const st = standingsRef.current.get(s.id)?.state;
+            return {
+              id: s.id,
+              name: s.name,
+              fuel: st?.fuel,
+              crashes: st?.crashes,
+            };
+          };
         }
       } else {
         // orientation flipped mid-run: keep the run, re-fit the renderer
@@ -2528,10 +2662,11 @@ export function TwingoRacer() {
       raf = requestAnimationFrame(frame);
     })();
 
-    /* VS race: stream our car state to the room at 20 Hz — 50 ms spacing
-       keeps 2-3 packets inside the remote's ~120 ms interpolation window
-       (see remotes.ts) despite DataChannel arrival jitter. Solo runs have
-       no net — one null check per tick, zero behaviour change. After the
+    /* VS race: stream our car state to the room EVERY FRAME (~60 Hz, the
+       rAF cadence below) — at 20 Hz the interpolation buffer starved and
+       remote cars jumped between sparse packets; 60 Hz keeps the buffer
+       continuously fed so remotes ride a smooth curve. Solo runs have no
+       net — one null check per frame, zero behaviour change. After the
        local death the `dead` message (sent once in the frame loop) is the
        final word, so OUR stream stops there. The leader's CPU bots keep
        streaming regardless (dead humans spectate them): each snapshot
@@ -2539,7 +2674,7 @@ export function TwingoRacer() {
        network loopback, so a solo room with bots works too. A dead bot
        keeps its final pose + dead flag on the stream so every client
        (incl. mid-race joiners) parks the wreck */
-    const netSend = window.setInterval(() => {
+    const streamNet = () => {
       const net = netRef.current;
       const e = engineRef.current;
       if (!net || !e) return;
@@ -2551,6 +2686,8 @@ export function TwingoRacer() {
           score: Math.floor(e.state.score),
           dead: false,
           steer: steerOutRef.current,
+          fuel: e.state.fuel,
+          crashes: e.state.crashes,
         });
       }
       const sim = botsSimRef.current;
@@ -2597,7 +2734,7 @@ export function TwingoRacer() {
           }
         }
       }
-    }, 50);
+    };
 
     const onKey = (down: boolean) => (ev: KeyboardEvent) => {
       const k = ev.key.toLowerCase();
@@ -2816,7 +2953,6 @@ export function TwingoRacer() {
       cancelled = true;
       cancelAnimationFrame(raf);
       window.clearTimeout(introTimer);
-      window.clearInterval(netSend);
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
       document.removeEventListener("visibilitychange", autoPause);
