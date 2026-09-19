@@ -13,9 +13,11 @@
  *     a ∈ hello|start|st|take|hole|dead|rematch|bots|bst  (mirror of
  *     net.ts actions; "st" is the per-frame car state, the hot path)
  *   server → client (relay): {a, d, from}
- *   server → client (membership): {a: "peers", d: [{id, ...hello}]}
- *     sent to the joiner on entry and to everyone on join/leave —
- *     clients derive the leader from joinedAt exactly like today
+ *   server → client (membership): {a: "peers", d: [{id, ...hello}], you}
+ *     sent to the joiner on entry and to everyone on join/leave/hello —
+ *     "you" is the RECIPIENT's own server id (a client cannot infer which
+ *     roster row is itself), clients derive the leader from joinedAt
+ *     exactly like today
  *   server → client (errors): {a: "error", d: "ROOM_FULL" | "BAD_CODE"}
  *
  * Why WebSocket beats the Nostr/WebRTC mesh for this game: Trystero pays
@@ -34,9 +36,16 @@ const PING_MS = 20000;
 
 const rooms = new Map(); // code → Map<peerId, {ws, hello}>
 
-const send = (ws, a, d, from) => {
+const send = (ws, a, d, from, you) => {
   if (ws.readyState === ws.OPEN)
-    ws.send(JSON.stringify(from === undefined ? { a, d } : { a, d, from }));
+    ws.send(
+      JSON.stringify({
+        a,
+        d,
+        ...(from === undefined ? {} : { from }),
+        ...(you === undefined ? {} : { you }),
+      }),
+    );
 };
 const broadcast = (room, exceptId, a, d, from) => {
   for (const [id, p] of room) if (id !== exceptId) send(p.ws, a, d, from);
@@ -44,7 +53,7 @@ const broadcast = (room, exceptId, a, d, from) => {
 const emitPeers = (room) => {
   const peers = [...room.entries()].map(([id, p]) => ({ id, ...p.hello }));
   peers.sort((x, y) => x.joinedAt - y.joinedAt);
-  for (const [, p] of room) send(p.ws, "peers", peers);
+  for (const [id, p] of room) send(p.ws, "peers", peers, undefined, id);
 };
 
 const wss = new WebSocketServer({ port: PORT });

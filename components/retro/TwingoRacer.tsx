@@ -45,9 +45,11 @@ import {
   type RaceBot,
   type RaceHello,
   type RaceNet,
+  type RaceNetHandlers,
   type RacePeer,
   START_COUNTDOWN_MS,
   TrysteroNet,
+  WsNet,
 } from "./racer/net";
 import {
   loadCarFrames,
@@ -135,6 +137,9 @@ const RACE_GRID: readonly (readonly GridSlot[])[] = [
 /* per-race VS track seed: the lobby leader rolls a fresh one for every
    race (rematch included) — the daily track is solo-only */
 const newSeed = () => Math.floor(Math.random() * 1e9);
+
+/* logged once per session: the WS relay fell back to the Trystero mesh */
+let wsFallbackWarned = false;
 
 /* input bag fed to the engine while a VS race countdown holds the grid:
    every channel zeroed, the analog ones included — the car idles in
@@ -1131,11 +1136,11 @@ export function TwingoRacer() {
     [startRun],
   );
 
-  /* create (or re-create, on Retry) the Trystero room. The handlers close
-     over setState + the hello + stable race-flow callbacks + refs — never
-     the net instance itself: LoopbackNet fires onPeersChanged synchronously
-     from its constructor, before the instance exists. The engine is
-     recreated every race, so handlers always resolve it through
+  /* create (or re-create, on Retry) the room: the WS relay first (single
+     direct hop), falling back to the Trystero mesh if it can't open in
+     ~5 s. The handlers close over setState + the hello + stable
+     race-flow callbacks + refs — never the net instance itself. The
+     engine is recreated every race, so handlers always resolve it through
      engineRef at call time */
   const joinNet = useCallback(
     (code: string) => {
@@ -1150,9 +1155,17 @@ export function TwingoRacer() {
       const rosterName = (id: string) =>
         rosterRef.current.find((p) => p.id === id)?.name ?? "";
       let delivered = false;
-      const net = new TrysteroNet(code.toUpperCase(), hello, {
+      const handlers: RaceNetHandlers = {
         onPeersChanged: (ps) => {
           if (gen !== netGenRef.current) return; // a stale net (leave/retry)
+          // WsNet learns its server-assigned id from the first roster —
+          // adopt it BEFORE the bookkeeping below or SELF would be treated
+          // as a remote and get a ghost car
+          const sid = netRef.current?.selfId ?? "";
+          if (sid && sid !== selfPeerIdRef.current) {
+            selfPeerIdRef.current = sid;
+            setSelfPeerId(sid);
+          }
           delivered = true;
           setNetConnected(true);
           // over capacity and WE are the newest arrival → bounced. The
@@ -1304,24 +1317,49 @@ export function TwingoRacer() {
             e?.setSpectate({ id, pos: s.pos, x: s.x, speed: s.speed });
           }
         },
+        onError: (message) => {
+          if (gen !== netGenRef.current) return;
+          // the relay rejected us — same view as the over-capacity
+          // bounce above
+          if (message === "ROOM_FULL") setLobbyView("full");
+        },
+      };
+      const attach = (net: RaceNet) => {
+        netRef.current = net;
+        setSelfPeerId(net.selfId);
+        selfPeerIdRef.current = net.selfId;
+        setRoomCode(net.code);
+        setNetConnected(false);
+        setConnectStuck(false);
+        setCopied(false);
+        setJoinCode("");
+        // row 0 is the NAME input — land on READY so a quick Enter still
+        // readies up instead of focusing the text field
+        setLobbySel(1);
+        setLobbyView("room");
+        // a transport that never rostered us leaves us alone in the room —
+        // show ourselves at once (the WS relay always rosters on entry)
+        if (!delivered) {
+          rosterRef.current = [{ id: net.selfId, ...hello }];
+          setPeers([{ id: net.selfId, ...hello }]);
+        }
+      };
+      // WS relay first; the Nostr/WebRTC mesh is the fallback, not the
+      // default — a dead relay costs ~5 s before Trystero takes over
+      void WsNet.create(code.toUpperCase(), hello, handlers).then((wsNet) => {
+        if (gen !== netGenRef.current) {
+          wsNet?.leave(); // superseded by leave/retry — don't squat the room
+          return;
+        }
+        if (wsNet) return attach(wsNet);
+        if (!wsFallbackWarned) {
+          wsFallbackWarned = true;
+          console.warn(
+            "[race] WS relay unreachable — falling back to Trystero P2P",
+          );
+        }
+        attach(new TrysteroNet(code.toUpperCase(), hello, handlers));
       });
-      netRef.current = net;
-      setSelfPeerId(net.selfId);
-      selfPeerIdRef.current = net.selfId;
-      setRoomCode(net.code);
-      setNetConnected(false);
-      setConnectStuck(false);
-      setCopied(false);
-      setJoinCode("");
-      // row 0 is the NAME input — land on READY so a quick Enter still
-      // readies up instead of focusing the text field
-      setLobbySel(1);
-      setLobbyView("room");
-      // alone in a room TrysteroNet never emits — show ourselves at once
-      if (!delivered) {
-        rosterRef.current = [{ id: net.selfId, ...hello }];
-        setPeers([{ id: net.selfId, ...hello }]);
-      }
     },
     [repickSpectate, checkRaceOver, beginVsRace, attachBots],
   );
@@ -2639,6 +2677,7 @@ export function TwingoRacer() {
               __twingoSpec?: () => {
                 id: string;
                 name: string;
+                pos?: number;
                 fuel?: number;
                 crashes?: number;
               } | null;
@@ -2650,6 +2689,7 @@ export function TwingoRacer() {
             return {
               id: s.id,
               name: s.name,
+              pos: st?.pos,
               fuel: st?.fuel,
               crashes: st?.crashes,
             };

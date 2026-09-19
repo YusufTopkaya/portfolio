@@ -93,6 +93,8 @@ export interface RaceNetHandlers {
   /** a bot's 20 Hz state from the leader's simulation (bots never send
       take/hole/dead — they are immortal ghosts) */
   onBotState?: (id: string, name: string, s: NetCarState) => void;
+  /** server-side rejection (WsNet only): "ROOM_FULL" | "BAD_CODE" */
+  onError?: (message: string) => void;
 }
 
 export interface RaceNet {
@@ -334,6 +336,215 @@ export class TrysteroNet implements RaceNet {
   leave() {
     void this.room.leave();
     this.peers.clear();
+  }
+}
+
+/* ── WebSocket room relay (server/race-server.mjs) — a single direct
+     server hop instead of the Nostr/WebRTC mesh. Same RaceNet surface as
+     TrysteroNet: the server owns membership (roster messages) and relays
+     every other action verbatim, tagged with the sender's server id ── */
+
+function raceServerUrl(code: string): string {
+  const env = process.env.NEXT_PUBLIC_RACE_SERVER?.trim();
+  const base = env
+    ? env.replace(/^http(s)?:\/\//, "ws$1://") // tolerate http(s) forms too
+    : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8787`;
+  return `${base.replace(/\/+$/, "")}/?room=${code}`;
+}
+
+export class WsNet implements RaceNet {
+  private static readonly OPEN_TIMEOUT = 5000;
+  private _selfId = ""; // server-assigned, arrives with the first roster
+  readonly code: string;
+  readonly me: RaceHello;
+  private h: RaceNetHandlers;
+  private ws: WebSocket;
+  private peers = new Map<string, RaceHello>();
+
+  /** resolves with a connected WsNet on open, null on error/timeout —
+      the caller falls back to another transport */
+  static create(
+    code: string,
+    hello: RaceHello,
+    handlers: RaceNetHandlers,
+  ): Promise<WsNet | null> {
+    return new Promise((resolve) => {
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(raceServerUrl(code));
+      } catch {
+        resolve(null);
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        ws.close();
+        resolve(null);
+      }, WsNet.OPEN_TIMEOUT);
+      ws.onopen = () => {
+        window.clearTimeout(timer);
+        resolve(new WsNet(code, hello, handlers, ws));
+      };
+      ws.onerror = () => {
+        window.clearTimeout(timer);
+        resolve(null);
+      };
+    });
+  }
+
+  get selfId() {
+    return this._selfId;
+  }
+
+  private constructor(
+    code: string,
+    hello: RaceHello,
+    handlers: RaceNetHandlers,
+    ws: WebSocket,
+  ) {
+    this.code = code;
+    this.me = hello;
+    this.h = handlers;
+    this.ws = ws;
+    // post-open errors/close just mean the pipe died — the room roster on
+    // the OTHER clients drops us via their own close handling
+    ws.onerror = null;
+    ws.onclose = () => this.peers.clear();
+    ws.onmessage = (ev) => {
+      let msg: {
+        a?: unknown;
+        d?: unknown;
+        from?: unknown;
+        you?: unknown;
+      };
+      try {
+        msg = JSON.parse(String(ev.data));
+      } catch {
+        return;
+      }
+      if (!msg || typeof msg.a !== "string") return;
+      if (msg.a === "peers" && Array.isArray(msg.d)) {
+        // membership: the server's roster wholesale (like trystero sync)
+        if (typeof msg.you === "string") this._selfId = msg.you;
+        const seen = new Set<string>();
+        for (const p of msg.d as unknown[]) {
+          const e = p as { id?: unknown } & RaceHello;
+          if (typeof e?.id !== "string" || !validHello(e)) continue;
+          // our own row — `me` is authoritative (we never receive our own
+          // hello back over Trystero either; including it would duplicate
+          // self in the roster and skew the grid/over-capacity counts)
+          if (e.id === this._selfId) continue;
+          seen.add(e.id);
+          const existing = this.peers.get(e.id);
+          // keep the ORIGINAL joinedAt/seed — same rule as TrysteroNet
+          const keep = existing && existing.joinedAt <= e.joinedAt;
+          this.peers.set(e.id, {
+            name: e.name,
+            seed: keep ? existing.seed : e.seed,
+            joinedAt: keep ? existing.joinedAt : e.joinedAt,
+            ready: e.ready,
+          });
+        }
+        for (const id of [...this.peers.keys()])
+          if (!seen.has(id)) this.peers.delete(id);
+        this.emitPeers();
+        return;
+      }
+      if (msg.a === "error") {
+        if (typeof msg.d === "string") this.h.onError?.(msg.d);
+        return;
+      }
+      if (typeof msg.from !== "string") return;
+      // relayed room traffic — same validators + dispatch as TrysteroNet
+      const data = msg.d;
+      const id = msg.from;
+      switch (msg.a) {
+        case "start":
+          if (validStart(data)) this.h.onStart?.(data);
+          break;
+        case "st":
+          if (validState(data)) this.h.onState?.(id, data);
+          break;
+        case "take":
+          if (validSeg(data)) this.h.onTake?.(id, data);
+          break;
+        case "hole":
+          if (validSeg(data)) this.h.onHole?.(id, data);
+          break;
+        case "dead":
+          if (validScore(data)) this.h.onDead?.(id, data);
+          break;
+        case "rematch":
+          if (validSeed(data)) this.h.onRematch?.(data);
+          break;
+        case "bots":
+          if (validBots(data)) this.h.onBotsChanged?.(data);
+          break;
+        case "bst":
+          if (validBotState(data)) {
+            const { id: botId, name, ...s } = data as NetBotState;
+            this.h.onBotState?.(botId, name, s);
+          }
+          break;
+      }
+    };
+    // announce ourselves: the server stores it and rosters it to the room
+    this.send("hello", this.me);
+  }
+
+  private send(a: string, d: unknown) {
+    if (this.ws.readyState === WebSocket.OPEN)
+      this.ws.send(JSON.stringify({ a, d }));
+  }
+
+  private emitPeers() {
+    const peers: RacePeer[] = [
+      { id: this.selfId, ...this.me },
+      ...[...this.peers.entries()].map(([id, p]) => ({ id, ...p })),
+    ];
+    peers.sort((a, b) => a.joinedAt - b.joinedAt);
+    this.h.onPeersChanged?.(peers);
+  }
+
+  setReady(ready: boolean) {
+    this.me.ready = ready;
+    this.send("hello", this.me);
+    this.emitPeers();
+  }
+  setName(name: string) {
+    this.me.name = name;
+    this.send("hello", this.me);
+    this.emitPeers();
+  }
+  startRace(seed: number) {
+    const msg: RaceStart = { ms: START_COUNTDOWN_MS, seed };
+    this.send("start", msg);
+    this.h.onStart?.(msg); // the leader's own countdown too
+  }
+  rematch(seed: number) {
+    this.send("rematch", seed);
+    this.h.onRematch?.(seed);
+  }
+  sendState(s: NetCarState) {
+    this.send("st", s);
+  }
+  sendTake(segIdx: number) {
+    this.send("take", segIdx);
+  }
+  sendHole(segIdx: number) {
+    this.send("hole", segIdx);
+  }
+  sendDead(score: number) {
+    this.send("dead", score);
+  }
+  setBots(bots: RaceBot[]) {
+    this.send("bots", bots);
+  }
+  sendBotState(id: string, name: string, s: NetCarState) {
+    this.send("bst", { ...s, id, name });
+  }
+  leave() {
+    this.peers.clear();
+    this.ws.close();
   }
 }
 
