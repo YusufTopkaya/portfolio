@@ -1,0 +1,100 @@
+/* Twingo Racer VS room relay — the whole backend, one file.
+ *
+ * What it does: room membership keyed by the 4-char code (max 5 peers,
+ * matching client MAX_RACERS) and nothing else. Every client message is
+ * relayed verbatim to the other peers in the room, tagged with the sender
+ * id. No auth, no persistence, no game logic — leader election, seed
+ * authority, validation and interpolation all stay client-side (see
+ * components/retro/racer/net.ts), so this server is a dumb pipe that can
+ * be killed and restarted without losing anything but the live room.
+ *
+ * Wire shape (JSON text frames):
+ *   client → server: {a: action, d: payload}
+ *     a ∈ hello|start|st|take|hole|dead|rematch|bots|bst  (mirror of
+ *     net.ts actions; "st" is the per-frame car state, the hot path)
+ *   server → client (relay): {a, d, from}
+ *   server → client (membership): {a: "peers", d: [{id, ...hello}]}
+ *     sent to the joiner on entry and to everyone on join/leave —
+ *     clients derive the leader from joinedAt exactly like today
+ *   server → client (errors): {a: "error", d: "ROOM_FULL" | "BAD_CODE"}
+ *
+ * Why WebSocket beats the Nostr/WebRTC mesh for this game: Trystero pays
+ * ~50-150 ms one-way relay latency through public relays plus connection
+ * setup; a direct WS room is a single hop at ~5-20 ms, so the 60 Hz state
+ * stream lands denser, the interpolation buffer extrapolates less and the
+ * spectator camera glides instead of catching up.
+ */
+import { WebSocketServer } from "ws";
+
+const PORT = Number(process.env.PORT ?? 8787);
+const MAX_PEERS = 5; // client MAX_RACERS
+const CODE_RE = /^[A-Z2-9]{4}$/; // same look-alike-free alphabet as the client
+const MAX_MSG = 4096; // st packets are ~60 B; nothing legit comes near this
+const PING_MS = 20000;
+
+const rooms = new Map(); // code → Map<peerId, {ws, hello}>
+
+const send = (ws, a, d, from) => {
+  if (ws.readyState === ws.OPEN)
+    ws.send(JSON.stringify(from === undefined ? { a, d } : { a, d, from }));
+};
+const broadcast = (room, exceptId, a, d, from) => {
+  for (const [id, p] of room) if (id !== exceptId) send(p.ws, a, d, from);
+};
+const emitPeers = (room) => {
+  const peers = [...room.entries()].map(([id, p]) => ({ id, ...p.hello }));
+  peers.sort((x, y) => x.joinedAt - y.joinedAt);
+  for (const [, p] of room) send(p.ws, "peers", peers);
+};
+
+const wss = new WebSocketServer({ port: PORT });
+wss.on("connection", (ws, req) => {
+  const url = new URL(req.url, "http://x");
+  const code = (url.searchParams.get("room") ?? "").toUpperCase();
+  if (!CODE_RE.test(code)) return send(ws, "error", "BAD_CODE"), ws.close();
+  let room = rooms.get(code);
+  if (!room) rooms.set(code, (room = new Map()));
+  if (room.size >= MAX_PEERS)
+    return send(ws, "error", "ROOM_FULL"), ws.close();
+
+  const id = `ws-${Math.random().toString(36).slice(2, 10)}`;
+  let hello = null;
+  room.set(id, { ws, hello });
+  // roster to the joiner right away (empty or not), like Trystero's sync:
+  // the client shows itself alone-in-room immediately instead of waiting
+  emitPeers(room);
+  ws.on("message", (raw) => {
+    if (raw.length > MAX_MSG) return;
+    let msg;
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    if (!msg || typeof msg.a !== "string") return;
+    if (msg.a === "hello") {
+      hello = msg.d; // first hello is the RaceHello (name/seed/joinedAt/ready)
+      room.get(id).hello = hello;
+      emitPeers(room);
+      return;
+    }
+    if (msg.a === "peers" || msg.a === "error") return; // server-owned
+    broadcast(room, id, msg.a, msg.d, id);
+  });
+
+  const drop = () => {
+    if (!room.has(id)) return;
+    room.delete(id);
+    if (room.size === 0) rooms.delete(code);
+    else emitPeers(room);
+  };
+  ws.on("close", drop);
+  ws.on("error", drop);
+  const ping = setInterval(() => {
+    if (ws.readyState === ws.OPEN) ws.ping();
+    else clearInterval(ping);
+  }, PING_MS);
+  ws.on("close", () => clearInterval(ping));
+});
+
+console.log(`[race] ws relay on :${PORT}`);

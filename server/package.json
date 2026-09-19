@@ -1,0 +1,13 @@
+{
+  "name": "twingo-race-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Standalone WS relay for Twingo Racer VS rooms — the only job it has.",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "scripts": {
+    "start": "node race-server.mjs"
+  }
+}
