@@ -1301,6 +1301,10 @@ export function TwingoRacer() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: runId intentionally re-issues a token when PLAY AGAIN starts a new run
   useEffect(() => {
     if (!open || screen !== "playing") return;
+    // VS races never submit: the room's track is a fresh random layout
+    // every race, so its scores can't sit on the daily board fairly —
+    // don't even burn a submit token
+    if (netRef.current) return;
     tokenRef.current = null;
     setBoard(null);
     setInitials(savedInitials());
@@ -2347,22 +2351,31 @@ export function TwingoRacer() {
           // fetch the current period's top-10 alongside the overlay
           fetchBoard(boardPeriodRef.current);
           // ...and ALL four periods for the qualify check — the initials
-          // form must not depend on which tab happens to be open
-          setQualifyBoards(null);
-          const PERIODS: ScorePeriod[] = ["all", "monthly", "weekly", "daily"];
-          void Promise.all(
-            PERIODS.map((p) =>
-              fetch(`/api/highscore?period=${p}`, { cache: "no-store" })
-                .then((r) => (r.ok ? r.json() : null))
-                .catch(() => null),
-            ),
-          ).then((boards) => {
-            const out = {} as Record<ScorePeriod, ScoreEntry[]>;
-            boards.forEach((d: { scores?: ScoreEntry[] } | null, i) => {
-              out[PERIODS[i]] = d?.scores ?? [];
+          // form must not depend on which tab happens to be open.
+          // VS races skip this entirely (no initials form there — the
+          // room's random track makes board scores incomparable)
+          if (!netRef.current) {
+            setQualifyBoards(null);
+            const PERIODS: ScorePeriod[] = [
+              "all",
+              "monthly",
+              "weekly",
+              "daily",
+            ];
+            void Promise.all(
+              PERIODS.map((p) =>
+                fetch(`/api/highscore?period=${p}`, { cache: "no-store" })
+                  .then((r) => (r.ok ? r.json() : null))
+                  .catch(() => null),
+              ),
+            ).then((boards) => {
+              const out = {} as Record<ScorePeriod, ScoreEntry[]>;
+              boards.forEach((d: { scores?: ScoreEntry[] } | null, i) => {
+                out[PERIODS[i]] = d?.scores ?? [];
+              });
+              setQualifyBoards(out);
             });
-            setQualifyBoards(out);
-          });
+          }
         }
       } else if (pausedRef.current) {
         // frozen run: silence the car, leave the music playing
@@ -2853,6 +2866,10 @@ export function TwingoRacer() {
      score bug) */
   const qualifies =
     gameOver &&
+    // never in a VS race: the room's track is a fresh random layout every
+    // race, so its scores can't fairly sit on the daily-seeded boards
+    // (mpActive mirrors netRef via selfPeerId, cleared by leaveNet)
+    selfPeerId === "" &&
     // the token is consumed client-side the moment a submit starts —
     // "sending" keeps the form (and the pad's spinner routing) alive
     // until the server answers, so an impatient A can't fire PLAY AGAIN
