@@ -20,6 +20,13 @@
  *     exactly like today
  *   server → client (errors): {a: "error", d: "ROOM_FULL" | "BAD_CODE"}
  *
+ * Hardening: ws `maxPayload` = MAX_MSG, so a frame over 4 KB gets the whole
+ * connection closed with code 1009 (message too big) instead of the old
+ * silent drop — small garbage JSON is still tolerated. The ping loop does
+ * standard ws liveness: isAlive=false before each ping, pong flips it back,
+ * still false on the next tick → terminate (half-open zombies would squat
+ * a room slot forever). PING_MS env overrides the 20 s interval for tests.
+ *
  * Why WebSocket beats the Nostr/WebRTC mesh for this game: Trystero pays
  * ~50-150 ms one-way relay latency through public relays plus connection
  * setup; a direct WS room is a single hop at ~5-20 ms, so the 60 Hz state
@@ -32,7 +39,7 @@ const PORT = Number(process.env.PORT ?? 8787);
 const MAX_PEERS = 5; // client MAX_RACERS
 const CODE_RE = /^[A-Z2-9]{4}$/; // same look-alike-free alphabet as the client
 const MAX_MSG = 4096; // st packets are ~60 B; nothing legit comes near this
-const PING_MS = 20000;
+const PING_MS = Number.parseInt(process.env.PING_MS ?? "20000", 10);
 
 const rooms = new Map(); // code → Map<peerId, {ws, hello}>
 
@@ -56,7 +63,7 @@ const emitPeers = (room) => {
   for (const [id, p] of room) send(p.ws, "peers", peers, undefined, id);
 };
 
-const wss = new WebSocketServer({ port: PORT });
+const wss = new WebSocketServer({ port: PORT, maxPayload: MAX_MSG });
 wss.on("connection", (ws, req) => {
   const url = new URL(req.url, "http://x");
   const code = (url.searchParams.get("room") ?? "").toUpperCase();
@@ -73,7 +80,6 @@ wss.on("connection", (ws, req) => {
   // the client shows itself alone-in-room immediately instead of waiting
   emitPeers(room);
   ws.on("message", (raw) => {
-    if (raw.length > MAX_MSG) return;
     let msg;
     try {
       msg = JSON.parse(raw.toString());
@@ -99,9 +105,15 @@ wss.on("connection", (ws, req) => {
   };
   ws.on("close", drop);
   ws.on("error", drop);
+  ws.isAlive = true;
+  ws.on("pong", () => {
+    ws.isAlive = true;
+  });
   const ping = setInterval(() => {
-    if (ws.readyState === ws.OPEN) ws.ping();
-    else clearInterval(ping);
+    if (ws.readyState !== ws.OPEN) return clearInterval(ping);
+    if (!ws.isAlive) return ws.terminate(); // missed a pong → zombie, drop it
+    ws.isAlive = false;
+    ws.ping();
   }, PING_MS);
   ws.on("close", () => clearInterval(ping));
 });

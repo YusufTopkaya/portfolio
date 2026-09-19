@@ -1,7 +1,9 @@
 /**
- * Backend-less P2P race networking for the Twingo racer (Trystero over
- * public Nostr relays — signaling only; race traffic flows browser to
- * browser over WebRTC DataChannels).
+ * Race networking for the Twingo racer. The default transport is `WsNet`,
+ * a thin client for the standalone WS room relay (`server/race-server.mjs`,
+ * port 8787) — one ~5-20 ms hop instead of a mesh. The fallback below is
+ * backend-less P2P (Trystero over public Nostr relays — signaling only;
+ * race traffic flows browser to browser over WebRTC DataChannels).
  *
  * The track is identical for everyone (the daily seed), so the wire only
  * carries car state, pickup/hole consumption and lobby messages. There is
