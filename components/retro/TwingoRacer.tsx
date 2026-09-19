@@ -170,6 +170,8 @@ interface StandingRow {
   score: number;
   dead: boolean;
   self: boolean;
+  /** signed gap to us in km (0.1 precision), peers only — + ahead / − behind */
+  gap?: number;
   /** CPU ghost bot (leader-simulated) — tagged BOT in the UI */
   bot?: boolean;
 }
@@ -1547,6 +1549,7 @@ export function TwingoRacer() {
         const cur = standingsRef.current.get(spectatingRef.current.id);
         if (!cur || cur.dead) repickSpectate();
       }
+      const selfPos = engineRef.current?.state.position ?? 0;
       const rows: StandingRow[] = [
         {
           id: net.selfId,
@@ -1563,6 +1566,8 @@ export function TwingoRacer() {
           score: Math.floor(p.dead ? p.deadScore : p.state.score),
           dead: p.dead,
           self: false,
+          // 1 world unit = 50/MAX_SPEED m (score formula) → 1 km = 240 000 u
+          gap: Math.round(((p.state.pos - selfPos) / 240000) * 10) / 10,
           bot: isBotId(id),
         });
       }
@@ -1574,7 +1579,8 @@ export function TwingoRacer() {
             r.id === rows[i].id &&
             r.name === rows[i].name &&
             r.score === rows[i].score &&
-            r.dead === rows[i].dead,
+            r.dead === rows[i].dead &&
+            r.gap === rows[i].gap,
         )
           ? prev
           : rows,
@@ -4116,6 +4122,12 @@ export function TwingoRacer() {
                 {r.name}
                 {r.bot && <span className="racer-bot-tag">BOT</span>}
               </span>
+              {!r.self && r.gap !== undefined && (
+                <span className="racer-standings-gap">
+                  {r.gap >= 0 ? "+" : ""}
+                  {r.gap.toFixed(1)} KM
+                </span>
+              )}
               <span className="racer-standings-score">
                 {r.dead ? "OUT" : r.score}
               </span>

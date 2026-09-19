@@ -1169,8 +1169,8 @@ html.crt-boot::after {
   flex-direction: column;
   gap: 5px;
   /* sized for the worst row at 8px Press Start 2P: "» " + a 10-char
-     display name + gap + a 6-digit score ≈ 172px */
-  min-width: 172px;
+     display name + gap + "+99.9 KM" + a 6-digit score ≈ 236px */
+  min-width: 236px;
   font-size: 8px;
   color: #d7ff9e;
   background: #1c1a16;
@@ -1189,6 +1189,12 @@ html.crt-boot::after {
 
 .racer-standings-me {
   color: #ffd75e;
+}
+
+/* signed distance to us, peers only — dimmer than the score, it's context */
+.racer-standings-gap {
+  color: #8a9a6a;
+  margin-left: auto;
 }
 
 .racer-standings-dead {
