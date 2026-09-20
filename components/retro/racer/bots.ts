@@ -25,6 +25,14 @@
  * and actual brake input for bends entered too hot. Rubber banding
  * stretches/shrinks the cruise against the best human.
  *
+ * The calibration is DYNAMIC: a room-skill factor (0..1, EMA over ~3 s)
+ * is read off the humans' own streamed state every frame — how fast they
+ * actually drive, how many hearts they've lost, how long their can
+ * streaks run — and scales every knob: a room of beginners gets slower,
+ * wanderier, late-reacting bots; a room of pros pushes cruise past the
+ * bronze band with crisper steering and greedier cans. Bots never get
+ * superhuman perception, just sharper reactions of the same limited view.
+ *
  * Bots never broadcast take/dead-by-crash messages of their own beyond
  * the shared-hazard rule: a bot's hole fall goes out as `hole(segIdx)`
  * (consumed for everyone, exactly like a human's); cans are effectively
@@ -94,6 +102,28 @@ const CORNER_MARGIN = 0.85;
 const RUBBER_DIST = 600;
 const RUBBER_GAIN = 0.08;
 
+/* ── dynamic room skill: the humans' streamed speed/crashes/streaks read
+   as one 0..1 factor, EMA-smoothed over ~3 s so bots adapt mid-race
+   instead of snapping. 0.5 = the neutral bronze field ── */
+const SKILL_EMA_T = 3; // seconds
+let skillEma = 0.5;
+
+/** one frame of room skill: average over LIVE humans of
+    75 % pace (speed / top speed) + 25 % streak form, minus a crash
+    penalty. Empty field → null (keep the last read) */
+const roomSkill = (humans: BotHuman[]): number | null => {
+  let sum = 0;
+  let n = 0;
+  for (const h of humans) {
+    const pace = clamp((h.speed ?? 0) / MAX_SPEED, 0, 1);
+    const form = clamp((h.streak ?? 0) / 10, 0, 1);
+    const wrecked = 0.15 * Math.min(3, h.crashes ?? 0);
+    sum += clamp(pace * 0.75 + form * 0.25 - wrecked, 0, 1);
+    n++;
+  }
+  return n === 0 ? null : sum / n;
+};
+
 export interface Bot {
   id: string; // "cpu-N"
   name: string; // "CPU N"
@@ -118,10 +148,15 @@ export interface Bot {
   perception: number;
 }
 
-/** a human pose — the rubber band's reference (best along-track pos) */
+/** a human pose — the rubber band's reference (best along-track pos) and
+    the dynamic-skill read (speed / crashes / streak from the 60 Hz
+    stream; optional so older callers stay valid) */
 export interface BotHuman {
   pos: number;
   x: number;
+  speed?: number;
+  crashes?: number;
+  streak?: number;
 }
 
 /** everything a bot engine needs that the leader already has loaded */
@@ -172,6 +207,7 @@ export function createBots(
   deps: BotEngineDeps,
 ): Bot[] {
   const rng = mulberry32(seed);
+  skillEma = 0.5; // fresh room: neutral bronze until the humans show form
   const out: Bot[] = [];
   for (let i = 0; i < count; i++) {
     const id = `cpu-${i + 1}`;
@@ -231,6 +267,16 @@ function pilotInput(b: Bot, dt: number, humans: BotHuman[]): RacerInput {
   const carSeg = Math.floor(
     (Math.max(0, st.position) + PLAYER_Z) / SEGMENT_LENGTH,
   );
+  /* dynamic skill scaling: the same bronze personality, pushed gentler
+     (skill 0) or sharper (skill 1) by the room's form — never past
+     human-plausible bounds */
+  const s = skillEma;
+  const cruiseMul = 0.8 + 0.45 * s; // 0.80…1.25
+  const lagMul = 1.35 - 0.7 * s; // 1.35…0.65 (reaction time)
+  const wanderMul = 1.4 - 0.9 * s; // 1.40…0.50
+  const gainAdd = (s - 0.5) * 0.2; // corner hold ±0.10
+  const eagerness = clamp(b.eagerness * (0.85 + 0.3 * s), 0, 1);
+  const caution = clamp(b.caution * (0.8 + 0.4 * s), 0, 1);
 
   // ── lane target: road centre by default (the weak recentering pull),
   // the nearest can this bot BOTHERED with (eagerness roll — the rest
@@ -238,12 +284,12 @@ function pilotInput(b: Bot, dt: number, humans: BotHuman[]): RacerInput {
   let laneTarget = 0;
   for (const obj of seen) {
     if (obj.kind !== "can") continue;
-    if (hash01(b.seed, obj.segIdx) < b.eagerness || st.fuel < DESPERATE_FUEL) {
+    if (hash01(b.seed, obj.segIdx) < eagerness || st.fuel < DESPERATE_FUEL) {
       laneTarget = clamp(obj.x, -1, 1);
       break; // nearest attempted can only
     }
   }
-  const holeReactSegs = Math.round(18 + b.caution * 22);
+  const holeReactSegs = Math.round(18 + caution * 22);
   for (const obj of seen) {
     if (obj.kind !== "hole") continue;
     if (obj.segIdx - carSeg > holeReactSegs) continue; // too far to matter
@@ -251,7 +297,7 @@ function pilotInput(b: Bot, dt: number, humans: BotHuman[]): RacerInput {
       // dodge to the far side; low-caution bots aim shallow (and the lag
       // makes even a good dodge late sometimes — holes DO get clipped)
       laneTarget = clamp(
-        obj.x + (obj.x > st.playerX ? -1 : 1) * (0.7 + 0.4 * b.caution),
+        obj.x + (obj.x > st.playerX ? -1 : 1) * (0.7 + 0.4 * caution),
         -1,
         1,
       );
@@ -265,17 +311,17 @@ function pilotInput(b: Bot, dt: number, humans: BotHuman[]): RacerInput {
   const authority = 2.2 * (1 - 0.45 * Math.min(1, p)); // engine.ts
   const holdSteer = (p * curve * CENTRIFUGAL) / Math.max(0.6, authority);
   const desired = clamp(
-    b.cornerGain * holdSteer -
+    (b.cornerGain + gainAdd) * holdSteer -
       LANE_GAIN * (st.playerX - laneTarget) +
-      b.wanderAmp * Math.sin(b.wanderPhase),
+      b.wanderAmp * wanderMul * Math.sin(b.wanderPhase),
     -1,
     1,
   );
-  b.steer += (desired - b.steer) * Math.min(1, dt / b.steerLag);
+  b.steer += (desired - b.steer) * Math.min(1, dt / (b.steerLag * lagMul));
 
   // ── pedals: rubber-banded cruise, capped under the CURRENT bend's
   // hold speed — too hot means actual brake, not a magic slowdown ──
-  let cruise = b.cruise;
+  let cruise = b.cruise * cruiseMul;
   if (humans.length > 0) {
     const best = Math.max(...humans.map((h) => h.pos));
     if (st.position < best - RUBBER_DIST) cruise *= 1 + RUBBER_GAIN;
@@ -309,6 +355,11 @@ function pilotInput(b: Bot, dt: number, humans: BotHuman[]): RacerInput {
     parks through the normal remote path on the next botStates() */
 export function updateBots(bots: Bot[], dt: number, humans: BotHuman[]): void {
   if (dt <= 0) return;
+  // adapt to the room: EMA the humans' live form into the shared skill
+  // factor before anybody drives a frame
+  const raw = roomSkill(humans);
+  if (raw !== null)
+    skillEma += (raw - skillEma) * Math.min(1, dt / SKILL_EMA_T);
   for (const b of bots) {
     if (b.dead) continue;
     b.engine.update(dt, pilotInput(b, dt, humans));
@@ -318,6 +369,9 @@ export function updateBots(bots: Bot[], dt: number, humans: BotHuman[]): void {
     }
   }
 }
+
+/** dev probe: the current room-skill EMA the bots are calibrated against */
+export const currentBotSkill = () => skillEma;
 
 /** snapshot the field as remote-car states for the net broadcast and the
     leader's own engine feed. Dead bots keep their final pose with the

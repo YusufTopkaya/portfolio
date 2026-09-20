@@ -27,7 +27,14 @@ import {
   type RacerAudio,
   type RacerVolumes,
 } from "./racer/audio";
-import { type Bot, botStates, createBots, updateBots } from "./racer/bots";
+import {
+  type Bot,
+  type BotHuman,
+  botStates,
+  createBots,
+  currentBotSkill,
+  updateBots,
+} from "./racer/bots";
 import { bracketForScore, nextBracket } from "./racer/brackets";
 import {
   createEngine,
@@ -2408,12 +2415,28 @@ export function TwingoRacer() {
         // depends on the leader's bot stream, menu or no menu
         const sim = botsSimRef.current;
         if (sim && pendingRaceRef.current === null) {
-          const humans: { pos: number; x: number }[] = [
-            { pos: e.state.position, x: e.state.playerX },
-          ];
+          // live humans only — the read doubles as the bots' dynamic
+          // room-skill input (pace / crashes / streak form)
+          const humans: BotHuman[] = gameOverRef.current
+            ? []
+            : [
+                {
+                  pos: e.state.position,
+                  x: e.state.playerX,
+                  speed: e.state.speed,
+                  crashes: e.state.crashes,
+                  streak: e.state.streak,
+                },
+              ];
           for (const [id, p] of standingsRef.current) {
             if (isBotId(id) || p.dead) continue;
-            humans.push({ pos: p.state.pos, x: p.state.x });
+            humans.push({
+              pos: p.state.pos,
+              x: p.state.x,
+              speed: p.state.speed,
+              crashes: p.state.crashes,
+              streak: p.state.streak,
+            });
           }
           updateBots(sim, dt, humans);
         }
@@ -2644,6 +2667,9 @@ export function TwingoRacer() {
           (
             window as unknown as { __twingoBots?: () => Bot[] | null }
           ).__twingoBots = () => botsSimRef.current;
+          (
+            window as unknown as { __twingoSkill?: () => number }
+          ).__twingoSkill = currentBotSkill;
           (
             window as unknown as {
               __twingoSpec?: () => {
