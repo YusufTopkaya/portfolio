@@ -2123,13 +2123,18 @@ export function TwingoRacer() {
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const pad = pollPad();
-      padInputRef.current = pad;
+      // the Gamepad API is global, NOT focus-scoped: with the site visible
+      // but unfocused (second monitor, another game on the pad) its state
+      // keeps streaming here — a resting trigger reads as a few % gas and
+      // the car crawls driverless. Drop ALL pad input unless we hold focus
+      const focused = document.hasFocus();
+      padInputRef.current = focused ? pad : null;
       const now = !!pad;
       if (now !== connected) {
         connected = now;
         setPadConnected(now);
       }
-      if (!pad) return;
+      if (!pad || !focused) return;
       // arcade initials spinner owns the pad while it's on screen: edges
       // go out as a dedicated event (Start = send the score), and a HELD
       // direction auto-repeats like the joystick scroll of the originals
