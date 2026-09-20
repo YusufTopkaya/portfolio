@@ -71,7 +71,6 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/content ./content
-COPY --from=builder --chown=nextjs:nodejs /app/data ./data
 COPY --from=builder /app/server.js ./server.js
 COPY --from=builder /app/server/race-relay-core.cjs ./server/race-relay-core.cjs
 COPY --from=builder /app/next.config.js ./next.config.js
