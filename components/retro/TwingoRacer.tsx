@@ -823,8 +823,12 @@ export function TwingoRacer() {
   }, []);
 
   /* leave the P2P room: the LEAVE button, ESC, QUIT and ✕ all funnel
-     through here */
+     through here. Leaving a room mid-run also DESTROYS the engine —
+     otherwise the next race boots the stale engine and resumes the old
+     run's track/position/fuel (quitToTitle does the same on its own
+     path). A solo ✕ (never in a room) keeps the resume-the-run behaviour */
   const leaveNet = useCallback(() => {
+    const wasInRoom = netRef.current !== null;
     netGenRef.current++;
     netRef.current?.leave();
     netRef.current = null;
@@ -836,6 +840,11 @@ export function TwingoRacer() {
     setBots([]);
     botsSimRef.current = null;
     engineRef.current?.setSpectate(null);
+    if (wasInRoom) {
+      engineRef.current = null;
+      gameOverRef.current = false;
+      setGameOver(false);
+    }
     setSpectateMode(null);
     raceResultsRef.current = null;
     setRaceResults(null);
@@ -1084,7 +1093,7 @@ export function TwingoRacer() {
           // into watch mode (a race starting later arrives as onStart)
           if (
             firstRoster &&
-            screenRef.current === "lobby" &&
+            screenRef.current !== "playing" &&
             !pendingRaceRef.current
           ) {
             const live = ps.find(
