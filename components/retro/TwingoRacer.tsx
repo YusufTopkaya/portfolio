@@ -341,9 +341,10 @@ export function TwingoRacer() {
   const [boardError, setBoardError] = useState(false);
   const [intro, setIntro] = useState(false);
   const [paused, setPaused] = useState(false);
-  /* pause menu (ESC / ⏸): freezes the run and offers RESUME / STATS /
-     SETTINGS / RESTART / QUIT. Distinct from the plain auto-pause banner
-     shown on tab blur */
+  /* pause menu (ESC / ⏸): solo freezes the run and offers RESUME / STATS /
+     SETTINGS / RESTART / QUIT; a VS race CANNOT pause — the menu opens
+     (no RESTART row) while the car coasts driverless on HELD_INPUT.
+     Distinct from the plain auto-pause banner shown on tab blur */
   const [pauseMenu, setPauseMenu] = useState(false);
   const [pauseSel, setPauseSel] = useState<
     "resume" | "stats" | "settings" | "restart" | "quit"
@@ -1483,11 +1484,15 @@ export function TwingoRacer() {
     btn?.focus();
   }, [leaveNet]);
 
-  /* ESC / ⏸ during a run: freeze the engine and open the pause menu */
+  /* ESC / ⏸ during a run: freeze the engine and open the pause menu.
+     A VS race cannot pause — the room races on without you: the menu
+     opens but the engine keeps ticking on HELD_INPUT (frame-loop hold),
+     so the car coasts driverless to a stop, gas off, like the driver
+     bailed out of a moving car */
   const openPauseMenu = useCallback(() => {
     keysRef.current = { left: false, right: false, gas: false, brake: false };
     audioRef.current?.menuSelect();
-    setPaused(true);
+    if (!netRef.current) setPaused(true);
     setPauseMenu(true);
     setPauseSel("resume");
     setPauseSettingsOpen(false);
@@ -2372,8 +2377,14 @@ export function TwingoRacer() {
         // merge above is overridden, not skipped, so nothing latches on
         // at the release). Solo runs never see a pending race. A WATCH
         // run is held the same way, for the whole run: the spectator has
-        // no car in this race, so their pads/keys must not drive one
-        const hold = pendingRaceRef.current !== null || watchOnlyRef.current;
+        // no car in this race, so their pads/keys must not drive one.
+        // An open pause MENU in a VS race holds too — the race can't
+        // stop, the car just coasts driverless (solo pause freezes the
+        // whole update above instead and never reaches this)
+        const hold =
+          pendingRaceRef.current !== null ||
+          watchOnlyRef.current ||
+          pauseMenuRef.current;
         steerOutRef.current = hold
           ? 0
           : Math.max(
@@ -2874,13 +2885,11 @@ export function TwingoRacer() {
         }
         if (k === "arrowup" || k === "arrowdown" || k === "w" || k === "s") {
           ev.preventDefault();
-          const order = [
-            "resume",
-            "stats",
-            "settings",
-            "restart",
-            "quit",
-          ] as const;
+          // a VS race restarts only through the leader's REMATCH — the
+          // local RESTART row would respawn the car on the grid mid-race
+          const order: readonly (typeof pauseSelRef.current)[] = netRef.current
+            ? ["resume", "stats", "settings", "quit"]
+            : ["resume", "stats", "settings", "restart", "quit"];
           const i = order.indexOf(sel);
           const next =
             k === "arrowup" || k === "w"
@@ -2900,13 +2909,16 @@ export function TwingoRacer() {
             audioRef.current?.menuSelect();
             setSettingsRow(0);
             setPauseSettingsOpen(true);
-          } else if (sel === "restart") playAgain();
-          else quitToTitle();
+          } else if (sel === "restart") {
+            // unreachable via nav in a VS race (order above) — guard anyway
+            if (!netRef.current) playAgain();
+          } else quitToTitle();
         }
         return;
       }
       // R restarts the run instantly: zero score, zero speed, full tank
-      if (down && (k === "r" || ev.code === "KeyR")) {
+      // (solo only — a VS race restarts only through the leader's REMATCH)
+      if (down && (k === "r" || ev.code === "KeyR") && !netRef.current) {
         playAgain();
         return;
       }
@@ -2935,11 +2947,12 @@ export function TwingoRacer() {
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
 
-    // auto-pause when the tab loses focus/visibility — and drop every
-    // held key, so a keyup lost while unfocused can't leave the
-    // throttle stuck on (or silently off) when the tab returns. A hidden
-    // tab also suspends the whole AudioContext: the pause menu only
-    // silences the car by design, but a locked phone must go FULLY quiet
+    // auto-pause when the tab loses focus/visibility (solo — a VS race
+    // never pauses) — and drop every held key, so a keyup lost while
+    // unfocused can't leave the throttle stuck on (or silently off) when
+    // the tab returns. A hidden tab also suspends the whole AudioContext:
+    // the pause menu only silences the car by design, but a locked phone
+    // must go FULLY quiet
     const autoPause = () => {
       if (document.hidden || !document.hasFocus()) {
         keysRef.current = {
@@ -2948,7 +2961,10 @@ export function TwingoRacer() {
           gas: false,
           brake: false,
         };
-        setPaused(true);
+        // solo pauses on blur; a VS race can't — a hidden tab halts the
+        // rAF loop anyway, and on return the coasting car must keep
+        // rolling rather than waking up frozen
+        if (!netRef.current) setPaused(true);
       }
       audioRef.current?.setHidden(document.hidden);
     };
@@ -3901,7 +3917,14 @@ export function TwingoRacer() {
           role="menu"
           aria-label="Pause menu"
         >
-          <div className="racer-pausemenu-title">PAUSED</div>
+          <div className="racer-pausemenu-title">
+            {selfPeerId ? "MENU" : "PAUSED"}
+          </div>
+          {selfPeerId !== "" && (
+            <div className="racer-pausemenu-hint">
+              VS RACE CAN'T PAUSE — YOUR CAR IS COASTING DRIVERLESS
+            </div>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -3951,20 +3974,24 @@ export function TwingoRacer() {
           >
             SETTINGS
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={`racer-pausemenu-btn${
-              pauseSel === "restart" ? " racer-pausemenu-btn-sel" : ""
-            }`}
-            onClick={playAgain}
-            onPointerEnter={() => {
-              audioRef.current?.menuMove();
-              setPauseSel("restart");
-            }}
-          >
-            RESTART
-          </button>
+          {/* RESTART is solo-only: in a VS race a local reset would
+              respawn the car on the grid while the room races on */}
+          {selfPeerId === "" && (
+            <button
+              type="button"
+              role="menuitem"
+              className={`racer-pausemenu-btn${
+                pauseSel === "restart" ? " racer-pausemenu-btn-sel" : ""
+              }`}
+              onClick={playAgain}
+              onPointerEnter={() => {
+                audioRef.current?.menuMove();
+                setPauseSel("restart");
+              }}
+            >
+              RESTART
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
