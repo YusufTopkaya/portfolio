@@ -203,8 +203,8 @@ const nextConfig = {
   // Disable X-Powered-By header for security
   poweredByHeader: false,
 
-  // Output standalone build for Docker deployment
-  output: "standalone",
+  // Docker runs the custom server.js in full mode (it embeds the race WS
+  // relay on /race-relay), so no standalone output bundle is needed.
 
   // 🚀 GZIP COMPRESSION - Force enable
   compress: true,

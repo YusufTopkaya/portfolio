@@ -10,6 +10,18 @@ RUN npm ci
 # Rebuild Sharp for Alpine Linux
 RUN npm rebuild sharp
 
+# Production-only node_modules for the runner (the custom server.js runs
+# Next in full mode, not the standalone bundle, so it needs real deps).
+FROM base AS prod-deps
+RUN apk add --no-cache libc6-compat vips-dev build-base
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev
+
+# Rebuild Sharp for Alpine Linux
+RUN npm rebuild sharp
+
 FROM base AS builder
 RUN apk add --no-cache vips-dev
 WORKDIR /app
@@ -53,9 +65,17 @@ RUN adduser --system --uid 1001 nextjs
 # Mount a volume here in Dokploy or scores reset on every redeploy.
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
+# Full-mode runtime: the custom server.js embeds the race WS relay
+# (/race-relay) and needs real node_modules, not the standalone bundle.
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/content ./content
+COPY --from=builder --chown=nextjs:nodejs /app/data ./data
+COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/server/race-relay-core.cjs ./server/race-relay-core.cjs
+COPY --from=builder /app/next.config.js ./next.config.js
+COPY --from=builder /app/package.json ./package.json
 
 USER nextjs
 

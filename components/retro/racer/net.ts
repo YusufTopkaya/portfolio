@@ -1,7 +1,8 @@
 /**
  * Race networking for the Twingo racer. The default transport is `WsNet`,
- * a thin client for the standalone WS room relay (`server/race-server.mjs`,
- * port 8787) — one ~5-20 ms hop instead of a mesh. The fallback below is
+ * a thin client for the WS room relay embedded in the app's own server
+ * (`/race-relay`, root server.js + server/race-relay-core.cjs) — one
+ * ~5-20 ms hop instead of a mesh. The fallback below is
  * backend-less P2P (Trystero over public Nostr relays — signaling only;
  * race traffic flows browser to browser over WebRTC DataChannels).
  *
@@ -349,16 +350,18 @@ export class TrysteroNet implements RaceNet {
   }
 }
 
-/* ── WebSocket room relay (server/race-server.mjs) — a single direct
+/* ── WebSocket room relay (server/race-relay-core.cjs) — a single direct
      server hop instead of the Nostr/WebRTC mesh. Same RaceNet surface as
      TrysteroNet: the server owns membership (roster messages) and relays
      every other action verbatim, tagged with the sender's server id ── */
 
 function raceServerUrl(code: string): string {
   const env = process.env.NEXT_PUBLIC_RACE_SERVER?.trim();
+  // default: the app's own server embeds the relay at /race-relay (root
+  // server.js) — same origin, no separate service to deploy
   const base = env
     ? env.replace(/^http(s)?:\/\//, "ws$1://") // tolerate http(s) forms too
-    : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8787`;
+    : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/race-relay`;
   return `${base.replace(/\/+$/, "")}/?room=${code}`;
 }
 
