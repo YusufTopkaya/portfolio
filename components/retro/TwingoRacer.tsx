@@ -2403,9 +2403,11 @@ export function TwingoRacer() {
         // segment's curve + a ~60-80 segment can/hole window inside the
         // bot's engine. Held with the grid during the countdown like the
         // human cars; keeps running after the leader's own death (dead
-        // humans spectate them)
+        // humans spectate them). Bots wait out ONLY the countdown — an
+        // open pause menu or a WATCH run must not freeze them: the room
+        // depends on the leader's bot stream, menu or no menu
         const sim = botsSimRef.current;
-        if (sim && !hold) {
+        if (sim && pendingRaceRef.current === null) {
           const humans: { pos: number; x: number }[] = [
             { pos: e.state.position, x: e.state.playerX },
           ];
