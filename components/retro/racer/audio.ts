@@ -412,7 +412,14 @@ export function createRacerAudio(): RacerAudio {
   return {
     start() {
       if (!ctx) {
-        ctx = new AudioContext();
+        // bare global throws a ReferenceError where WebAudio is missing
+        // (old webviews) — stay silent instead of crashing the component
+        const AC =
+          window.AudioContext ??
+          (window as { webkitAudioContext?: typeof AudioContext })
+            .webkitAudioContext;
+        if (!AC) return;
+        ctx = new AC();
         master = ctx.createGain();
         master.gain.value = muted ? 0 : 1;
         master.connect(ctx.destination);

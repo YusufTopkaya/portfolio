@@ -534,8 +534,10 @@ export function TwingoRacer() {
   const raceSeedRef = useRef<number | null>(null);
   /* this run is a render-only WATCH run: we joined the room mid-race and
      are spectating on the racers' own track seed — we never stream state,
-     never appear in the standings, and turn into a real racer on rematch */
+     never appear in the standings, and turn into a real racer on rematch.
+     State mirror gates touch controls + the JOINING RACE chip on render */
   const watchOnlyRef = useRef(false);
+  const [watchOnly, setWatchOnly] = useState(false);
   /* record chase: each period's #1 score, fetched at run start — applied
      to the engine both when the fetch lands and when the engine boots,
      whichever happens last */
@@ -855,6 +857,7 @@ export function TwingoRacer() {
     pendingRaceRef.current = null;
     raceSeedRef.current = null;
     watchOnlyRef.current = false;
+    setWatchOnly(false);
     setNetConnected(false);
     setNetAttached(false);
     setConnectStuck(false);
@@ -939,6 +942,7 @@ export function TwingoRacer() {
     // spectator on the fresh track as a real racer
     if (gameOverRef.current || watchOnlyRef.current) playAgain();
     watchOnlyRef.current = false;
+    setWatchOnly(false);
     setScreen("playing");
     setIntro(true);
     // ascending prestige: later entries win the dedupe when two period
@@ -1001,6 +1005,7 @@ export function TwingoRacer() {
       raceSeedRef.current = seed;
       startRun();
       watchOnlyRef.current = true;
+      setWatchOnly(true);
     },
     [startRun],
   );
@@ -2365,8 +2370,10 @@ export function TwingoRacer() {
         // VS race countdown: the engine is on the grid but ALL driving
         // input is suppressed until GO (keyboard, pad AND tilt — the
         // merge above is overridden, not skipped, so nothing latches on
-        // at the release). Solo runs never see a pending race
-        const hold = pendingRaceRef.current !== null;
+        // at the release). Solo runs never see a pending race. A WATCH
+        // run is held the same way, for the whole run: the spectator has
+        // no car in this race, so their pads/keys must not drive one
+        const hold = pendingRaceRef.current !== null || watchOnlyRef.current;
         steerOutRef.current = hold
           ? 0
           : Math.max(
@@ -2423,6 +2430,13 @@ export function TwingoRacer() {
         }
         if (e.state.gameOver && !gameOverRef.current) {
           gameOverRef.current = true;
+          // a WATCH run's own engine dying is NOT a race death: the held
+          // grid car idles its tank dry if packets never park the camera
+          // — no death broadcast, no game-over panel, the race isn't ours
+          if (watchOnlyRef.current) {
+            raf = requestAnimationFrame(frame);
+            return;
+          }
           audioRef.current?.gameOver();
           setFinalScore(Math.floor(e.state.score));
           setFinalTime(e.state.time);
@@ -4296,6 +4310,16 @@ export function TwingoRacer() {
         </div>
       )}
 
+      {/* watch-only, camera not parked yet (packets still landing): say
+          what this screen IS — otherwise the grid + intro reads as a
+          fresh solo run, especially on touch where the pads are hidden
+          and the car refuses to drive */}
+      {!spectating && watchOnly && !raceResults && (
+        <div className="racer-spectate font-pixel" role="status">
+          JOINING RACE…
+        </div>
+      )}
+
       {/* spectate mode: the game-over panel hides behind the camera ride;
           ESC / pad B drops back to it. With 2+ peers alive ←/→, pad LB/RB
           or a tap on the chip cycles the camera between them */}
@@ -4425,7 +4449,7 @@ export function TwingoRacer() {
         </button>
       )}
 
-      {screen === "playing" && coarse && (
+      {screen === "playing" && coarse && !watchOnly && (
         <div className="racer-touch" aria-hidden="true">
           {/* two-thumb corners: with TILT the phone is the wheel, so the
               pads become brake (left thumb) and gas (right thumb) at the
