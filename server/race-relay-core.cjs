@@ -16,7 +16,7 @@
  *
  * Wire shape (JSON text frames):
  *   client → server: {a: action, d: payload}
- *     a ∈ hello|start|st|take|hole|dead|rematch|bots|bst  (mirror of
+ *     a ∈ hello|start|st|take|hole|chit|dead|rematch|bots|bst  (mirror of
  *     net.ts actions; "st" is the per-frame car state, the hot path)
  *   server → client (relay): {a, d, from}
  *   server → client (membership): {a: "peers", d: [{id, ...hello}], you}

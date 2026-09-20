@@ -1447,6 +1447,15 @@ export interface RacerEngine {
   /** a peer fell into the pothole on this absolute segment: consumed for
       everyone (hazards don't respawn). No-op on a stale ring slot */
   applyRemoteHole(absSegIdx: number): void;
+  /** the cat on this absolute segment was run over by ANYONE (VS race:
+      every cat is lethal to everyone, the first hit consumes it for the
+      whole room): if it is ours — walking or still dormant — it never
+      crosses for us either. No-op for any other segment */
+  applyRemoteCatGone(absSegIdx: number): void;
+  /** our own cat's live pose for the 60 Hz state stream — only while it
+      is crossing and alive (a dormant cat is never revealed early).
+      undefined in solo play conditions too (no frames / not crossing) */
+  catSnapshot(): { s: number; x: number; d: 1 | -1 } | undefined;
   /** feed a peer's latest state packet into the interpolation buffer */
   setRemoteState(id: string, s: NetCarState): void;
   /** peer left the room: remove its car (a fade is the UI's business) */
@@ -1576,9 +1585,12 @@ export function createEngine(opts: {
   /** fired on the THIRD crash — the engine dies: the run ends in a
       driverless coast, so play the breakdown sputter instead of crash() */
   onBreakdown?: () => void;
-  /** fired the instant the car hits the crossing cat (fatal — the
-      breakdown sputter follows through the normal fatal path) */
-  onCatHit?: () => void;
+  /** fired the instant the car hits ANY crossing cat (fatal — the
+      breakdown sputter follows through the normal fatal path). Carries
+      the cat's absolute segment so the net layer can broadcast the
+      consumption (`chit`): in a VS race the cat is gone for the whole
+      room, whoever hit it */
+  onCatHit?: (absSegIdx: number) => void;
   /** fired when the score crosses into a higher league bracket (once per
       tier per run) — the engine grants +1 heart or a streak shield, this
       is the fanfare hook */
@@ -1706,6 +1718,10 @@ export function createEngine(opts: {
   // ghost remotes (CPU bots): skipped by the car-car collision below —
   // everyone passes through them in both directions
   const ghostRemotes = new Set<string>();
+  // peers' cats WE already ran over (absolute segments): the owner keeps
+  // streaming the pose until our `chit` broadcast comes back around, so
+  // without this set the same cat would kill us twice in that window
+  const consumedRemoteCats = new Set<number>();
 
   // horizon parallax offsets (Lou: horizon slides opposite the curve)
   let skyOffset = 0;
@@ -2488,7 +2504,7 @@ export function createEngine(opts: {
           const side = Math.sign(cat.x - state.playerX) || cat.dir;
           cat.flyVX = side * width * 0.22;
           cat.flyVY = -height * 0.95;
-          opts.onCatHit?.();
+          opts.onCatHit?.(cat.segIdx);
           // the heart ladder doesn't apply: sink it, then let the shared
           // fatal path (dying coast, smoke, banner) take over
           crashes = CRASH_MAX - 1;
@@ -2834,6 +2850,29 @@ export function createEngine(opts: {
         if (state.time - lastBumpAt > BUMP_AUDIO_T) {
           lastBumpAt = state.time;
           opts.onBump?.(intensity);
+        }
+      }
+      // peers' crossing cats (VS race): lethal to EVERYONE, not just the
+      // owner — same instant-death rule as our own cat (the heart ladder
+      // is skipped), and the first to hit one consumes it for the whole
+      // room via the chit broadcast (the owner may not have triggered it
+      // yet). Airborne cars clear it, exactly like the local cat
+      for (const v of views) {
+        const c = v.cat;
+        if (!c || v.dead || consumedRemoteCats.has(c.s)) continue;
+        if (
+          playerSegFloat >= c.s &&
+          playerSegFloat < c.s + 1 &&
+          airT <= 0 &&
+          Math.abs(state.playerX - c.x) < CAT_HIT_X &&
+          state.speed > MAX_SPEED * 0.02
+        ) {
+          consumedRemoteCats.add(c.s);
+          opts.onCatHit?.(c.s);
+          crashes = CRASH_MAX - 1;
+          state.crashes = crashes;
+          crashRespawn("cat");
+          break;
         }
       }
       // the exchanged lateral kick integrates over a fraction of a second
@@ -3267,6 +3306,17 @@ export function createEngine(opts: {
       // or the crossing renders INVISIBLE (the "görünmez kedi" bug)
       const catHere =
         catFrames && cat.crossing && !cat.gone && segment.index === cat.segIdx;
+      // peers' crossing cats (VS race) live in the remotes buffer, not in
+      // engine state — lethal to everyone, so they follow the same
+      // visit/draw/marker rules; ones WE ran over are already consumed
+      const remoteCatsHere: { x: number; d: 1 | -1 }[] = [];
+      if (catFrames && remoteViews) {
+        for (const v of remoteViews) {
+          const c = v.cat;
+          if (c && c.s === segment.index && !consumedRemoteCats.has(c.s))
+            remoteCatsHere.push(c);
+        }
+      }
       // same for remote cars: they live in the remotes buffer, not on the
       // segment — a peer on a prop-less segment must still be visited
       const remoteHere = remoteViews
@@ -3280,6 +3330,7 @@ export function createEngine(opts: {
         !segment.hole &&
         segment.sprites.length === 0 &&
         !catHere &&
+        remoteCatsHere.length === 0 &&
         !remoteHere
       )
         continue;
@@ -3456,68 +3507,89 @@ export function createEngine(opts: {
         }
       }
 
-      // the crossing cat: drawn like a roadside sprite but at its LIVE x
-      // (it walks), walk-cycling with the sheet's row. Crest-hidden cats
-      // get the same mystery "?" cans and holes share — an instant-death
-      // hazard must never be invisible
-      if (catHere) {
-        const scale = segment.p1.screen.scale;
-        // frozen = sitting front, staring at the oncoming car
-        const fr =
-          cat.pauseT > 0
-            ? catFrames.front
-            : (cat.dir > 0 ? catFrames.right : catFrames.left)[
-                Math.floor(state.time * 10) % 8
-              ];
-        const destW = fr.width * scale * (width / 2) * 4.2 * CAT_SCALE;
-        const destH = fr.height * scale * (width / 2) * 4.2 * CAT_SCALE;
-        if (destW >= 2) {
-          const destX =
-            segment.p1.screen.x +
-            scale * cat.x * ROAD_WIDTH * (width / 2) -
-            destW / 2;
-          const destY = segment.p1.screen.y - destH;
-          let visibleH = destH;
-          if (segment.clip && destY + destH > segment.clip) {
-            visibleH = segment.clip - destY;
-          }
-          if (visibleH > 0) {
-            lastCatRect = {
-              x: Math.round(destX),
-              y: Math.round(destY),
-              w: Math.round(destW),
-              h: Math.round(visibleH),
-            };
-            ctx.drawImage(
-              fr,
-              0,
-              0,
-              fr.width,
-              (visibleH / destH) * fr.height,
-              Math.round(destX),
-              Math.round(destY),
-              Math.round(destW),
-              Math.round((visibleH / destH) * destH),
-            );
-            // sliding under the car sprite / dash — an instant-death
-            // hazard gets the red blind-zone "!" like a pothole, never
-            // a silent kill
-            if (destY + visibleH > height * 0.45) {
-              blindObjs.push({
-                cx: destX + destW / 2,
-                top: destY,
-                bottom: destY + visibleH,
-                w: destW,
-                kind: "hole",
-              });
+      // the crossing cats — ours AND every peer's in a VS race: drawn like
+      // a roadside sprite but at each cat's LIVE x (they walk),
+      // walk-cycling with the sheet's row. Crest-hidden cats get the same
+      // mystery "?" cans and holes share — an instant-death hazard must
+      // never be invisible
+      if (catFrames && (catHere || remoteCatsHere.length > 0)) {
+        const cf = catFrames;
+        const walkers: {
+          x: number;
+          dir: 1 | -1;
+          front: boolean;
+          local: boolean;
+        }[] = [];
+        // ours can freeze mid-crossing and stare down the car; a peer's
+        // pauses arrive implicitly in its x stream (front frame is
+        // owner-local flavour)
+        if (catHere)
+          walkers.push({
+            x: cat.x,
+            dir: cat.dir,
+            front: cat.pauseT > 0,
+            local: true,
+          });
+        for (const c of remoteCatsHere)
+          walkers.push({ x: c.x, dir: c.d, front: false, local: false });
+        for (const w of walkers) {
+          const scale = segment.p1.screen.scale;
+          // frozen = sitting front, staring at the oncoming car
+          const fr = w.front
+            ? cf.front
+            : (w.dir > 0 ? cf.right : cf.left)[Math.floor(state.time * 10) % 8];
+          const destW = fr.width * scale * (width / 2) * 4.2 * CAT_SCALE;
+          const destH = fr.height * scale * (width / 2) * 4.2 * CAT_SCALE;
+          if (destW >= 2) {
+            const destX =
+              segment.p1.screen.x +
+              scale * w.x * ROAD_WIDTH * (width / 2) -
+              destW / 2;
+            const destY = segment.p1.screen.y - destH;
+            let visibleH = destH;
+            if (segment.clip && destY + destH > segment.clip) {
+              visibleH = segment.clip - destY;
             }
-          } else {
-            drawCrestMystery(
-              destX + destW / 2,
-              Math.round(segment.clip || 0),
-              destW,
-              segment.index,
-            );
+            if (visibleH > 0) {
+              if (w.local) {
+                lastCatRect = {
+                  x: Math.round(destX),
+                  y: Math.round(destY),
+                  w: Math.round(destW),
+                  h: Math.round(visibleH),
+                };
+              }
+              ctx.drawImage(
+                fr,
+                0,
+                0,
+                fr.width,
+                (visibleH / destH) * fr.height,
+                Math.round(destX),
+                Math.round(destY),
+                Math.round(destW),
+                Math.round((visibleH / destH) * destH),
+              );
+              // sliding under the car sprite / dash — an instant-death
+              // hazard gets the red blind-zone "!" like a pothole, never
+              // a silent kill
+              if (destY + visibleH > height * 0.45) {
+                blindObjs.push({
+                  cx: destX + destW / 2,
+                  top: destY,
+                  bottom: destY + visibleH,
+                  w: destW,
+                  kind: "hole",
+                });
+              }
+            } else {
+              drawCrestMystery(
+                destX + destW / 2,
+                Math.round(segment.clip || 0),
+                destW,
+                segment.index,
+              );
+            }
           }
         }
       }
@@ -4825,6 +4897,17 @@ export function createEngine(opts: {
       // hazards never respawn
       if (seg.index === absSegIdx) seg.hole = undefined;
     },
+    applyRemoteCatGone: (absSegIdx) => {
+      // someone (possibly ourselves) ran over the cat on this segment —
+      // if it is OURS it never crosses for us either, even if it was
+      // still dormant (a faster peer reached it first)
+      if (cat.segIdx === absSegIdx && !cat.gone) cat.gone = true;
+      consumedRemoteCats.add(absSegIdx);
+    },
+    catSnapshot: () =>
+      catFrames && cat.crossing && !cat.gone
+        ? { s: cat.segIdx, x: cat.x, d: cat.dir }
+        : undefined,
     setRemoteState: (id, s) => remotes.upsert(id, s, nowMs()),
     removeRemote: (id) => {
       remotes.remove(id);
@@ -4836,6 +4919,7 @@ export function createEngine(opts: {
       bumpContact.clear();
       bumpLatVel = 0;
       ghostRemotes.clear();
+      consumedRemoteCats.clear();
     },
     setRemoteName: (id, name) => remotes.setName(id, name),
     markRemoteDead: (id, score) => remotes.markDead(id, score),

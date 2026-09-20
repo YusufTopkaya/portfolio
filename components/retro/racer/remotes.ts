@@ -61,6 +61,11 @@ export interface RemoteCarView {
       from peers predating the fields (the HUD then keeps ours) */
   fuel?: number;
   crashes?: number;
+  /** the peer's crossing cat (newest packet's pose — a strolling cat is
+      slow enough that interpolation isn't worth it). Rendered
+      world-anchored and lethal to EVERYONE; undefined while the peer's
+      cat is dormant/gone, and always for a parked wreck */
+  cat?: { s: number; x: number; d: 1 | -1 };
 }
 
 /** render the field this far in the past so two packets bracket the sample
@@ -270,6 +275,7 @@ export function createRemoteCars(): RemoteCars {
       streak: latest.streak ?? 0,
       fuel: latest.fuel,
       crashes: latest.crashes,
+      cat: p.dead ? undefined : latest.cat,
     };
   };
 

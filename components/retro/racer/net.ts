@@ -30,6 +30,10 @@ export interface RaceHello {
   seed: number; // the player's turkeyDay() at join time
   joinedAt: number; // Date.now() — oldest peer is the lobby leader
   ready: boolean;
+  /** the CURRENT race's track seed while this peer is racing — a mid-race
+      joiner reads it off the roster and drops straight into spectate on
+      the same layout; absent in the lobby / on the results screen */
+  racing?: number;
 }
 
 export interface NetCarState {
@@ -48,6 +52,11 @@ export interface NetCarState {
   /** fuel-chain streak (the jerrycan counter) — the spectate HUD mirrors
       it and flashes on each can the followed player bags */
   streak?: number;
+  /** the sender's crossing cat while it is alive and walking: absolute
+      segment, lateral x, walk direction. Peers render it world-anchored —
+      in a VS race the cat is lethal to EVERYONE, not just its owner.
+      Absent while the cat is dormant (never revealed early) or gone */
+  cat?: { s: number; x: number; d: 1 | -1 };
   /** sender's performance.now() at send time. Receivers interpolate
       BETWEEN THESE stamps: arrival jitter then never modulates the lerp
       bracket spans (the spectate-camera judder bug). Absent from
@@ -95,6 +104,10 @@ export interface RaceNetHandlers {
   /** a peer fell into the pothole on this absolute segment — consumed
       for everyone (hazards don't respawn) */
   onHole?: (id: string, segIdx: number) => void;
+  /** the cat on this absolute segment was run over (by anyone — in a VS
+      race every cat is lethal to everyone): consumed for the whole room,
+      including its owner who may not have triggered it yet */
+  onCatGone?: (id: string, segIdx: number) => void;
   onDead?: (id: string, score: number) => void;
   /** leader triggered a rematch — carries the fresh per-race track seed */
   onRematch?: (seed: number) => void;
@@ -117,6 +130,10 @@ export interface RaceNet {
       (peers keep the ORIGINAL joinedAt/seed, so a rename never moves the
       lobby lead or the track seed) */
   setName(name: string): void;
+  /** announce that we are racing on this track seed (null = race over) —
+      re-announces the hello so a mid-race joiner can drop straight into
+      spectate on the same layout */
+  setRacing(seed: number | null): void;
   /** lobby leader only: everyone starts `START_COUNTDOWN_MS` after they
       receive this, on a fresh random track seed (per-race layout) */
   startRace(seed: number): void;
@@ -125,6 +142,9 @@ export interface RaceNet {
   sendState(s: NetCarState): void;
   sendTake(segIdx: number): void;
   sendHole(segIdx: number): void;
+  /** broadcast that the cat on this absolute segment was run over (own
+      cat or a peer's) — consumed for everyone */
+  sendCatGone(segIdx: number): void;
   sendDead(score: number): void;
   /** lobby leader only: broadcast the full CPU bot roster (replaces the
       receivers' mirror — no local echo, the leader already has it) */
@@ -148,7 +168,8 @@ function validHello(v: unknown): v is RaceHello {
     isStr(h.name) &&
     isNum(h.seed, 0, 1e9) &&
     isNum(h.joinedAt, 0, 1e13) &&
-    typeof h.ready === "boolean"
+    typeof h.ready === "boolean" &&
+    (h.racing === undefined || isNum(h.racing, 0, 1e9))
   );
 }
 function validState(v: unknown): v is NetCarState {
@@ -162,7 +183,12 @@ function validState(v: unknown): v is NetCarState {
     typeof s.dead === "boolean" &&
     (s.steer === undefined || isNum(s.steer, -1, 1)) &&
     (s.fuel === undefined || isNum(s.fuel, 0, 12)) &&
-    (s.crashes === undefined || isNum(s.crashes, 0, 99))
+    (s.crashes === undefined || isNum(s.crashes, 0, 99)) &&
+    (s.cat === undefined ||
+      (!!s.cat &&
+        isNum(s.cat.s, 0, 1e9) &&
+        isNum(s.cat.x, -4, 4) &&
+        (s.cat.d === 1 || s.cat.d === -1)))
   );
 }
 const validSeg = (v: unknown): v is number => isNum(v, 0, 1e9);
@@ -201,6 +227,7 @@ export class TrysteroNet implements RaceNet {
     state: (v: NetCarState) => void;
     take: (v: number) => void;
     hole: (v: number) => void;
+    chit: (v: number) => void;
     dead: (v: number) => void;
     rematch: (v: number) => void;
     bots: (v: RaceBot[]) => void;
@@ -224,6 +251,7 @@ export class TrysteroNet implements RaceNet {
     const stateAct = this.room.makeAction("st");
     const takeAct = this.room.makeAction("take");
     const holeAct = this.room.makeAction("hole");
+    const chitAct = this.room.makeAction("chit");
     const deadAct = this.room.makeAction("dead");
     const rematchAct = this.room.makeAction("rematch");
     const botsAct = this.room.makeAction("bots");
@@ -239,6 +267,7 @@ export class TrysteroNet implements RaceNet {
       state: (v) => void stateAct.send(v as unknown as Wire),
       take: (v) => void takeAct.send(v),
       hole: (v) => void holeAct.send(v),
+      chit: (v) => void chitAct.send(v),
       dead: (v) => void deadAct.send(v),
       rematch: (v) => void rematchAct.send(v),
       bots: (v) => void botsAct.send(v as unknown as Wire[]),
@@ -256,6 +285,7 @@ export class TrysteroNet implements RaceNet {
         seed: keep ? existing.seed : data.seed,
         joinedAt: keep ? existing.joinedAt : data.joinedAt,
         ready: data.ready,
+        racing: data.racing,
       });
       this.emitPeers();
     };
@@ -270,6 +300,9 @@ export class TrysteroNet implements RaceNet {
     };
     holeAct.onMessage = (data, ctx) => {
       if (validSeg(data)) this.h.onHole?.(ctx.peerId, data);
+    };
+    chitAct.onMessage = (data, ctx) => {
+      if (validSeg(data)) this.h.onCatGone?.(ctx.peerId, data);
     };
     deadAct.onMessage = (data, ctx) => {
       if (validScore(data)) this.h.onDead?.(ctx.peerId, data);
@@ -317,6 +350,12 @@ export class TrysteroNet implements RaceNet {
     this.senders.hello(this.me);
     this.emitPeers();
   }
+  setRacing(seed: number | null) {
+    if (seed === null) delete this.me.racing;
+    else this.me.racing = seed;
+    this.senders.hello(this.me);
+    this.emitPeers();
+  }
   startRace(seed: number) {
     const msg: RaceStart = { ms: START_COUNTDOWN_MS, seed };
     this.senders.start(msg);
@@ -334,6 +373,9 @@ export class TrysteroNet implements RaceNet {
   }
   sendHole(segIdx: number) {
     this.senders.hole(segIdx);
+  }
+  sendCatGone(segIdx: number) {
+    this.senders.chit(segIdx);
   }
   sendDead(score: number) {
     this.senders.dead(score);
@@ -455,6 +497,7 @@ export class WsNet implements RaceNet {
             seed: keep ? existing.seed : e.seed,
             joinedAt: keep ? existing.joinedAt : e.joinedAt,
             ready: e.ready,
+            racing: e.racing,
           });
         }
         for (const id of [...this.peers.keys()])
@@ -482,6 +525,9 @@ export class WsNet implements RaceNet {
           break;
         case "hole":
           if (validSeg(data)) this.h.onHole?.(id, data);
+          break;
+        case "chit":
+          if (validSeg(data)) this.h.onCatGone?.(id, data);
           break;
         case "dead":
           if (validScore(data)) this.h.onDead?.(id, data);
@@ -528,6 +574,12 @@ export class WsNet implements RaceNet {
     this.send("hello", this.me);
     this.emitPeers();
   }
+  setRacing(seed: number | null) {
+    if (seed === null) delete this.me.racing;
+    else this.me.racing = seed;
+    this.send("hello", this.me);
+    this.emitPeers();
+  }
   startRace(seed: number) {
     const msg: RaceStart = { ms: START_COUNTDOWN_MS, seed };
     this.send("start", msg);
@@ -545,6 +597,9 @@ export class WsNet implements RaceNet {
   }
   sendHole(segIdx: number) {
     this.send("hole", segIdx);
+  }
+  sendCatGone(segIdx: number) {
+    this.send("chit", segIdx);
   }
   sendDead(score: number) {
     this.send("dead", score);
@@ -618,6 +673,15 @@ export class LoopbackNet implements RaceNet {
     });
     this.emitPeers();
   }
+  setRacing(seed: number | null) {
+    if (seed === null) delete this.me.racing;
+    else this.me.racing = seed;
+    this.each((o) => {
+      o.peers.set(this.selfId, { ...this.me });
+      o.emitPeers();
+    });
+    this.emitPeers();
+  }
   startRace(seed: number) {
     const msg: RaceStart = { ms: START_COUNTDOWN_MS, seed };
     this.each((o) => o.h.onStart?.(msg));
@@ -635,6 +699,9 @@ export class LoopbackNet implements RaceNet {
   }
   sendHole(segIdx: number) {
     this.each((o) => o.h.onHole?.(this.selfId, segIdx));
+  }
+  sendCatGone(segIdx: number) {
+    this.each((o) => o.h.onCatGone?.(this.selfId, segIdx));
   }
   sendDead(score: number) {
     this.each((o) => o.h.onDead?.(this.selfId, score));
