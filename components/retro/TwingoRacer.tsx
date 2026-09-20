@@ -3922,7 +3922,7 @@ export function TwingoRacer() {
           </div>
           {selfPeerId !== "" && (
             <div className="racer-pausemenu-hint">
-              VS RACE CAN'T PAUSE — YOUR CAR IS COASTING DRIVERLESS
+              VS RACE NEVER PAUSES — YOUR CAR IS COASTING DRIVERLESS
             </div>
           )}
           <button
