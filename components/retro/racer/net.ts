@@ -17,7 +17,7 @@
  * context with zero network.
  */
 
-import { joinRoom, selfId } from "trystero";
+import type { joinRoom } from "trystero"; // type-only — the mesh itself is dynamic-imported in the fallback path (TrysteroNet.create)
 
 export const NET_APP_ID = "yusuf-twingo-racer";
 export const MAX_RACERS = 5;
@@ -224,7 +224,7 @@ function validBotState(v: unknown): v is NetBotState {
 /* ── Trystero (real network) ── */
 
 export class TrysteroNet implements RaceNet {
-  readonly selfId = selfId;
+  readonly selfId: string;
   readonly code: string;
   readonly me: RaceHello;
   private room: ReturnType<typeof joinRoom>;
@@ -243,11 +243,28 @@ export class TrysteroNet implements RaceNet {
     bst: (v: NetBotState) => void;
   };
 
-  constructor(code: string, hello: RaceHello, handlers: RaceNetHandlers) {
+  /** the Nostr/WebRTC mesh is only the FALLBACK transport — its chunk is
+      pulled off the wire only when the WS relay is unreachable */
+  static async create(
+    code: string,
+    hello: RaceHello,
+    handlers: RaceNetHandlers,
+  ): Promise<TrysteroNet> {
+    const t = await import("trystero");
+    return new TrysteroNet(code, hello, handlers, t);
+  }
+
+  private constructor(
+    code: string,
+    hello: RaceHello,
+    handlers: RaceNetHandlers,
+    t: { joinRoom: typeof joinRoom; selfId: string },
+  ) {
+    this.selfId = t.selfId;
     this.code = code;
     this.me = hello;
     this.h = handlers;
-    this.room = joinRoom(
+    this.room = t.joinRoom(
       { appId: NET_APP_ID },
       `twingo-race-v1:${code.toUpperCase()}`,
     );

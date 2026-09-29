@@ -1318,20 +1318,33 @@ export function TwingoRacer() {
       };
       // WS relay first; the Nostr/WebRTC mesh is the fallback, not the
       // default — a dead relay costs ~5 s before Trystero takes over
-      void WsNet.create(code.toUpperCase(), hello, handlers).then((wsNet) => {
-        if (gen !== netGenRef.current) {
-          wsNet?.leave(); // superseded by leave/retry — don't squat the room
-          return;
-        }
-        if (wsNet) return attach(wsNet);
-        if (!wsFallbackWarned) {
-          wsFallbackWarned = true;
-          console.warn(
-            "[race] WS relay unreachable — falling back to Trystero P2P",
+      void WsNet.create(code.toUpperCase(), hello, handlers).then(
+        async (wsNet) => {
+          if (gen !== netGenRef.current) {
+            wsNet?.leave(); // superseded by leave/retry — don't squat the room
+            return;
+          }
+          if (wsNet) return attach(wsNet);
+          if (!wsFallbackWarned) {
+            wsFallbackWarned = true;
+            console.warn(
+              "[race] WS relay unreachable — falling back to Trystero P2P",
+            );
+          }
+          // the mesh chunk downloads only here — a leave/retry landing
+          // mid-download must not attach the stale room
+          const tNet = await TrysteroNet.create(
+            code.toUpperCase(),
+            hello,
+            handlers,
           );
-        }
-        attach(new TrysteroNet(code.toUpperCase(), hello, handlers));
-      });
+          if (gen !== netGenRef.current) {
+            tNet.leave();
+            return;
+          }
+          attach(tNet);
+        },
+      );
     },
     [
       repickSpectate,
@@ -1905,6 +1918,14 @@ export function TwingoRacer() {
     window.addEventListener("twingo:start", openOverlay);
     return () => window.removeEventListener("twingo:start", openOverlay);
   }, [openOverlay]);
+
+  /* the chunk lazy-loads on demand (TwingoRacerGate in ClientProviders):
+     announce once mounted — with the start listener attached ABOVE already
+     in place — so a START click that triggered the load gets re-dispatched
+     into it */
+  useEffect(() => {
+    window.dispatchEvent(new Event("twingo:mounted"));
+  }, []);
 
   /* dev-only probe (e2e): which transport the current room runs on —
      unlike the engine probes below this must exist in the LOBBY too */

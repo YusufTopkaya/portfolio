@@ -57,3 +57,6 @@ plans/
 /data/
 # standalone race relay server
 server/node_modules/
+
+# e2e/debug scratch artifacts (screenshots, one-off probes)
+scripts/.tmp-*
