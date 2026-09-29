@@ -329,6 +329,13 @@ export function TwingoRacer() {
      must cover the ~5 s WS open attempt, not wait for peer traffic */
   const [netAttached, setNetAttached] = useState(false);
   const [connectStuck, setConnectStuck] = useState(false);
+  /* WsNet recovery: true while the reconnect backoff loop runs (the room
+     view stays — a resumed session restores it), cleared by the next
+     roster; on "lost" the room detaches (a live run continues solo) */
+  const [connLost, setConnLost] = useState(false);
+  /* one-line lobby notice after a server policy close ({a:"closed"} —
+     idle/max-age) or a lost connection; cleared on the next join/leave */
+  const [netNotice, setNetNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   /* a VS race start/rematch the room announced: the engine boots
      IMMEDIATELY (cars idle on the grid behind the countdown overlay) and
@@ -833,43 +840,76 @@ export function TwingoRacer() {
   }, []);
 
   /* leave the P2P room: the LEAVE button, ESC, QUIT and ✕ all funnel
-     through here. Leaving a room mid-run also DESTROYS the engine —
-     otherwise the next race boots the stale engine and resumes the old
-     run's track/position/fuel (quitToTitle does the same on its own
-     path). A solo ✕ (never in a room) keeps the resume-the-run behaviour */
-  const leaveNet = useCallback(() => {
-    const wasInRoom = netRef.current !== null;
-    netGenRef.current++;
-    netRef.current?.leave();
-    netRef.current = null;
-    rosterRef.current = [];
-    selfPeerIdRef.current = "";
-    standingsRef.current.clear();
-    setStandings([]);
-    botsRef.current = [];
-    setBots([]);
-    botsSimRef.current = null;
-    engineRef.current?.setSpectate(null);
-    if (wasInRoom) {
-      engineRef.current = null;
-      gameOverRef.current = false;
-      setGameOver(false);
-    }
-    setSpectateMode(null);
-    raceResultsRef.current = null;
-    setRaceResults(null);
-    setPeers([]);
-    setSelfPeerId("");
-    setRoomCode("");
-    setPendingRace(null);
-    pendingRaceRef.current = null;
-    raceSeedRef.current = null;
-    watchOnlyRef.current = false;
-    setWatchOnly(false);
-    setNetConnected(false);
-    setNetAttached(false);
-    setConnectStuck(false);
-  }, [setSpectateMode]);
+     through here — and so do the net-gone paths (policy close, reconnect
+     give-up) via onNetGone. Leaving a room mid-run also DESTROYS the
+     engine — otherwise the next race boots the stale engine and resumes
+     the old run's track/position/fuel (quitToTitle does the same on its
+     own path) — UNLESS keepRun holds: the connection died but the local
+     race hadn't, so it simply continues SOLO (every VS gate keys off
+     netRef and flips by itself). A solo ✕ (never in a room) keeps the
+     resume-the-run behaviour */
+  const leaveNet = useCallback(
+    (keepRun = false) => {
+      const wasInRoom = netRef.current !== null;
+      const keepAlive =
+        keepRun &&
+        wasInRoom &&
+        screenRef.current === "playing" &&
+        !gameOverRef.current &&
+        !watchOnlyRef.current;
+      netGenRef.current++;
+      netRef.current?.leave();
+      netRef.current = null;
+      rosterRef.current = [];
+      selfPeerIdRef.current = "";
+      standingsRef.current.clear();
+      setStandings([]);
+      botsRef.current = [];
+      setBots([]);
+      botsSimRef.current = null;
+      engineRef.current?.setSpectate(null);
+      if (wasInRoom && !keepAlive) {
+        engineRef.current = null;
+        gameOverRef.current = false;
+        setGameOver(false);
+      }
+      setSpectateMode(null);
+      raceResultsRef.current = null;
+      setRaceResults(null);
+      setPeers([]);
+      setSelfPeerId("");
+      setRoomCode("");
+      setPendingRace(null);
+      pendingRaceRef.current = null;
+      raceSeedRef.current = null;
+      watchOnlyRef.current = false;
+      setWatchOnly(false);
+      setNetConnected(false);
+      setNetAttached(false);
+      setConnectStuck(false);
+      setConnLost(false);
+    },
+    [setSpectateMode],
+  );
+
+  /* the net went away WITHOUT us leaving: a server policy close
+     ({a:"closed"} — idle TTL / max age / capacity) or the reconnect
+     window running out. A live run survives solo (leaveNet keepRun);
+     anywhere else we land on the lobby home view with the reason up */
+  const onNetGone = useCallback(
+    (notice: string) => {
+      const midRun =
+        screenRef.current === "playing" &&
+        !gameOverRef.current &&
+        !watchOnlyRef.current;
+      leaveNet(midRun);
+      if (!midRun) {
+        setLobbyView("home");
+        setNetNotice(notice);
+      }
+    },
+    [leaveNet],
+  );
 
   /* attach the bot roster to the CURRENT engine: ghost flag (collision
      pass-through, both ways) + the name tag. Called wherever bot ids are
@@ -1035,6 +1075,8 @@ export function TwingoRacer() {
       setNetAttached(false);
       setNetConnected(false);
       setConnectStuck(false);
+      setConnLost(false);
+      setNetNotice(null);
       setPeers([]);
       setLobbyView("room");
       const hello: RaceHello = {
@@ -1060,6 +1102,7 @@ export function TwingoRacer() {
           const firstRoster = !delivered;
           delivered = true;
           setNetConnected(true); // over capacity and WE are the newest arrival → bounced. The
+          setConnLost(false); // a fresh roster ends any reconnecting state
           // leave itself runs in the lobbyView === "full" effect below —
           // the net instance isn't reliably reachable from in here. CPU
           // bots count against the cap (humans + bots ≤ MAX_RACERS)
@@ -1233,6 +1276,24 @@ export function TwingoRacer() {
           // bounce above
           if (message === "ROOM_FULL") setLobbyView("full");
         },
+        onConnectionChange: (state) => {
+          if (gen !== netGenRef.current) return;
+          // transport drop (WsNet only): the backoff loop is running —
+          // flag it in the UI; "lost" means the window ran out
+          if (state === "reconnecting") setConnLost(true);
+          else onNetGone("CONNECTION LOST — LEFT THE ROOM");
+        },
+        onClosed: (reason) => {
+          if (gen !== netGenRef.current) return;
+          // the relay ended the room on purpose — no reconnect follows
+          onNetGone(
+            reason === "IDLE"
+              ? "ROOM CLOSED — IDLE TOO LONG"
+              : reason === "EXPIRED"
+                ? "ROOM CLOSED — SESSION EXPIRED"
+                : "ROOM CLOSED",
+          );
+        },
       };
       const attach = (net: RaceNet) => {
         netRef.current = net;
@@ -1272,7 +1333,14 @@ export function TwingoRacer() {
         attach(new TrysteroNet(code.toUpperCase(), hello, handlers));
       });
     },
-    [repickSpectate, checkRaceOver, beginVsRace, beginWatch, attachBots],
+    [
+      repickSpectate,
+      checkRaceOver,
+      beginVsRace,
+      beginWatch,
+      attachBots,
+      onNetGone,
+    ],
   );
 
   /* shareable join link: <origin>/<lang>/?race=CODE — the lang comes from
@@ -1878,6 +1946,25 @@ export function TwingoRacer() {
     setScreen("lobby");
     joinNet(code);
   }, [openOverlay, joinNet]);
+
+  /* page lifecycle: pagehide frees the room slot on the relay immediately
+     (a discarded/suspended mobile tab would otherwise squat it until the
+     server's ping/idle reaper fires); a bfcache RESTORE (pageshow
+     persisted) re-joins the same code fresh — the old socket is dead */
+  useEffect(() => {
+    const onHide = () => {
+      netRef.current?.leave();
+    };
+    const onShow = (ev: PageTransitionEvent) => {
+      if (ev.persisted && netRef.current) joinNet(netRef.current.code);
+    };
+    window.addEventListener("pagehide", onHide);
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("pageshow", onShow);
+    };
+  }, [joinNet]);
 
   /* lock page scroll and grab focus while the overlay is open (title
      screen included, not just the running game) */
@@ -3412,6 +3499,11 @@ export function TwingoRacer() {
                 <div className="racer-lobby-sub">
                   2-5 PLAYERS — FRESH TRACK EVERY RACE
                 </div>
+                {netNotice && (
+                  <div className="racer-lobby-sub racer-lobby-notice">
+                    {netNotice}
+                  </div>
+                )}
                 {nameRow}
                 <div className="racer-lobby-menu">
                   <button
@@ -3667,6 +3759,9 @@ export function TwingoRacer() {
                   <div className="racer-pausemenu-hint">
                     LEADER STARTS THE RACE
                   </div>
+                )}
+                {connLost && (
+                  <div className="racer-lobby-retry">RECONNECTING…</div>
                 )}
                 {(!netAttached || (connectStuck && !netConnected)) && (
                   <div className="racer-lobby-retry">
@@ -4367,6 +4462,15 @@ export function TwingoRacer() {
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* transport drop mid-race: the backoff loop is re-entering the
+          room with the resume credential — the run itself never paused,
+          the remotes just fade back in when the stream resumes */}
+      {screen === "playing" && connLost && (
+        <div className="racer-reconnecting font-pixel" role="status">
+          RECONNECTING…
         </div>
       )}
 

@@ -119,6 +119,15 @@ export interface RaceNetHandlers {
   onBotState?: (id: string, name: string, s: NetCarState) => void;
   /** server-side rejection (WsNet only): "ROOM_FULL" | "BAD_CODE" */
   onError?: (message: string) => void;
+  /** transport drop with recovery underway (WsNet only): "reconnecting"
+      while the backoff loop runs, "lost" when it gives up — the roster
+      stays as-is in between, a fresh roster ends the state. Never fired
+      by TrysteroNet/LoopbackNet (the mesh heals itself) */
+  onConnectionChange?: (state: "reconnecting" | "lost") => void;
+  /** the server ended the connection ON PURPOSE ({a:"closed"} — idle TTL,
+      max age, rate limit, capacity): no auto-reconnect, surface the
+      reason ("IDLE" | "EXPIRED" | "RATE_LIMITED" | "SERVER_FULL") */
+  onClosed?: (reason: string) => void;
 }
 
 export interface RaceNet {
@@ -409,12 +418,25 @@ function raceServerUrl(code: string): string {
 
 export class WsNet implements RaceNet {
   private static readonly OPEN_TIMEOUT = 5000;
+  /** total recovery window from the first drop before giving up ("lost") */
+  private static readonly GIVE_UP_MS = 90000;
   private _selfId = ""; // server-assigned, arrives with the first roster
   readonly code: string;
   readonly me: RaceHello;
   private h: RaceNetHandlers;
   private ws: WebSocket;
   private peers = new Map<string, RaceHello>();
+  /** the {a:"session"} credential — reconnects pass it as ?resume/id/token
+      so the server restores our id AND the original hello (lobby lead and
+      a live race survive the drop) */
+  private sessionToken = "";
+  private intentional = false; // leave() ran — never reconnect
+  private serverClosed = false; // {a:"closed"} arrived — policy, no reconnect
+  private rejected = false; // {a:"error"} (ROOM_FULL/BAD_CODE) preceded the close
+  private reconnecting = false;
+  private reconnectStart = 0;
+  private attempts = 0;
+  private reconnectTimer: number | null = null;
 
   /** resolves with a connected WsNet on open, null on error/timeout —
       the caller falls back to another transport */
@@ -460,10 +482,31 @@ export class WsNet implements RaceNet {
     this.me = hello;
     this.h = handlers;
     this.ws = ws;
-    // post-open errors/close just mean the pipe died — the room roster on
-    // the OTHER clients drops us via their own close handling
+    this.wire(ws);
+    // announce ourselves: the server stores it and rosters it to the room
+    this.send("hello", this.me);
+  }
+
+  /** the relay URL; reconnects append the resume credential so the room
+      gives us our old seat back instead of a fresh one */
+  private url(resume: boolean): string {
+    let u = raceServerUrl(this.code);
+    if (resume && this._selfId && this.sessionToken)
+      u += `&resume=${encodeURIComponent(this._selfId)}&token=${encodeURIComponent(this.sessionToken)}`;
+    return u;
+  }
+
+  /** (re)bind a live socket: message dispatch + drop handling. Shared by
+      the constructor and every successful reconnect attempt */
+  private wire(ws: WebSocket) {
+    this.ws = ws;
+    // post-open errors just mean the pipe died — onclose owns that path
     ws.onerror = null;
-    ws.onclose = () => this.peers.clear();
+    ws.onclose = () => {
+      // an intentional leave, a policy close or a rejection never recover
+      if (this.intentional || this.serverClosed || this.rejected) return;
+      this.startReconnect();
+    };
     ws.onmessage = (ev) => {
       let msg: {
         a?: unknown;
@@ -477,6 +520,18 @@ export class WsNet implements RaceNet {
         return;
       }
       if (!msg || typeof msg.a !== "string") return;
+      if (msg.a === "session") {
+        const t = (msg.d as { token?: unknown } | null)?.token;
+        if (typeof t === "string") this.sessionToken = t;
+        return;
+      }
+      if (msg.a === "closed") {
+        // the server ended this on purpose (idle/max-age/rate/capacity) —
+        // surface the reason and let the socket die without a reconnect
+        this.serverClosed = true;
+        if (typeof msg.d === "string") this.h.onClosed?.(msg.d);
+        return;
+      }
       if (msg.a === "peers" && Array.isArray(msg.d)) {
         // membership: the server's roster wholesale (like trystero sync)
         if (typeof msg.you === "string") this._selfId = msg.you;
@@ -506,6 +561,7 @@ export class WsNet implements RaceNet {
         return;
       }
       if (msg.a === "error") {
+        this.rejected = true; // a rejection's close is not reconnectable
         if (typeof msg.d === "string") this.h.onError?.(msg.d);
         return;
       }
@@ -546,8 +602,68 @@ export class WsNet implements RaceNet {
           break;
       }
     };
-    // announce ourselves: the server stores it and rosters it to the room
-    this.send("hello", this.me);
+  }
+
+  /* ── reconnect engine: a bare transport drop (deploy, network blip)
+     starts an exponential-backoff loop that re-enters the SAME room with
+     the resume credential; a policy close/rejection never triggers it ── */
+
+  private startReconnect() {
+    if (!this.reconnecting) {
+      this.reconnecting = true;
+      this.reconnectStart = Date.now();
+      this.attempts = 0;
+      this.h.onConnectionChange?.("reconnecting");
+    }
+    this.deferAttempt();
+  }
+
+  private deferAttempt() {
+    if (this.reconnectTimer !== null) return;
+    const backoff = Math.min(15000, 1000 * 2 ** this.attempts);
+    this.attempts++;
+    const jitter = 0.8 + Math.random() * 0.4;
+    this.reconnectTimer = window.setTimeout(
+      () => this.attemptReconnect(),
+      backoff * jitter,
+    );
+  }
+
+  private attemptReconnect() {
+    this.reconnectTimer = null;
+    if (this.intentional || this.serverClosed || this.rejected) return;
+    if (Date.now() - this.reconnectStart > WsNet.GIVE_UP_MS) {
+      this.reconnecting = false;
+      this.h.onConnectionChange?.("lost");
+      return;
+    }
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(this.url(true));
+    } catch {
+      this.deferAttempt();
+      return;
+    }
+    const timer = window.setTimeout(() => ws.close(), WsNet.OPEN_TIMEOUT);
+    ws.onopen = () => {
+      window.clearTimeout(timer);
+      if (this.intentional) {
+        ws.close(); // left the room while this attempt was in flight
+        return;
+      }
+      this.reconnecting = false;
+      this.wire(ws);
+      // re-announce with the ORIGINAL hello (joinedAt/racing preserved) —
+      // the roster that follows clears the "reconnecting" UI upstream
+      this.send("hello", this.me);
+    };
+    const retry = () => {
+      window.clearTimeout(timer);
+      if (this.ws === ws) return; // already wired — onclose owns retries now
+      this.deferAttempt();
+    };
+    ws.onerror = retry;
+    ws.onclose = retry;
   }
 
   private send(a: string, d: unknown) {
@@ -611,6 +727,11 @@ export class WsNet implements RaceNet {
     this.send("bst", { ...s, id, name });
   }
   leave() {
+    this.intentional = true; // never reconnect after an explicit leave
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.peers.clear();
     this.ws.close();
   }

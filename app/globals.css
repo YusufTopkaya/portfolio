@@ -1225,6 +1225,25 @@ html.crt-boot::after {
   z-index: 5;
 }
 
+/* mid-race transport drop: the reconnect backoff loop is running — the
+   run itself never paused. Same chip language as .racer-spectate but
+   parked lower so the two never overlap, and not clickable */
+.racer-reconnecting {
+  position: absolute;
+  top: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  color: #ffd75e;
+  background: #1c1a16;
+  border: 2px solid #6e6650;
+  padding: 4px 10px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+  animation: racerBlink 1.2s steps(2, start) infinite;
+}
+
 /* results rows reuse the lobby roster's NAME ……… VALUE language */
 .racer-results {
   margin: 4px 0 8px;
@@ -1820,6 +1839,11 @@ html.crt-boot::after {
   color: #9fb97a;
 }
 
+/* policy-close / connection-lost reason line on the lobby home view */
+.racer-lobby-notice {
+  color: #ffd75e;
+}
+
 .racer-lobby-code-label {
   font-size: 7px;
   color: #9fb97a;
@@ -1994,6 +2018,7 @@ html.crt-boot::after {
 
 @media (prefers-reduced-motion: reduce) {
   .racer-ready,
+  .racer-reconnecting,
   .racer-gameover-title {
     animation: none;
   }
