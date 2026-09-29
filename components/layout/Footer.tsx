@@ -59,6 +59,14 @@ export function Footer({ profile, lang, translations }: FooterProps) {
                   Privacy Policy
                 </Link>
               )}
+              <a
+                href="https://www.google.com/preferences/source?q=www.yusuftopkaya.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+              >
+                Add as Google Preferred Source
+              </a>
             </div>
           </div>
         </div>

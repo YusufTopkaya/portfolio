@@ -67,17 +67,22 @@ export function Header({
                 </span>
               )}
             </h2>
-            <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
+            <p
+              data-nosnippet
+              className="text-lg md:text-xl text-muted-foreground leading-relaxed"
+            >
               {about}
             </p>
             {cv?.url && cv?.fileName && (
-              <CVDownloadButton
-                url={cv.url}
-                fileName={cv.fileName}
-                label={translations.downloadCV}
-                language={language}
-                className="mt-4"
-              />
+              <div data-nosnippet>
+                <CVDownloadButton
+                  url={cv.url}
+                  fileName={cv.fileName}
+                  label={translations.downloadCV}
+                  language={language}
+                  className="mt-4"
+                />
+              </div>
             )}
           </div>
           <div className="flex justify-center">
